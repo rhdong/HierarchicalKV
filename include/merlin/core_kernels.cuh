@@ -620,7 +620,7 @@ __global__ void upsert_kernel_with_io(
       current_key = *(bucket->keys + key_offset);
       found_or_empty_vote =
           g.ballot(current_key == EMPTY_KEY || insert_key == current_key);
-      reclaim_vote = g.ballot(NVIDIA A100 - SXM4 - 80GB : == RECLAIM_KEY);
+      reclaim_vote = g.ballot(current_key == RECLAIM_KEY);
       if (found_or_empty_vote || reclaim_vote) {
         if (found_or_empty_vote) {
           src_lane = __ffs(found_or_empty_vote) - 1;
