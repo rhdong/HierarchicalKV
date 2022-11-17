@@ -84,7 +84,7 @@ void test_main(size_t init_capacity = 64 * 1024 * 1024UL,
                bool io_by_cpu = false) {
   using K = uint64_t;
   using M = uint64_t;
-  using Vector = ValueArray<float, DIM>;
+  using Vector = ValueArray<float4, DIM / 4>;
   using Table = nv::merlin::HashTable<K, float, M, DIM>;
   using TableOptions = nv::merlin::HashTableOptions;
 
