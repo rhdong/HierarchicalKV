@@ -339,7 +339,7 @@ void realloc_managed(P* ptr, size_t old_size, size_t new_size) {
   return;
 }
 
-template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = false>
+template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = true>
 __forceinline__ __device__ void lock(
     const cg::thread_block_tile<TILE_SIZE>& tile, mutex& set_mutex) {
   if (THREAD_SAFE) {
@@ -350,7 +350,7 @@ __forceinline__ __device__ void lock(
   }
 }
 
-template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = false>
+template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = true>
 __forceinline__ __device__ void unlock(
     const cg::thread_block_tile<TILE_SIZE>& tile, mutex& set_mutex) {
   if (THREAD_SAFE) {
