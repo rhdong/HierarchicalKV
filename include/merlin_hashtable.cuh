@@ -103,8 +103,8 @@ using EraseIfPredict = bool (*)(
 );
 
 /**
- * A HierarchicalKV hash table is a concurrent and hierarchical hash table that is
- * powered by GPUs and can use HBM and host memory as storage for key-value
+ * A HierarchicalKV hash table is a concurrent and hierarchical hash table that
+ * is powered by GPUs and can use HBM and host memory as storage for key-value
  * pairs. Support for SSD storage is a future consideration.
  *
  * The `meta` is introduced to define the importance of each key, the
@@ -308,9 +308,10 @@ class HashTable {
       }
 
       {
-        static_assert(sizeof(value_type*) == sizeof(uint64_t),
-                      "[HierarchicalKV] illegal conversation. value_type pointer "
-                      "should be 64 bit!");
+        static_assert(
+            sizeof(value_type*) == sizeof(uint64_t),
+            "[HierarchicalKV] illegal conversation. value_type pointer "
+            "should be 64 bit!");
 
         const size_t N = n;
         thrust::device_ptr<uint64_t> d_dst_ptr(
@@ -456,9 +457,10 @@ class HashTable {
     }
 
     if (!is_fast_mode()) {
-      static_assert(sizeof(value_type*) == sizeof(uint64_t),
-                    "[HierarchicalKV] illegal conversation. value_type pointer must "
-                    "be 64 bit!");
+      static_assert(
+          sizeof(value_type*) == sizeof(uint64_t),
+          "[HierarchicalKV] illegal conversation. value_type pointer must "
+          "be 64 bit!");
 
       const size_t N = n;
       thrust::device_ptr<uint64_t> dst_ptr(reinterpret_cast<uint64_t*>(dst));
@@ -553,9 +555,10 @@ class HashTable {
       }
 
       {
-        static_assert(sizeof(value_type*) == sizeof(uint64_t),
-                      "[HierarchicalKV] illegal conversation. value_type pointer "
-                      "must be 64 bit!");
+        static_assert(
+            sizeof(value_type*) == sizeof(uint64_t),
+            "[HierarchicalKV] illegal conversation. value_type pointer "
+            "must be 64 bit!");
 
         const size_t N = n;
         thrust::device_ptr<uint64_t> src_ptr(reinterpret_cast<uint64_t*>(src));
