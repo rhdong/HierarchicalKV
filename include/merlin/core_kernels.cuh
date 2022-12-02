@@ -192,6 +192,32 @@ void double_capacity(Table<K, V, M, DIM>** table) {
   (*table)->buckets_num *= 2;
 }
 
+/* Double the capacity on storage, must be followed by calling the
+ * rehash_kernel. */
+template <class K, class V, class M, size_t DIM>
+void increase_capacity(Table<K, V, M, DIM>** table, const size_t new_capacity) {
+  const size_t preferred_buckets_num =
+      1 + size_t(new_capacity / (*table)->buckets_size);
+
+  if ((*table)->buckets_num >= preferred_buckets_num) return;
+
+  realloc<Mutex*>(&((*table)->locks), (*table)->buckets_num * sizeof(Mutex),
+                  preferred_buckets_num * sizeof(Mutex));
+  realloc<int*>(&((*table)->buckets_size), (*table)->buckets_num * sizeof(int),
+                preferred_buckets_num * sizeof(int));
+
+  realloc_managed<Bucket<K, V, M, DIM>*>(
+      &((*table)->buckets),
+      (*table)->buckets_num * sizeof(Bucket<K, V, M, DIM>),
+      preferred_buckets_num * sizeof(Bucket<K, V, M, DIM>));
+
+  initialize_buckets<K, V, M, DIM>(table, (*table)->buckets_num,
+                                   preferred_buckets_num);
+
+  (*table)->capacity = (*table)->buckets_size * preferred_buckets_num;
+  (*table)->buckets_num = preferred_buckets_num;
+}
+
 /* free all of the resource of a Table. */
 template <class K, class V, class M, size_t DIM>
 void destroy_table(Table<K, V, M, DIM>** table) {

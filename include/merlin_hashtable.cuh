@@ -972,23 +972,25 @@ class HashTable {
    * @param stream The CUDA stream that is used to execute the operation.
    */
   void reserve(const size_type new_capacity, cudaStream_t stream = 0) {
-    if (reach_max_capacity_ || new_capacity > options_.max_capacity) {
+    if (reach_max_capacity_) {
       return;
     }
 
     {
       std::unique_lock<std::shared_timed_mutex> lock(mutex_);
 
-      // Once we have exclusive access, make sure that pending GPU calls have
-      // been processed.
       CUDA_CHECK(cudaDeviceSynchronize());
 
-      while (capacity() < new_capacity &&
-             capacity() * 2 <= options_.max_capacity) {
-        double_capacity(&table_);
+      const size_t preferred_capacity =
+          std::min(new_capacity, options_.max_capacity);
+
+      if (capacity() < preferred_capacity) {
+        const size_t previous_buckets_num = table_->buckets_num;
+
+        increase_capacity(&table_, preferred_capacity);
 
         const size_t block_size = options_.block_size;
-        const size_t N = TILE_SIZE * table_->buckets_num / 2;
+        const size_t N = TILE_SIZE * previous_buckets_num;
         const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
         rehash_kernel_for_fast_mode<key_type, vector_type, meta_type, DIM,
@@ -997,10 +999,11 @@ class HashTable {
                 table_, table_->buckets, table_->buckets_size,
                 table_->bucket_max_size, table_->buckets_num, N);
       }
+      reach_max_capacity_ = (capacity() >= options_.max_capacity);
+
       CUDA_CHECK(cudaDeviceSynchronize());
     }
 
-    reach_max_capacity_ = (capacity() * 2 > options_.max_capacity);
     CudaCheckError();
   }
 
