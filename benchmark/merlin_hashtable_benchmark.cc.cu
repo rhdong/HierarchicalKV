@@ -61,6 +61,29 @@ void create_random_keys(K* h_keys, M* h_metas, const int key_num_per_op) {
   }
 }
 
+template <class K, class M>
+void create_random_keys_by_power_law(K* h_keys, M* h_metas, const int key_num_per_op, const float alpha = 1.05, const size_t cache_size=2 * 1024 * 1024 * 1024) {
+  std::unordered_set<K> numbers;
+  std::random_device rd;
+  std::mt19937_64 eng(rd());
+  std::uniform_real_distribution<double> distr(0, 1);
+  int i = 0;
+
+  const float gamma = 1 - alpha;
+  const float pMax = std::pow(cache_size * 1.0, gamma);
+  const float pMin = 1.;
+
+  while (numbers.size() < key_num_per_op) {
+    K lookup_keys = (K)std::pow(1.0 * (1 - distr(eng)) * (pMax - pMin) + pMin, 1. / gamma);
+    numbers.insert(lookup_keys);
+  }
+  for (const K num : numbers) {
+    h_keys[i] = num;
+    h_metas[i] = getTimestamp();
+    i++;
+  }
+}
+
 std::string rep(int n) { return std::string(n, ' '); }
 
 template <class K, class M>
@@ -159,7 +182,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
   std::chrono::duration<double> diff_erase;
 
   while (cur_load_factor < load_factor) {
-    create_continuous_keys<K, M>(h_keys, h_metas, key_num_per_op, start);
+    create_random_keys_by_power_law<K, M>(h_keys, h_metas, key_num_per_op, start);
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
