@@ -62,7 +62,7 @@ void create_random_keys(K* h_keys, M* h_metas, const int key_num_per_op) {
 }
 
 template <class K, class M>
-void create_random_keys_by_power_law(K* h_keys, M* h_metas, const int key_num_per_op, const float alpha = 1.05, const size_t cache_size=2 * 1024 * 1024 * 1024) {
+void create_random_keys_by_power_law(K* h_keys, M* h_metas, const size_t key_num_per_op, const float alpha = 1.05, const size_t cache_size=2 * 1024 * 1024 * 1024) {
   std::unordered_set<K> numbers;
   std::random_device rd;
   std::mt19937_64 eng(rd());
@@ -182,7 +182,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
   std::chrono::duration<double> diff_erase;
 
   while (cur_load_factor < load_factor) {
-    create_random_keys_by_power_law<K, M>(h_keys, h_metas, key_num_per_op);
+    create_random_keys<K, M>(h_keys, h_metas, key_num_per_op, start);
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
@@ -210,6 +210,27 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
     }
     start += key_num_per_op;
   }
+
+  create_random_keys<K, M>(h_keys, h_metas, key_num_per_op, 0ul);
+  CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
+                        cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
+                        cudaMemcpyHostToDevice));
+
+  start_insert_or_assign = std::chrono::steady_clock::now();
+  table->insert_or_assign(key_num_per_op, d_keys,
+                          reinterpret_cast<float*>(d_vectors), d_metas,
+                          stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  end_insert_or_assign = std::chrono::steady_clock::now();
+  diff_insert_or_assign = end_insert_or_assign - start_insert_or_assign;
+
+  start_find = std::chrono::steady_clock::now();
+  table->find(key_num_per_op, d_keys, reinterpret_cast<float*>(d_vectors),
+              d_found, nullptr, stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  end_find = std::chrono::steady_clock::now();
+  diff_find = end_find - start_find;
 
   start_erase = std::chrono::steady_clock::now();
   table->erase(key_num_per_op, d_keys, stream);
