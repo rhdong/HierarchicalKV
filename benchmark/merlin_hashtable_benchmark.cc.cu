@@ -205,13 +205,13 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
 
     cur_load_factor = table->load_factor(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    if (start == 0) {
-      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
-    }
+//    if (start == 0) {
+//      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
+//    }
     start += key_num_per_op;
   }
 
-  create_continuous_keys<K, M>(h_keys, h_metas, key_num_per_op, key_num_per_op);
+  create_continuous_keys<K, M>(h_keys, h_metas, key_num_per_op, 0);
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
