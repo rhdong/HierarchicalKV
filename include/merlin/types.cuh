@@ -52,7 +52,7 @@ struct Bucket {
   int min_pos;
 };
 
-using Mutex = cuda::binary_semaphore<cuda::thread_scope_device>;
+using Mutex = cuda::binary_semaphore<cuda::thread_scope_block>;
 
 template <class K, class V, class M, size_t DIM>
 struct Table {
