@@ -1249,10 +1249,10 @@ __global__ void lookup_kernel_with_io(
         src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
 
-        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+//        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
         copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
                                        (float*)(values + key_idx));
-        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+//        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
         break;
       }
 
