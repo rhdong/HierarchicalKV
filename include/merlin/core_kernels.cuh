@@ -1200,6 +1200,14 @@ __global__ void accum_kernel(
   }
 }
 
+template <class V, size_t DIM, uint32_t TILE_SIZE = 8>
+__forceinline__ __device__ void copy_vector_n(cg::thread_block_tile<TILE_SIZE> g,
+                                            const float* src, float* dst) {
+  for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
+    dst[i] = src[i];
+  }
+}
+
 /* lookup with IO operation. This kernel is
  * usually used for the pure HBM mode for better performance.
  */
@@ -1242,7 +1250,7 @@ __global__ void lookup_kernel_with_io(
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
 
 //        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
-        copy_vector<V, DIM, TILE_SIZE>(g, bucket->vectors + key_pos,
+        copy_vector_n<V, DIM, TILE_SIZE>(g, bucket->vectors + key_pos,
                                        values + key_idx);
 //        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
         break;
