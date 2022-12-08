@@ -32,7 +32,6 @@ void test_save_to_file() {
   std::string prefix = "checkpoint";
   size_t keynum = 1 * 1024 * 1024;
   size_t capacity = 2 * 1024 * 1024;
-  size_t buffer_size = 1024 * 1024;
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
 
@@ -81,11 +80,11 @@ void test_save_to_file() {
   std::string values_path = prefix + ".values";
   std::string metas_path = prefix + ".metas";
   file.open(keys_path, values_path, metas_path, "wb");
-  table_0->save(&file, buffer_size, stream);
+  table_0->save(&file, stream);
   file.close();
   printf("table_0 saves.\n");
   file.open(keys_path, values_path, metas_path, "rb");
-  table_1->load(&file, buffer_size, stream);
+  table_1->load(&file, stream);
   file.close();
   printf("table_1 loads.\n");
   ASSERT_TRUE(test_util::tables_equal(table_0.get(), table_1.get(), stream));

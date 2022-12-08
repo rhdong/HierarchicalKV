@@ -26,6 +26,7 @@
 #include <type_traits>
 #include "merlin/core_kernels.cuh"
 #include "merlin/flexible_buffer.cuh"
+#include "merlin/memory_pool.cuh"
 #include "merlin/types.cuh"
 #include "merlin/utils.cuh"
 
@@ -63,6 +64,10 @@ struct HashTableOptions {
   int device_id = 0;               ///< The ID of device.
   bool io_by_cpu = false;  ///< The flag indicating if the CPU handles IO.
   EvictStrategy evict_strategy = EvictStrategy::kLru;  ///< The evict strategy.
+  MemoryPoolOptions
+      device_memory_pool;  ///< Configuration options for device memory pool.
+  MemoryPoolOptions
+      host_memory_pool;  ///< Configuration options for host memory pool.
 };
 
 /**
@@ -152,6 +157,9 @@ class HashTable {
   using TableCore = nv::merlin::Table<key_type, vector_type, meta_type, DIM>;
   static constexpr unsigned int TILE_SIZE = 8;
 
+  using DeviceMemoryPool = MemoryPool<DeviceAllocator<char>>;
+  using HostMemoryPool = MemoryPool<HostAllocator<char>>;
+
 #if THRUST_VERSION >= 101600
   static constexpr auto thrust_par = thrust::cuda::par_nosync;
 #else
@@ -169,8 +177,13 @@ class HashTable {
    * table object.
    */
   ~HashTable() {
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    // Erase table.
     if (initialized_) {
       destroy_table<key_type, vector_type, meta_type, DIM>(&table_);
+      device_memory_pool_.reset();
+      host_memory_pool_.reset();
     }
   }
 
@@ -188,10 +201,13 @@ class HashTable {
    */
  public:
   void init(const HashTableOptions options) {
+    // Prevent double initialization.
     if (initialized_) {
       return;
     }
     options_ = options;
+
+    // Construct table.
     cudaDeviceProp deviceProp;
     CUDA_CHECK(cudaSetDevice(options_.device_id));
     CUDA_CHECK(cudaGetDeviceProperties(&deviceProp, 0));
@@ -205,6 +221,25 @@ class HashTable {
                  "[HierarchicalKV] `io_by_cpu` should not be true when "
                  "`max_hbm_for_vectors` is not 0!");
     initialized_ = true;
+
+    // Create memory pools.
+    MERLIN_CHECK(options_.device_memory_pool.buffer_size ==
+                     options_.host_memory_pool.buffer_size,
+                 "[HierarchicalKV] host and device memory pools must have same "
+                 "buffer size.");
+
+    constexpr size_t min_pool_size =
+        std::max({sizeof(void*), sizeof(size_type), sizeof(vector_type)});
+    MERLIN_CHECK(
+        options_.device_memory_pool.buffer_size >= min_pool_size,
+        "[HierarchicalKV] device memory pool's buffer_size is too small.");
+
+    device_memory_pool_ = std::make_unique<MemoryPool<DeviceAllocator<char>>>(
+        options_.device_memory_pool);
+    host_memory_pool_ = std::make_unique<MemoryPool<HostAllocator<char>>>(
+        options_.host_memory_pool);
+
+    CUDA_CHECK(cudaDeviceSynchronize());
     CudaCheckError();
   }
 
@@ -259,6 +294,8 @@ class HashTable {
       check_evict_strategy(metas);
     }
 
+    auto value_vectors = reinterpret_cast<const vector_type*>(values);
+
     std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
     if (!reach_max_capacity_) {
       lock.lock();
@@ -272,84 +309,97 @@ class HashTable {
       if (metas == nullptr) {
         upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
             <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, reinterpret_cast<const vector_type*>(values),
-                table_->buckets, table_->buckets_size, table_->bucket_max_size,
+                table_, keys, value_vectors, table_->buckets,
+                table_->buckets_size, table_->bucket_max_size,
                 table_->buckets_num, N);
       } else {
         upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
             <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, reinterpret_cast<const vector_type*>(values),
-                metas, table_->buckets, table_->buckets_size,
-                table_->bucket_max_size, table_->buckets_num, N);
+                table_, keys, value_vectors, metas, table_->buckets,
+                table_->buckets_size, table_->bucket_max_size,
+                table_->buckets_num, N);
       }
     } else {
-      vector_type** d_dst = nullptr;
-      int* d_src_offset = nullptr;
+      auto device_ws = device_memory_pool_->get_workspace<2>(stream);
+      auto d_dst = device_ws.get<vector_type**>(0);
+      auto d_src_offset = device_ws.get<int*>(1);
 
-      CUDA_CHECK(cudaMallocAsync(&d_dst, n * sizeof(vector_type*), stream));
-      CUDA_CHECK(cudaMemsetAsync(d_dst, 0, n * sizeof(vector_type*), stream));
-      CUDA_CHECK(cudaMallocAsync(&d_src_offset, n * sizeof(int), stream));
-      CUDA_CHECK(cudaMemsetAsync(d_src_offset, 0, n * sizeof(int), stream));
+      HostMemoryPool::StaticWorkspace<3> host_ws;
+      vector_type** h_dst;
+      vector_type* h_values;
+      int* h_src_offset;
 
-      {
-        const size_t block_size = options_.block_size;
-        const size_t N = n * TILE_SIZE;
-        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      size_t max_bs;
+      if (options_.io_by_cpu) {
+        host_ws = std::move(host_memory_pool_->get_workspace<3>(stream));
+        h_dst = host_ws.get<vector_type**>(0);
+        h_values = host_ws.get<vector_type*>(1);
+        h_src_offset = host_ws.get<int*>(2);
 
-        if (metas == nullptr) {
-          upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-              <<<grid_size, block_size, 0, stream>>>(
-                  table_, keys, d_dst, table_->buckets, table_->buckets_size,
-                  table_->bucket_max_size, table_->buckets_num, d_src_offset,
-                  N);
+        max_bs = device_memory_pool_->max_batch_size(
+            std::max(sizeof(vector_type), sizeof(void*)));
+      } else {
+        max_bs = device_memory_pool_->max_batch_size<void*>();
+      }
+
+      for (size_t i = 0; i < n; i += max_bs) {
+        const size_t bs = std::min(n - i, max_bs);
+
+        CUDA_CHECK(
+            cudaMemsetAsync(d_dst, 0, bs * sizeof(vector_type*), stream));
+        CUDA_CHECK(cudaMemsetAsync(d_src_offset, 0, bs * sizeof(int), stream));
+
+        {
+          const size_t block_size = options_.block_size;
+          const size_t N = bs * TILE_SIZE;
+          const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+          if (metas == nullptr) {
+            upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+                <<<grid_size, block_size, 0, stream>>>(
+                    table_, keys + i, d_dst, table_->buckets,
+                    table_->buckets_size, table_->bucket_max_size,
+                    table_->buckets_num, d_src_offset, N);
+          } else {
+            upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+                <<<grid_size, block_size, 0, stream>>>(
+                    table_, keys + i, d_dst, metas + i, table_->buckets,
+                    table_->buckets_size, table_->bucket_max_size,
+                    table_->buckets_num, d_src_offset, N);
+          }
+        }
+
+        {
+          thrust::device_ptr<uintptr_t> d_dst_ptr(
+              reinterpret_cast<uintptr_t*>(d_dst));
+          thrust::device_ptr<int> d_src_offset_ptr(d_src_offset);
+
+          thrust::sort_by_key(thrust_par.on(stream), d_dst_ptr, d_dst_ptr + bs,
+                              d_src_offset_ptr, thrust::less<uintptr_t>());
+        }
+
+        if (options_.io_by_cpu) {
+          CUDA_CHECK(cudaMemcpyAsync(h_dst, d_dst, bs * sizeof(vector_type*),
+                                     cudaMemcpyDeviceToHost, stream));
+          CUDA_CHECK(cudaMemcpyAsync(h_values, value_vectors + i,
+                                     bs * sizeof(vector_type),
+                                     cudaMemcpyDeviceToHost, stream));
+          CUDA_CHECK(cudaMemcpyAsync(h_src_offset, d_src_offset,
+                                     bs * sizeof(int), cudaMemcpyDeviceToHost,
+                                     stream));
+          CUDA_CHECK(cudaStreamSynchronize(stream));
+
+          write_by_cpu<vector_type>(h_dst, h_values, h_src_offset, bs);
         } else {
-          upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-              <<<grid_size, block_size, 0, stream>>>(
-                  table_, keys, d_dst, metas, table_->buckets,
-                  table_->buckets_size, table_->bucket_max_size,
-                  table_->buckets_num, d_src_offset, N);
+          const size_t block_size = options_.block_size;
+          const size_t N = bs * DIM;
+          const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+          write_kernel<key_type, vector_type, meta_type, DIM>
+              <<<grid_size, block_size, 0, stream>>>(value_vectors + i, d_dst,
+                                                     d_src_offset, N);
         }
       }
-
-      {
-        thrust::device_ptr<uintptr_t> d_dst_ptr(
-            reinterpret_cast<uintptr_t*>(d_dst));
-        thrust::device_ptr<int> d_src_offset_ptr(d_src_offset);
-
-        thrust::sort_by_key(thrust_par.on(stream), d_dst_ptr, d_dst_ptr + n,
-                            d_src_offset_ptr, thrust::less<uintptr_t>());
-      }
-
-      if (options_.io_by_cpu) {
-        static thread_local FlexPinnedBuffer<vector_type*> h_dst;
-        static thread_local FlexPinnedBuffer<vector_type> h_values;
-        static thread_local FlexPinnedBuffer<int> h_src_offset;
-
-        vector_type** l_dst = h_dst.alloc_or_reuse(n);
-        vector_type* l_values = h_values.alloc_or_reuse(n);
-        int* l_src_offset = h_src_offset.alloc_or_reuse(n);
-
-        CUDA_CHECK(cudaStreamSynchronize(stream));
-        CUDA_CHECK(cudaMemcpy(l_dst, d_dst, n * sizeof(vector_type*),
-                              cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(l_values, values, n * sizeof(vector_type),
-                              cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(l_src_offset, d_src_offset, n * sizeof(int),
-                              cudaMemcpyDeviceToHost));
-        write_by_cpu<vector_type>(l_dst, l_values, l_src_offset, n);
-      } else {
-        const size_t block_size = options_.block_size;
-        const size_t N = n * DIM;
-        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-
-        write_kernel<key_type, vector_type, meta_type, DIM>
-            <<<grid_size, block_size, 0, stream>>>(
-                reinterpret_cast<const vector_type*>(values), d_dst,
-                d_src_offset, N);
-      }
-
-      CUDA_CHECK(cudaFreeAsync(d_dst, stream));
-      CUDA_CHECK(cudaFreeAsync(d_src_offset, stream));
     }
 
     CudaCheckError();
@@ -416,64 +466,69 @@ class HashTable {
       check_evict_strategy(metas);
     }
 
-    vector_type** dst;
-    int* src_offset;
-    bool* founds;
+    auto value_or_delta_vectors =
+        reinterpret_cast<const vector_type*>(value_or_deltas);
 
     std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
     if (!reach_max_capacity_) {
       lock.lock();
     }
 
-    CUDA_CHECK(cudaMallocAsync(&dst, n * sizeof(vector_type*), stream));
-    CUDA_CHECK(cudaMemsetAsync(dst, 0, n * sizeof(vector_type*), stream));
-    CUDA_CHECK(cudaMallocAsync(&src_offset, n * sizeof(int), stream));
-    CUDA_CHECK(cudaMemsetAsync(src_offset, 0, n * sizeof(int), stream));
-    CUDA_CHECK(cudaMallocAsync(&founds, n * sizeof(bool), stream));
-    CUDA_CHECK(cudaMemsetAsync(founds, 0, n * sizeof(bool), stream));
+    const size_t max_bs = device_memory_pool_->max_batch_size<void*>();
 
-    {
-      const size_t block_size = options_.block_size;
-      const size_t N = n * TILE_SIZE;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+    auto device_ws = device_memory_pool_->get_workspace<3>(stream);
+    auto dst = device_ws.get<vector_type**>(0);
+    auto src_offset = device_ws.get<int*>(1);
+    auto founds = device_ws.get<bool*>(2);
 
-      if (metas == nullptr) {
-        accum_kernel<key_type, vector_type, meta_type, DIM>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, dst, accum_or_assigns, table_->buckets,
-                table_->buckets_size, table_->bucket_max_size,
-                table_->buckets_num, src_offset, founds, N);
-      } else {
-        accum_kernel<key_type, vector_type, meta_type, DIM>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, dst, metas, accum_or_assigns, table_->buckets,
-                table_->buckets_size, table_->bucket_max_size,
-                table_->buckets_num, src_offset, founds, N);
+    for (size_t i = 0; i < n; i += max_bs) {
+      const size_t bs = std::min(n - i, max_bs);
+
+      CUDA_CHECK(cudaMemsetAsync(dst, 0, bs * sizeof(vector_type*), stream));
+      CUDA_CHECK(cudaMemsetAsync(src_offset, 0, bs * sizeof(int), stream));
+      CUDA_CHECK(cudaMemsetAsync(founds, 0, bs * sizeof(bool), stream));
+
+      {
+        const size_t block_size = options_.block_size;
+        const size_t N = bs * TILE_SIZE;
+        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+        if (metas == nullptr) {
+          accum_kernel<key_type, vector_type, meta_type, DIM>
+              <<<grid_size, block_size, 0, stream>>>(
+                  table_, keys + i, dst, accum_or_assigns + i, table_->buckets,
+                  table_->buckets_size, table_->bucket_max_size,
+                  table_->buckets_num, src_offset, founds, N);
+        } else {
+          accum_kernel<key_type, vector_type, meta_type, DIM>
+              <<<grid_size, block_size, 0, stream>>>(
+                  table_, keys + i, dst, metas + i, accum_or_assigns + i,
+                  table_->buckets, table_->buckets_size,
+                  table_->bucket_max_size, table_->buckets_num, src_offset,
+                  founds, N);
+        }
+      }
+
+      if (!is_fast_mode()) {
+        thrust::device_ptr<uintptr_t> dst_ptr(
+            reinterpret_cast<uintptr_t*>(dst));
+        thrust::device_ptr<int> src_offset_ptr(src_offset);
+
+        thrust::sort_by_key(thrust_par.on(stream), dst_ptr, dst_ptr + bs,
+                            src_offset_ptr, thrust::less<uintptr_t>());
+      }
+
+      {
+        const size_t block_size = options_.block_size;
+        const size_t N = bs * DIM;
+        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+        write_with_accum_kernel<key_type, vector_type, meta_type, DIM>
+            <<<grid_size, block_size, 0, stream>>>(value_or_delta_vectors + i,
+                                                   dst, accum_or_assigns + i,
+                                                   founds, src_offset, N);
       }
     }
-
-    if (!is_fast_mode()) {
-      thrust::device_ptr<uintptr_t> dst_ptr(reinterpret_cast<uintptr_t*>(dst));
-      thrust::device_ptr<int> src_offset_ptr(src_offset);
-
-      thrust::sort_by_key(thrust_par.on(stream), dst_ptr, dst_ptr + n,
-                          src_offset_ptr, thrust::less<uintptr_t>());
-    }
-
-    {
-      const size_t block_size = options_.block_size;
-      const size_t N = n * DIM;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-
-      write_with_accum_kernel<key_type, vector_type, meta_type, DIM>
-          <<<grid_size, block_size, 0, stream>>>(
-              reinterpret_cast<const vector_type*>(value_or_deltas), dst,
-              accum_or_assigns, founds, src_offset, N);
-    }
-
-    CUDA_CHECK(cudaFreeAsync(dst, stream));
-    CUDA_CHECK(cudaFreeAsync(src_offset, stream));
-    CUDA_CHECK(cudaFreeAsync(founds, stream));
 
     CudaCheckError();
   }
@@ -507,6 +562,8 @@ class HashTable {
 
     CUDA_CHECK(cudaMemsetAsync(founds, 0, n * sizeof(bool), stream));
 
+    auto value_vectors = reinterpret_cast<vector_type*>(values);
+
     std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
     if (!reach_max_capacity_) {
       lock.lock();
@@ -519,51 +576,53 @@ class HashTable {
 
       lookup_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
           <<<grid_size, block_size, 0, stream>>>(
-              table_, keys, reinterpret_cast<vector_type*>(values), metas,
-              founds, table_->buckets, table_->buckets_size,
-              table_->bucket_max_size, table_->buckets_num, N);
+              table_, keys, value_vectors, metas, founds, table_->buckets,
+              table_->buckets_size, table_->bucket_max_size,
+              table_->buckets_num, N);
     } else {
-      vector_type** src;
-      int* dst_offset = nullptr;
-      CUDA_CHECK(cudaMallocAsync(&src, n * sizeof(vector_type*), stream));
-      CUDA_CHECK(cudaMemsetAsync(src, 0, n * sizeof(vector_type*), stream));
-      CUDA_CHECK(cudaMallocAsync(&dst_offset, n * sizeof(int), stream));
-      CUDA_CHECK(cudaMemsetAsync(dst_offset, 0, n * sizeof(int), stream));
+      const size_t max_bs = device_memory_pool_->max_batch_size<void*>();
 
-      {
-        const size_t block_size = options_.block_size;
-        const size_t N = n * TILE_SIZE;
-        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      auto device_ws = device_memory_pool_->get_workspace<2>(stream);
+      auto src = device_ws.get<vector_type**>(0);
+      auto dst_offset = device_ws.get<int*>(1);
 
-        lookup_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, reinterpret_cast<vector_type**>(src), metas,
-                founds, table_->buckets, table_->buckets_size,
-                table_->bucket_max_size, table_->buckets_num, dst_offset, N);
+      for (size_t i = 0; i < n; i += max_bs) {
+        const size_t bs = std::min(n - i, max_bs);
+
+        CUDA_CHECK(cudaMemsetAsync(src, 0, bs * sizeof(vector_type*), stream));
+        CUDA_CHECK(cudaMemsetAsync(dst_offset, 0, bs * sizeof(int), stream));
+
+        {
+          const size_t block_size = options_.block_size;
+          const size_t N = bs * TILE_SIZE;
+          const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+          lookup_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+              <<<grid_size, block_size, 0, stream>>>(
+                  table_, keys + i, src, metas ? metas + i : nullptr,
+                  founds + i, table_->buckets, table_->buckets_size,
+                  table_->bucket_max_size, table_->buckets_num, dst_offset, N);
+        }
+
+        {
+          thrust::device_ptr<uintptr_t> src_ptr(
+              reinterpret_cast<uintptr_t*>(src));
+          thrust::device_ptr<int> dst_offset_ptr(dst_offset);
+
+          thrust::sort_by_key(thrust_par.on(stream), src_ptr, src_ptr + bs,
+                              dst_offset_ptr, thrust::less<uintptr_t>());
+        }
+
+        {
+          const size_t block_size = options_.block_size;
+          const size_t N = bs * DIM;
+          const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+          read_kernel<key_type, vector_type, meta_type, DIM>
+              <<<grid_size, block_size, 0, stream>>>(src, value_vectors + i,
+                                                     founds + i, dst_offset, N);
+        }
       }
-
-      {
-        thrust::device_ptr<uintptr_t> src_ptr(
-            reinterpret_cast<uintptr_t*>(src));
-        thrust::device_ptr<int> dst_offset_ptr(dst_offset);
-
-        thrust::sort_by_key(thrust_par.on(stream), src_ptr, src_ptr + n,
-                            dst_offset_ptr, thrust::less<uintptr_t>());
-      }
-
-      {
-        const size_t block_size = options_.block_size;
-        const size_t N = n * DIM;
-        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-
-        read_kernel<key_type, vector_type, meta_type, DIM>
-            <<<grid_size, block_size, 0, stream>>>(
-                src, reinterpret_cast<vector_type*>(values), founds, dst_offset,
-                N);
-      }
-
-      CUDA_CHECK(cudaFreeAsync(src, stream));
-      CUDA_CHECK(cudaFreeAsync(dst_offset, stream));
     }
 
     CudaCheckError();
@@ -589,8 +648,9 @@ class HashTable {
       lock.lock();
     }
 
-    size_type* d_count;
-    CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
+    auto device_ws = device_memory_pool_->get_workspace<1>(stream);
+    auto d_count = device_ws.get<size_type*>(0);
+
     CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
 
     {
@@ -607,7 +667,6 @@ class HashTable {
     size_type count = 0;
     CUDA_CHECK(cudaMemcpyAsync(&count, d_count, sizeof(size_type),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaFreeAsync(d_count, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     CudaCheckError();
@@ -649,8 +708,9 @@ class HashTable {
       lock.lock();
     }
 
-    size_type* d_count;
-    CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
+    auto device_ws = device_memory_pool_->get_workspace<1>(stream);
+    auto d_count = device_ws.get<size_type*>(0);
+
     CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
 
     Pred h_pred;
@@ -672,7 +732,6 @@ class HashTable {
     size_type count = 0;
     CUDA_CHECK(cudaMemcpyAsync(&count, d_count, sizeof(size_type),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaFreeAsync(d_count, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     CudaCheckError();
@@ -763,15 +822,16 @@ class HashTable {
                          value_type* values,          // (n, DIM)
                          meta_type* metas = nullptr,  // (n)
                          cudaStream_t stream = 0) const {
-    size_type* d_counter = nullptr;
-    CUDA_CHECK(cudaMallocAsync(&d_counter, sizeof(size_type), stream));
+    auto device_ws = device_memory_pool_->get_workspace<1>(stream);
+    auto d_counter = device_ws.get<size_type*>(0);
+
     CUDA_CHECK(cudaMemsetAsync(d_counter, 0, sizeof(size_type), stream));
+
     export_batch(n, offset, d_counter, keys, values, metas, stream);
 
     size_type counter = 0;
     CUDA_CHECK(cudaMemcpyAsync(&counter, d_counter, sizeof(size_type),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaFreeAsync(d_counter, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
     return counter;
   }
@@ -972,93 +1032,76 @@ class HashTable {
    * @brief Save keys, vectors, metas in table to file or files.
    *
    * @param file A BaseKVFile object defined the file format on host filesystem.
-   * @param buffer_size The size of buffer used for saving in bytes.
    * @param stream The CUDA stream used to execute the operation.
    *
    * @return Number of KV pairs saved to file.
    */
   size_type save(BaseKVFile<K, V, M, DIM>* file,
-                 const size_type buffer_size = 1048576,
                  cudaStream_t stream = 0) const {
+    // Precalc some constants.
+    const size_type N =
+        device_memory_pool_->buffer_size() /
+        std::max({sizeof(key_type), sizeof(vector_type), sizeof(meta_type)});
+    assert(N > 0);
+
+    const size_t kvm_size =
+        sizeof(key_type) + sizeof(vector_type) + sizeof(meta_type);
+    const size_t block_size = std::min(shared_mem_size_ / 2 / kvm_size, 1024UL);
+    MERLIN_CHECK(
+        block_size > 0,
+        "[merlin-kv] block_size <= 0, the K-V-M size may be too large!");
+    const size_t shared_size = kvm_size * block_size;
+    const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+    // Request exclusive access.
     std::unique_lock<std::shared_timed_mutex> lock(mutex_);
-    K* d_keys = nullptr;
-    V* d_vectors = nullptr;
-    M* d_metas = nullptr;
-    K* h_keys = nullptr;
-    V* h_vectors = nullptr;
-    M* h_metas = nullptr;
-    size_type* d_next_nkeys = nullptr;
-    size_type nkeys = 0;
-    size_type total_size = capacity();
-    size_type pair_size = sizeof(K) + sizeof(M) + sizeof(V) * DIM;
-    size_type batch_pairs_num =
-        std::min((buffer_size + pair_size) / pair_size, total_size);
 
-    CUDA_CHECK(cudaMallocAsync(&d_next_nkeys, sizeof(size_type), stream));
-    CUDA_CHECK(cudaMallocAsync(&d_keys, sizeof(K) * batch_pairs_num, stream));
-    CUDA_CHECK(
-        cudaMallocAsync(&d_vectors, sizeof(V) * batch_pairs_num * DIM, stream));
-    CUDA_CHECK(cudaMallocAsync(&d_metas, sizeof(M) * batch_pairs_num, stream));
-    CUDA_CHECK(cudaMemsetAsync(d_next_nkeys, 0, sizeof(size_type), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_keys, 0, sizeof(K) * batch_pairs_num, stream));
-    CUDA_CHECK(cudaMemsetAsync(d_vectors, 0, sizeof(V) * batch_pairs_num * DIM,
-                               stream));
-    CUDA_CHECK(
-        cudaMemsetAsync(d_metas, 0, sizeof(M) * batch_pairs_num, stream));
+    const size_type total_size = capacity();
 
-    CUDA_CHECK(cudaMallocHost(&h_keys, sizeof(K) * batch_pairs_num));
-    CUDA_CHECK(cudaMallocHost(&h_vectors, sizeof(V) * batch_pairs_num * DIM));
-    CUDA_CHECK(cudaMallocHost(&h_metas, sizeof(M) * batch_pairs_num));
+    // Grab temporary device workspace.
+    auto device_ws = device_memory_pool_->get_workspace<4>(stream);
+    auto d_keys = device_ws.get<key_type*>(0);
+    auto d_vectors = device_ws.get<vector_type*>(1);
+    auto d_metas = device_ws.get<meta_type*>(2);
+    auto d_count = device_ws.get<size_type*>(3);
 
-    export_batch(batch_pairs_num, 0, d_next_nkeys, d_keys, d_vectors, d_metas,
-                 stream);
-    CUDA_CHECK(cudaMemcpyAsync(&nkeys, d_next_nkeys, sizeof(size_type),
-                               cudaMemcpyDeviceToHost, stream));
+    // Grab enough host memory to hold batch data.
+    auto host_ws = host_memory_pool_->get_workspace<3>(stream);
+    auto h_keys = host_ws.get<key_type*>(0);
+    auto h_values = host_ws.get<V*>(1);
+    auto h_metas = host_ws.get<meta_type*>(2);
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, sizeof(K) * nkeys,
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_vectors, d_vectors, sizeof(V) * nkeys * DIM,
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_metas, d_metas, sizeof(M) * nkeys,
-                               cudaMemcpyDeviceToHost, stream));
+    // Step through table, dumping contents in batches.
+    size_type total_count = 0;
+    for (size_type offset = 0; offset < total_size; offset += N) {
+      // Dump the next batch to workspace.
+      CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
 
-    size_type counter = 0;
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+      dump_kernel<key_type, vector_type, meta_type, DIM>
+          <<<grid_size, block_size, shared_size, stream>>>(
+              table_, d_keys, d_vectors, d_metas, offset, N, d_count);
 
-    for (size_type offset = batch_pairs_num; offset < total_size;
-         offset += batch_pairs_num) {
-      CUDA_CHECK(cudaMemsetAsync(d_next_nkeys, 0, sizeof(size_type), stream));
-      export_batch(batch_pairs_num, offset, d_next_nkeys, d_keys, d_vectors,
-                   d_metas, stream);
-      counter += file->write(nkeys, h_keys, h_vectors, h_metas);
-      CUDA_CHECK(cudaMemcpyAsync(&nkeys, d_next_nkeys, sizeof(size_type),
+      size_type count;
+      CUDA_CHECK(cudaMemcpyAsync(&count, d_count, sizeof(size_type),
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaStreamSynchronize(stream));
-      CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, sizeof(K) * nkeys,
+
+      // Move workspace to host memory.
+      CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, sizeof(key_type) * count,
                                  cudaMemcpyDeviceToHost, stream));
-      CUDA_CHECK(cudaMemcpyAsync(h_vectors, d_vectors, sizeof(V) * nkeys * DIM,
+      CUDA_CHECK(cudaMemcpyAsync(h_values, d_vectors,
+                                 sizeof(vector_type) * count,
                                  cudaMemcpyDeviceToHost, stream));
-      CUDA_CHECK(cudaMemcpyAsync(h_metas, d_metas, sizeof(M) * nkeys,
+      CUDA_CHECK(cudaMemcpyAsync(h_metas, d_metas, sizeof(meta_type) * count,
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaStreamSynchronize(stream));
+
+      // Store permanently.
+      file->write(count, h_keys, h_values, h_metas);
+      total_count += count;
     }
 
-    if (nkeys > 0) {
-      CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, sizeof(K) * nkeys,
-                                 cudaMemcpyDeviceToHost, stream));
-      CUDA_CHECK(cudaMemcpyAsync(h_vectors, d_vectors, sizeof(V) * nkeys * DIM,
-                                 cudaMemcpyDeviceToHost, stream));
-      CUDA_CHECK(cudaMemcpyAsync(h_metas, d_metas, sizeof(M) * nkeys,
-                                 cudaMemcpyDeviceToHost, stream));
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-      counter += file->write(nkeys, h_keys, h_vectors, h_metas);
-    }
-
-    CUDA_FREE_POINTERS(stream, d_keys, d_vectors, d_metas, d_next_nkeys);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    CUDA_FREE_POINTERS(stream, h_keys, h_vectors, h_metas);
-    return counter;
+    return total_count;
   }
 
   /**
@@ -1070,51 +1113,54 @@ class HashTable {
    *
    * @return Number of keys loaded from file.
    */
-  size_type load(BaseKVFile<K, V, M, DIM>* file,
-                 const size_type buffer_size = 1048576,
-                 cudaStream_t stream = 0) {
-    std::unique_lock<std::shared_timed_mutex> lock(mutex_);
-    K* d_keys = nullptr;
-    V* d_vectors = nullptr;
-    M* d_metas = nullptr;
-    K* h_keys = nullptr;
-    V* h_vectors = nullptr;
-    M* h_metas = nullptr;
-    size_type pair_size = sizeof(K) + sizeof(M) + sizeof(V) * DIM;
-    size_type batch_pairs_num = (buffer_size + pair_size) / pair_size;
+  size_type load(BaseKVFile<K, V, M, DIM>* file, cudaStream_t stream = 0) {
+    // Precalc some constants.
+    const size_type max_count =
+        device_memory_pool_->buffer_size() /
+        std::max({sizeof(key_type), sizeof(vector_type), sizeof(meta_type)});
+    assert(max_count > 0);
 
-    CUDA_CHECK(cudaMallocHost(&h_keys, sizeof(K) * batch_pairs_num));
-    CUDA_CHECK(cudaMallocHost(&h_vectors, sizeof(V) * batch_pairs_num * DIM));
-    CUDA_CHECK(cudaMallocHost(&h_metas, sizeof(M) * batch_pairs_num));
-    size_type nkeys = file->read(batch_pairs_num, h_keys, h_vectors, h_metas);
-    size_type counter = nkeys;
-    if (nkeys == 0) {
-      CUDA_FREE_POINTERS(stream, h_keys, h_vectors, h_metas);
-      CUDA_CHECK(cudaStreamSynchronize(stream));
+    // Grab enough host memory to hold batch data.
+    auto host_ws = host_memory_pool_->get_workspace<3>(stream);
+    auto h_keys = host_ws.get<key_type*>(0);
+    auto h_values = host_ws.get<V*>(1);
+    auto h_metas = host_ws.get<meta_type*>(2);
+
+    // Attempt a first read.
+    size_type count = file->read(max_count, h_keys, h_values, h_metas);
+    if (count == 0) {
       return 0;
     }
-    CUDA_CHECK(cudaMallocAsync(&d_keys, sizeof(K) * batch_pairs_num, stream));
-    CUDA_CHECK(
-        cudaMallocAsync(&d_vectors, sizeof(V) * batch_pairs_num * DIM, stream));
-    CUDA_CHECK(cudaMallocAsync(&d_metas, sizeof(M) * batch_pairs_num, stream));
 
+    // TODO: Doesn't work, because insert_or_assign may request a scoped_lock on
+    // `mutex_`. std::unique_lock<std::shared_timed_mutex> lock(mutex_);
+
+    // Fetch temporary workspace on device.
+    auto device_ws = device_memory_pool_->get_workspace<3>(stream);
+    auto d_keys = device_ws.get<key_type*>(0);
+    auto d_values = device_ws.get<value_type*>(1);
+    auto d_metas = device_ws.get<meta_type*>(2);
+
+    size_type total_count = 0;
     do {
-      CUDA_CHECK(cudaMemcpyAsync(d_keys, h_keys, sizeof(K) * nkeys,
+      // Move read data to device.
+      CUDA_CHECK(cudaMemcpyAsync(d_keys, h_keys, sizeof(key_type) * count,
                                  cudaMemcpyHostToDevice, stream));
-      CUDA_CHECK(cudaMemcpyAsync(d_vectors, h_vectors, sizeof(V) * nkeys * DIM,
+      CUDA_CHECK(cudaMemcpyAsync(d_values, h_values,
+                                 sizeof(vector_type) * count,
                                  cudaMemcpyHostToDevice, stream));
-      CUDA_CHECK(cudaMemcpyAsync(d_metas, h_metas, sizeof(M) * nkeys,
+      CUDA_CHECK(cudaMemcpyAsync(d_metas, h_metas, sizeof(meta_type) * count,
                                  cudaMemcpyHostToDevice, stream));
-      insert_or_assign(nkeys, d_keys, d_vectors, d_metas, stream, true);
-      nkeys = file->read(batch_pairs_num, h_keys, h_vectors, h_metas);
-      counter += nkeys;
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-    } while (nkeys > 0);
 
-    CUDA_FREE_POINTERS(stream, d_keys, d_vectors, d_metas);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    CUDA_FREE_POINTERS(stream, h_keys, h_vectors, h_metas);
-    return counter;
+      insert_or_assign(count, d_keys, d_values, d_metas, stream);
+      total_count += count;
+
+      // Read next batch.
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      count = file->read(max_count, h_keys, h_values, h_metas);
+    } while (count > 0);
+
+    return total_count;
   }
 
  private:
@@ -1172,6 +1218,9 @@ class HashTable {
   bool reach_max_capacity_ = false;
   bool initialized_ = false;
   mutable std::shared_timed_mutex mutex_;
+
+  std::unique_ptr<DeviceMemoryPool> device_memory_pool_;
+  std::unique_ptr<HostMemoryPool> host_memory_pool_;
 };
 
 }  // namespace merlin
