@@ -1248,7 +1248,7 @@ __global__ void lookup_kernel_with_io(
         break;
       }
 
-      if (g.any(current_key == EMPTY_KEY) {
+      if (g.any(current_key == EMPTY_KEY)) {
         break;
       }
     }
