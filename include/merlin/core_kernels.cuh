@@ -1216,7 +1216,7 @@ __global__ void lookup_kernel_with_io(
        t += blockDim.x * gridDim.x) {
     int key_idx = t / TILE_SIZE;
     int key_pos = -1;
-    bool local_found = false;
+//    bool local_found = false;
 
     K find_key = keys[key_idx];
     uint32_t hashed_key = Murmur3HashDevice(find_key);
@@ -1227,7 +1227,6 @@ __global__ void lookup_kernel_with_io(
     int src_lane = -1;
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
-    lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
 
     uint32_t tile_offset = 0;
     uint32_t key_offset = 0;
@@ -1237,33 +1236,32 @@ __global__ void lookup_kernel_with_io(
          tile_offset += TILE_SIZE) {
       key_offset = (start_idx + tile_offset + rank) % bucket_max_size;
       current_key = *(bucket->keys + key_offset);
-      auto const found_or_empty_vote =
-          g.ballot(find_key == current_key || current_key == EMPTY_KEY);
-      if (found_or_empty_vote) {
-        src_lane = __ffs(found_or_empty_vote) - 1;
+      auto const found_vote = g.ballot(find_key == current_key);
+      if (found_vote) {
+        src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-        if (src_lane == rank) {
-          local_found = (current_key == find_key);
-        }
-        local_found = g.shfl(local_found, src_lane);
+
+        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+        copy_vector<V, DIM, TILE_SIZE>(g, bucket->vectors + key_pos,
+                                       values + key_idx);
+        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+        break;
+      }
+
+      if (g.any(current_key == EMPTY_KEY) {
         break;
       }
     }
 
-    if (rank == 0) {
-      if (metas != nullptr && local_found) {
-        *(metas + key_idx) = bucket->metas[key_pos].val;
-      }
-      if (found != nullptr) {
-        *(found + key_idx) = local_found;
-      }
-    }
+//    if (rank == 0) {
+//      if (metas != nullptr && local_found) {
+//        *(metas + key_idx) = bucket->metas[key_pos].val;
+//      }
+//      if (found != nullptr) {
+//        *(found + key_idx) = local_found;
+//      }
+//    }
 
-    if (local_found) {
-      copy_vector<V, DIM, TILE_SIZE>(g, bucket->vectors + key_pos,
-                                     values + key_idx);
-    }
-    unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
   }
 }
 
