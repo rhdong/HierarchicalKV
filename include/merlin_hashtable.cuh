@@ -585,11 +585,11 @@ class HashTable {
     }
 
     std::unique_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-    lock.lock();
+    //lock.lock();
 
     size_type* d_count;
-    CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
+//    CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
+//    CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
 
     {
       const size_t block_size = options_.block_size;
@@ -603,9 +603,9 @@ class HashTable {
     }
 
     size_type count = 0;
-    CUDA_CHECK(cudaMemcpyAsync(&count, d_count, sizeof(size_type),
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaFreeAsync(d_count, stream));
+//    CUDA_CHECK(cudaMemcpyAsync(&count, d_count, sizeof(size_type),
+//                               cudaMemcpyDeviceToHost, stream));
+//    CUDA_CHECK(cudaFreeAsync(d_count, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     CudaCheckError();
