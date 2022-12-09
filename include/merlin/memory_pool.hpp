@@ -146,6 +146,7 @@ struct MemoryPoolOptions {
  */
 template <class Allocator>
 class MemoryPool;
+
 template <class Allocator>
 std::ostream& operator<<(std::ostream&, const MemoryPool<Allocator>&);
 
