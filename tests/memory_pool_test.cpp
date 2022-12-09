@@ -19,6 +19,35 @@
 #include <gtest/gtest.h>
 #include <iostream>
 
+using namespace nv::merlin;
+
+/**
+ * Wrapper around another allocator that prints debug messages.
+ */
+template <class Allocator>
+struct DebugAllocator final
+    : AllocatorBase<typename Allocator::type, DebugAllocator<Allocator>> {
+  using type = typename Allocator::type;
+
+  static constexpr const char* name{"DebugAllocator"};
+
+  inline static type* alloc(size_t n, cudaStream_t stream = 0) {
+    type* ptr = Allocator::alloc(n, stream);
+    std::cout << Allocator::name << "[type_name = " << typeid(type).name()
+              << "]: " << static_cast<void*>(ptr) << " allocated = " << n
+              << " x " << sizeof(type) << " bytes, stream = " << stream
+              << std::endl;
+    return ptr;
+  }
+
+  inline static void free(type* ptr, cudaStream_t stream = 0) {
+    Allocator::free(ptr, stream);
+    std::cout << Allocator::name << "[type_name = " << typeid(type).name()
+              << "]: " << static_cast<void*>(ptr)
+              << " freed, stream = " << stream << std::endl;
+  }
+};
+
 void print_divider() {
   for (size_t i = 0; i < 80; ++i) std::cout << '-';
   std::cout << std::endl;
