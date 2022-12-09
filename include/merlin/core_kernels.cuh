@@ -1406,7 +1406,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
         if (tile.thread_rank() == src_lane) {
 //          atomicAdd(count, 1);
-//          *(bucket->keys + key_pos) = RECLAIM_KEY;
+          *(bucket->keys + key_pos) = RECLAIM_KEY;
 //          buckets_size[bkt_idx]--;
         }
         break;
