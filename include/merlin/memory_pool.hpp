@@ -211,6 +211,7 @@ class MemoryPool final {
         : pool_{pool}, stream_{stream} {}
 
     Workspace(const Workspace&) = delete;
+
     Workspace& operator=(const Workspace&) = delete;
 
     inline Workspace(Workspace&& other)
@@ -279,10 +280,12 @@ class MemoryPool final {
     }
 
     StaticWorkspace(const StaticWorkspace&) = delete;
+
     StaticWorkspace& operator=(const StaticWorkspace&) = delete;
 
     inline StaticWorkspace(StaticWorkspace&& other)
         : base_type(std::move(other)) {}
+
     inline StaticWorkspace& operator=(StaticWorkspace&& other) {
       base_type::operator=(std::move(other));
       return *this;
@@ -303,10 +306,12 @@ class MemoryPool final {
     }
 
     DynamicWorkspace(const DynamicWorkspace&) = delete;
+
     DynamicWorkspace& operator=(const DynamicWorkspace&) = delete;
 
     inline DynamicWorkspace(DynamicWorkspace&& other)
         : base_type(std::move(other)) {}
+
     inline DynamicWorkspace& operator=(DynamicWorkspace&& other) {
       base_type::operator=(std::move(other));
       return *this;
@@ -451,8 +456,7 @@ class MemoryPool final {
           const cudaError_t event_state = cudaEventQuery(pair.second);
           switch (event_state) {
             case cudaSuccess:
-              // Stock buffers and destroy those that
-              // are no longer needed.
+              // Stock buffers and destroy those that are no longer needed.
               if (stock_.size() < options.max_stock) {
                 stock_.emplace_back(pair.first);
               } else {
@@ -504,7 +508,10 @@ class MemoryPool final {
                       cudaStream_t stream) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (stream) {
+    // If the workspace that borrowed a stream was moved out of the RAII scope
+    // where it was created, it could happen that the stream was destroyed when
+    // we return the buffer ownershup. This `cudaStreamQuery` will prevent that.
+    if (stream && cudaStreamQuery(stream) != cudaErrorInvalidResourceHandle) {
       for (; first != last; ++first) {
         // Spin lock if too many pending buffers (i.e., let CPU wait for GPU).
         while (ready_events_.empty()) {
