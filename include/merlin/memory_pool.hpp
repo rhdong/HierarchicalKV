@@ -42,16 +42,17 @@ struct AllocatorBase {
     return sync_unique_ptr(Allocator::alloc(n));
   }
 
-  inline static async_unique_ptr make_unique(size_t n, cudaStream_t ctx) {
-    return {Allocator::alloc(n, ctx), [ctx](type* p) { Allocator::free(p); }};
+  inline static async_unique_ptr make_unique(size_t n, cudaStream_t stream) {
+    return {Allocator::alloc(n, stream),
+            [stream](type* p) { Allocator::free(p); }};
   }
 
-  inline static shared_ptr make_shared(size_t n, cudaStream_t ctx = nullptr) {
-    return {Allocator::alloc(n, ctx),
-            [ctx](type* p) { Allocator::free(p, ctx); }};
+  inline static shared_ptr make_shared(size_t n, cudaStream_t stream = 0) {
+    return {Allocator::alloc(n, stream),
+            [stream](type* p) { Allocator::free(p, stream); }};
   }
 
-  inline void operator()(type* ptr) { Allocator::free(ptr, nullptr); }
+  inline void operator()(type* ptr) { Allocator::free(ptr); }
 };
 
 /**
@@ -65,13 +66,11 @@ struct StandardAllocator final : AllocatorBase<T, StandardAllocator<T>> {
 
   static constexpr const char* name{"StandardAllocator"};
 
-  inline static type* alloc(size_t n, cudaStream_t ctx = nullptr) {
+  inline static type* alloc(size_t n, cudaStream_t stream = 0) {
     return new type[n];
   }
 
-  inline static void free(type* ptr, cudaStream_t ctx = nullptr) {
-    delete[] ptr;
-  }
+  inline static void free(type* ptr, cudaStream_t stream = 0) { delete[] ptr; }
 };
 
 /**
@@ -83,13 +82,13 @@ struct HostAllocator final : AllocatorBase<T, HostAllocator<T>> {
 
   static constexpr const char* name{"HostAllocator"};
 
-  inline static type* alloc(size_t n, cudaStream_t ctx = nullptr) {
+  inline static type* alloc(size_t n, cudaStream_t stream = 0) {
     void* ptr;
     CUDA_CHECK(cudaMallocHost(&ptr, sizeof(T) * n));
     return reinterpret_cast<type*>(ptr);
   }
 
-  inline static void free(type* ptr, cudaStream_t ctx = nullptr) {
+  inline static void free(type* ptr, cudaStream_t stream = 0) {
     CUDA_CHECK(cudaFreeHost(ptr));
   }
 };
@@ -104,11 +103,11 @@ struct DeviceAllocator final : AllocatorBase<T, DeviceAllocator<T>> {
 
   static constexpr const char* name{"DeviceAllocator"};
 
-  inline static type* alloc(size_t n, cudaStream_t ctx = nullptr) {
+  inline static type* alloc(size_t n, cudaStream_t stream = 0) {
     void* ptr;
     cudaError_t res;
-    if (ctx) {
-      res = cudaMallocAsync(&ptr, sizeof(T) * n, ctx);
+    if (stream) {
+      res = cudaMallocAsync(&ptr, sizeof(T) * n, stream);
     } else {
       res = cudaMalloc(&ptr, sizeof(T) * n);
     }
@@ -116,10 +115,10 @@ struct DeviceAllocator final : AllocatorBase<T, DeviceAllocator<T>> {
     return reinterpret_cast<type*>(ptr);
   }
 
-  inline static void free(type* ptr, cudaStream_t ctx = nullptr) {
+  inline static void free(type* ptr, cudaStream_t stream = 0) {
     cudaError_t res;
-    if (ctx) {
-      res = cudaFreeAsync(ptr, ctx);
+    if (stream) {
+      res = cudaFreeAsync(ptr, stream);
     } else {
       res = cudaFree(ptr);
     }
@@ -137,19 +136,20 @@ struct DebugAllocator final
 
   static constexpr const char* name{"DebugAllocator"};
 
-  inline static type* alloc(size_t n, cudaStream_t ctx = nullptr) {
-    type* ptr = Allocator::alloc(n, ctx);
+  inline static type* alloc(size_t n, cudaStream_t stream = 0) {
+    type* ptr = Allocator::alloc(n, stream);
     std::cout << Allocator::name << "[type_name = " << typeid(type).name()
               << "]: " << static_cast<void*>(ptr) << " allocated = " << n
-              << " x " << sizeof(type) << " bytes, ctx = " << ctx << std::endl;
+              << " x " << sizeof(type) << " bytes, stream = " << stream
+              << std::endl;
     return ptr;
   }
 
-  inline static void free(type* ptr, cudaStream_t ctx = nullptr) {
-    Allocator::free(ptr, ctx);
+  inline static void free(type* ptr, cudaStream_t stream = 0) {
+    Allocator::free(ptr, stream);
     std::cout << Allocator::name << "[type_name = " << typeid(type).name()
-              << "]: " << static_cast<void*>(ptr) << " freed, ctx = " << ctx
-              << std::endl;
+              << "]: " << static_cast<void*>(ptr)
+              << " freed, stream = " << stream << std::endl;
   }
 };
 
@@ -229,25 +229,25 @@ class MemoryPool final {
   template <class Container>
   class Workspace {
    public:
-    inline Workspace() : pool_{nullptr}, ctx_{nullptr} {}
+    inline Workspace() : pool_{nullptr}, stream_{0} {}
 
-    inline Workspace(pool_type* pool, cudaStream_t ctx)
-        : pool_{pool}, ctx_{ctx} {}
+    inline Workspace(pool_type* pool, cudaStream_t stream)
+        : pool_{pool}, stream_{stream} {}
 
     Workspace(const Workspace&) = delete;
     Workspace& operator=(const Workspace&) = delete;
 
     inline Workspace(Workspace&& other)
         : pool_{other.pool_},
-          ctx_{other.ctx_},
+          stream_{other.stream_},
           buffers_{std::move(other.buffers_)} {}
 
     inline Workspace& operator=(Workspace&& other) {
       if (pool_) {
-        pool_->put_raw(buffers_.begin(), buffers_.end(), ctx_);
+        pool_->put_raw(buffers_.begin(), buffers_.end(), stream_);
       }
       pool_ = other.pool_;
-      ctx_ = other.ctx_;
+      stream_ = other.stream_;
       buffers_ = std::move(other.buffers_);
       other.pool_ = nullptr;
       return *this;
@@ -255,7 +255,7 @@ class MemoryPool final {
 
     inline ~Workspace() {
       if (pool_) {
-        pool_->put_raw(buffers_.begin(), buffers_.end(), ctx_);
+        pool_->put_raw(buffers_.begin(), buffers_.end(), stream_);
       }
     }
 
@@ -285,7 +285,7 @@ class MemoryPool final {
 
    protected:
     pool_type* pool_;
-    cudaStream_t ctx_;
+    cudaStream_t stream_;
     Container buffers_;
   };
 
@@ -296,10 +296,10 @@ class MemoryPool final {
 
     inline StaticWorkspace() : base_type() {}
 
-    inline StaticWorkspace(pool_type* pool, cudaStream_t ctx)
-        : base_type(pool, ctx) {
+    inline StaticWorkspace(pool_type* pool, cudaStream_t stream)
+        : base_type(pool, stream) {
       auto& buffers = this->buffers_;
-      pool->get_raw(buffers.begin(), buffers.end(), ctx);
+      pool->get_raw(buffers.begin(), buffers.end(), stream);
     }
 
     StaticWorkspace(const StaticWorkspace&) = delete;
@@ -319,11 +319,11 @@ class MemoryPool final {
 
     inline DynamicWorkspace() : base_type() {}
 
-    inline DynamicWorkspace(pool_type* pool, size_t n, cudaStream_t ctx)
-        : base_type(pool, ctx) {
+    inline DynamicWorkspace(pool_type* pool, size_t n, cudaStream_t stream)
+        : base_type(pool, stream) {
       auto& buffers = this->buffers_;
       buffers.resize(n);
-      pool->get_raw(buffers.begin(), buffers.end(), ctx);
+      pool->get_raw(buffers.begin(), buffers.end(), stream);
     }
 
     DynamicWorkspace(const DynamicWorkspace&) = delete;
@@ -397,43 +397,43 @@ class MemoryPool final {
     return pending_.size();
   }
 
-  void deplete(cudaStream_t ctx = nullptr) {
+  void deplete(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     // Collect any pending buffers first.
-    collect_pending_unsafe(ctx);
+    collect_pending_unsafe(stream);
 
     // Deplete remaining buffers.
     for (auto& ptr : stock_) {
-      Allocator::free(ptr, ctx);
+      Allocator::free(ptr, stream);
     }
     stock_.clear();
   }
 
-  void replenish(cudaStream_t ctx = nullptr) {
+  void replenish(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (stock_.size() >= options.base_stock) {
       return;
     }
 
     // Try to collect pending buffers first.
-    collect_pending_unsafe(ctx);
+    collect_pending_unsafe(stream);
 
     // Fill up until we reach the base stock.
     while (stock_.size() < options.base_stock) {
-      stock_.emplace_back(Allocator::alloc(options.buffer_size, ctx));
+      stock_.emplace_back(Allocator::alloc(options.buffer_size, stream));
     }
 
     // To avoid trouble downstream, make sure the buffers have materialized.
-    if (ctx) {
-      CUDA_CHECK(cudaStreamSynchronize(ctx));
+    if (stream) {
+      CUDA_CHECK(cudaStreamSynchronize(stream));
     }
   }
 
-  void await_pending(cudaStream_t ctx = nullptr) {
+  void await_pending(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
     while (!pending_.empty()) {
-      collect_pending_unsafe(ctx);
+      collect_pending_unsafe(stream);
       if (pending_.empty()) {
         break;
       }
@@ -442,34 +442,36 @@ class MemoryPool final {
   }
 
   inline std::unique_ptr<alloc_type, std::function<void(alloc_type*)>>
-  get_unique(cudaStream_t ctx = nullptr) {
+  get_unique(cudaStream_t stream = 0) {
     alloc_type* ptr;
-    get_raw(&ptr, (&ptr) + 1, ctx);
-    return {ptr, [this, ctx](alloc_type* p) { put_raw(&p, (&p) + 1, ctx); }};
+    get_raw(&ptr, (&ptr) + 1, stream);
+    return {ptr,
+            [this, stream](alloc_type* p) { put_raw(&p, (&p) + 1, stream); }};
   }
 
-  inline std::shared_ptr<alloc_type> get_shared(cudaStream_t ctx = nullptr) {
+  inline std::shared_ptr<alloc_type> get_shared(cudaStream_t stream = 0) {
     alloc_type* ptr;
-    get_raw(&ptr, (&ptr) + 1, ctx);
-    return {ptr, [this, ctx](alloc_type* p) { put_raw(&p, (&p) + 1, ctx); }};
+    get_raw(&ptr, (&ptr) + 1, stream);
+    return {ptr,
+            [this, stream](alloc_type* p) { put_raw(&p, (&p) + 1, stream); }};
   }
 
   template <size_t N>
-  inline StaticWorkspace<N> get_workspace(cudaStream_t ctx = nullptr) {
-    return {this, ctx};
+  inline StaticWorkspace<N> get_workspace(cudaStream_t stream = 0) {
+    return {this, stream};
   }
 
-  inline DynamicWorkspace get_workspace(size_t n, cudaStream_t ctx = nullptr) {
-    return {this, n, ctx};
+  inline DynamicWorkspace get_workspace(size_t n, cudaStream_t stream = 0) {
+    return {this, n, stream};
   }
 
   friend std::ostream& operator<<<Allocator>(std::ostream&, const MemoryPool&);
 
  private:
-  inline void collect_pending_unsafe(cudaStream_t ctx) {
+  inline void collect_pending_unsafe(cudaStream_t stream) {
     auto it = std::remove_if(
         pending_.begin(), pending_.end(),
-        [this, ctx](const std::pair<alloc_type*, cudaEvent_t>& pair) {
+        [this, stream](const std::pair<alloc_type*, cudaEvent_t>& pair) {
           const cudaError_t event_state = cudaEventQuery(pair.second);
           switch (event_state) {
             case cudaSuccess:
@@ -478,7 +480,7 @@ class MemoryPool final {
               if (stock_.size() < options.max_stock) {
                 stock_.emplace_back(pair.first);
               } else {
-                Allocator::free(pair.first, ctx);
+                Allocator::free(pair.first, stream);
               }
               ready_events_.emplace_back(pair.second);
               return true;
@@ -493,7 +495,8 @@ class MemoryPool final {
   }
 
   template <class Iterator>
-  inline void get_raw(Iterator first, Iterator const last, cudaStream_t ctx) {
+  inline void get_raw(Iterator first, Iterator const last,
+                      cudaStream_t stream) {
     // Get pre-allocated buffers if stock available.
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -501,7 +504,7 @@ class MemoryPool final {
       for (; first != last; ++first) {
         // If no buffers available, try to make some available.
         if (stock_.empty()) {
-          collect_pending_unsafe(ctx);
+          collect_pending_unsafe(stream);
           if (stock_.empty()) {
             // No buffers available.
             break;
@@ -516,19 +519,20 @@ class MemoryPool final {
 
     // Forge new buffers until request can be filled.
     for (; first != last; ++first) {
-      *first = Allocator::alloc(options.buffer_size, ctx);
+      *first = Allocator::alloc(options.buffer_size, stream);
     }
   }
 
   template <class Iterator>
-  inline void put_raw(Iterator first, Iterator const last, cudaStream_t ctx) {
+  inline void put_raw(Iterator first, Iterator const last,
+                      cudaStream_t stream) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (ctx) {
+    if (stream) {
       for (; first != last; ++first) {
         // Spin lock if too many pending buffers (i.e., let CPU wait for GPU).
         while (ready_events_.empty()) {
-          collect_pending_unsafe(ctx);
+          collect_pending_unsafe(stream);
           if (!ready_events_.empty()) {
             break;
           }
@@ -538,7 +542,7 @@ class MemoryPool final {
         // Queue buffer.
         cudaEvent_t ready_event = ready_events_.back();
         ready_events_.pop_back();
-        CUDA_CHECK(cudaEventRecord(ready_event, ctx));
+        CUDA_CHECK(cudaEventRecord(ready_event, stream));
         pending_.emplace_back(*first, ready_event);
       }
     } else {
