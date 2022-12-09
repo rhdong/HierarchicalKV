@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "merlin/memory_pool.cuh"
+#include "merlin/memory_pool.hpp"
 #include <cuda_runtime_api.h>
 #include <gtest/gtest.h>
 #include <iostream>
