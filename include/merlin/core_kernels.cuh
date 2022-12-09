@@ -1402,9 +1402,9 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
         src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
         if (src_lane == rank) {
-          atomicAdd(count, 1);
+//          atomicAdd(count, 1);
           *(bucket->keys + key_pos) = RECLAIM_KEY;
-          buckets_size[bkt_idx]--;
+//          buckets_size[bkt_idx]--;
         }
         break;
       }
