@@ -584,10 +584,8 @@ class HashTable {
       return 0;
     }
 
-    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-    if (!reach_max_capacity_) {
-      lock.lock();
-    }
+    std::unique_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+    lock.lock();
 
     size_type* d_count;
     CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
@@ -644,10 +642,8 @@ class HashTable {
    */
   size_type erase_if(const Pred& pred, const key_type& pattern,
                      const meta_type& threshold, cudaStream_t stream = 0) {
-    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-    if (!reach_max_capacity_) {
-      lock.lock();
-    }
+    std::unique_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+    lock.lock();
 
     size_type* d_count;
     CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));

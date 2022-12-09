@@ -1387,7 +1387,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
     int src_lane = -1;
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
-    lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+//    lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
 
     uint32_t tile_offset = 0;
     uint32_t key_offset = 0;
@@ -1397,10 +1397,9 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
          tile_offset += TILE_SIZE) {
       key_offset = (start_idx + tile_offset + rank) % bucket_max_size;
       current_key = *(bucket->keys + key_offset);
-      auto const found_or_empty_vote =
-          g.ballot(find_key == current_key || current_key == EMPTY_KEY);
-      if (found_or_empty_vote) {
-        src_lane = __ffs(found_or_empty_vote) - 1;
+      auto const found_vote = g.ballot(find_key == current_key);
+      if (found_vote) {
+        src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
         if (src_lane == rank) {
           local_found = (current_key == find_key);
@@ -1412,8 +1411,12 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
         }
         break;
       }
+
+      if (g.any(current_key == EMPTY_KEY)) {
+        break;
+      }
     }
-    unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+//    unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
   }
 }
 
