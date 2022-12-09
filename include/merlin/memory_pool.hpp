@@ -158,9 +158,9 @@ struct DebugAllocator final
  */
 struct MemoryPoolOptions {
   size_t buffer_size =
-      256L * 1024 * 1024;    ///< Size in bytes for buffers produced by this pool.
-  size_t max_stock = 4;     ///< Amount of buffers to keep in reserve.
-  size_t base_stock = 3;    ///< Amount of buffers to create right away.
+      256L * 1024 * 1024;  ///< Size in bytes for buffers produced by this pool.
+  size_t max_stock = 4;    ///< Amount of buffers to keep in reserve.
+  size_t base_stock = 3;   ///< Amount of buffers to create right away.
   size_t max_pending = 16;  ///< Maximum amount of awaitable buffers. If this
                             ///< limit is exceeded threads will start to block.
 };
