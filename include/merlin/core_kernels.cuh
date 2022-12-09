@@ -1374,11 +1374,11 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
   auto block = cooperative_groups::this_thread_block();
   auto tile = cooperative_groups::tiled_partition<TILE_SIZE>(block);
 
-  int rank = g.thread_rank();
+  int rank = tile.thread_rank();
 
 
   for (auto key_idx = tile.meta_group_size() * block.group_index().x + tile.meta_group_rank();
-       key_idx < num_keys; key_idx += tile.meta_group_size() * grid.group_dim().x) {
+       key_idx < 1024 *1024; key_idx += tile.meta_group_size() * grid.group_dim().x) {
     int key_pos = -1;
 //    bool local_found = false;
 
