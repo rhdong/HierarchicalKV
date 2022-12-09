@@ -1400,7 +1400,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
          tile_offset += TILE_SIZE) {
       key_offset = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
       const K current_key = *(bucket->keys + key_offset);
-      auto const found_vote = g.ballot(find_key == current_key);
+      auto const found_vote = tile.ballot(find_key == current_key);
       if (found_vote) {
         auto const src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
@@ -1412,7 +1412,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
         break;
       }
 
-      if (g.any(current_key == EMPTY_KEY)) {
+      if (tile.any(current_key == EMPTY_KEY)) {
         break;
       }
     }
