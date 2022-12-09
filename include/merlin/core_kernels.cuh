@@ -1383,7 +1383,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
 //    bool local_found = false;
 
 //    K find_key = keys[key_idx];
-    key_type find_key = keys[key_idx];
+    K find_key = keys[key_idx];
     uint32_t hashed_key = Murmur3HashDevice(find_key);
     size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
     size_t bkt_idx = global_idx / bucket_max_size;
