@@ -1369,16 +1369,21 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
                               int* __restrict buckets_size,
                               const size_t bucket_max_size,
                               const size_t buckets_num, size_t N) {
-  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+//  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+  auto grid = cooperative_groups::this_grid();
+  auto block = cooperative_groups::this_thread_block();
+  auto tile = cooperative_groups::tiled_partition<TILE_SIZE>(block);
+
   int rank = g.thread_rank();
 
-  for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
-       t += blockDim.x * gridDim.x) {
-    int key_idx = t / TILE_SIZE;
-    int key_pos = -1;
-    bool local_found = false;
 
-    K find_key = keys[key_idx];
+  for (auto key_idx = tile.meta_group_size() * block.group_index().x + tile.meta_group_rank();
+       key_idx < num_keys; key_idx += tile.meta_group_size() * grid.group_dim().x) {
+    int key_pos = -1;
+//    bool local_found = false;
+
+//    K find_key = keys[key_idx];
+    key_type find_key = keys[key_idx];
     uint32_t hashed_key = Murmur3HashDevice(find_key);
     size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
     size_t bkt_idx = global_idx / bucket_max_size;
