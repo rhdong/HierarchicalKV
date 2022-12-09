@@ -585,7 +585,7 @@ class HashTable {
     }
 
     std::unique_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-    //lock.lock();
+    lock.lock();
 
     size_type* d_count;
 //    CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
