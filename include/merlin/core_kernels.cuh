@@ -1361,7 +1361,7 @@ __global__ void clear_kernel(Table<K, V, M, DIM>* __restrict table, size_t N) {
 }
 
 /* Remove specified keys. */
-template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 8>
+template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
                               const K* __restrict keys,
                               size_t* __restrict count,
