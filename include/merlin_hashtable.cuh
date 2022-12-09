@@ -588,8 +588,8 @@ class HashTable {
     lock.lock();
 
     size_type* d_count;
-//    CUDA_CHECK(cudaMallocAsync(&d_count, sizeof(size_type), stream));
-//    CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
+    cudaMallocAsync(&d_count, sizeof(size_type), stream);
+    cudaMemsetAsync(d_count, 0, sizeof(size_type), stream);
 
     {
       const size_t block_size = options_.block_size;
@@ -603,9 +603,9 @@ class HashTable {
     }
 
     size_type count = 0;
-//    CUDA_CHECK(cudaMemcpyAsync(&count, d_count, sizeof(size_type),
-//                               cudaMemcpyDeviceToHost, stream));
-//    CUDA_CHECK(cudaFreeAsync(d_count, stream));
+    cudaMemcpyAsync(&count, d_count, sizeof(size_type),
+                               cudaMemcpyDeviceToHost, stream);
+    cudaFreeAsync(d_count, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     CudaCheckError();
