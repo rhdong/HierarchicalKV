@@ -1384,24 +1384,22 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
     size_t bkt_idx = global_idx / bucket_max_size;
     size_t start_idx = global_idx % bucket_max_size;
 
-    int src_lane = -1;
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
 //    lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
 
     uint32_t tile_offset = 0;
     uint32_t key_offset = 0;
-    K current_key = 0;
 #pragma unroll
     for (tile_offset = 0; tile_offset < bucket_max_size;
          tile_offset += TILE_SIZE) {
-      key_offset = (start_idx + tile_offset + rank) % bucket_max_size;
-      current_key = *(bucket->keys + key_offset);
+      key_offset = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+      const K current_key = *(bucket->keys + key_offset);
       auto const found_vote = g.ballot(find_key == current_key);
       if (found_vote) {
-        src_lane = __ffs(found_vote) - 1;
+        auto const src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-        if (src_lane == rank) {
+        if (g.thread_rank() == src_lane) {
 //          atomicAdd(count, 1);
           *(bucket->keys + key_pos) = RECLAIM_KEY;
           buckets_size[bkt_idx]--;
