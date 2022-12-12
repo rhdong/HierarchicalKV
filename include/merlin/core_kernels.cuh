@@ -1264,7 +1264,7 @@ __global__ void lookup_kernel_with_io(
 
     size_t bkt_idx = -1;
     size_t start_idx = -1;
-    uint32_t tile_offset = 0
+    uint32_t tile_offset = 0;
 
     get_key_position<K>(find_key, &bkt_idx, &start_idx, buckets_num, bucket_max_size);
 
