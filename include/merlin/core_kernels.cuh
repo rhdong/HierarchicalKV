@@ -1218,7 +1218,7 @@ __forceinline__ __device__ int find_in_bucket(
 #pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
-    key_offset = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+    key_offset = (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
     current_key = *(bucket->keys + key_offset);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
