@@ -1270,7 +1270,7 @@ __global__ void lookup_kernel_with_io(
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
 
-    const int key_pos = find_in_bucket<K, V, DIM, TILE_SIZE>(
+    const int key_pos = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
         g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
 
     if (key_pos >= 0) {
