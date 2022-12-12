@@ -1236,7 +1236,7 @@ __forceinline__ __device__ int find_in_bucket(
 template <class K>
 __forceinline__ __device__ void get_key_position(K key, size_t* bkt_idx,
                                                  size_t* start_idx,
-                                                 const size_t buckets_num, 
+                                                 const size_t buckets_num,
                                                  const size_t bucket_max_size) {
   uint32_t hashed_key = Murmur3HashDevice(key);
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
@@ -1264,6 +1264,7 @@ __global__ void lookup_kernel_with_io(
 
     size_t bkt_idx = -1;
     size_t start_idx = -1;
+    uint32_t tile_offset = 0
 
     get_key_position<K>(find_key, &bkt_idx, &start_idx, buckets_num, bucket_max_size);
 
