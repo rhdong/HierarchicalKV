@@ -1211,14 +1211,16 @@ __forceinline__ __device__ void copy_vector_n(
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 8>
 __forceinline__ __device__ int find_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M, DIM>* bucket,
-    const K find_key, uint32_t tile_offset, const uint32_t start_idx, const size_t bucket_max_size) {
+    const K find_key, uint32_t tile_offset, const uint32_t start_idx,
+    const size_t bucket_max_size) {
   uint32_t key_offset = 0;
   K current_key = 0;
 
 #pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
-    key_offset = (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+    key_offset =
+        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
     current_key = *(bucket->keys + key_offset);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
@@ -1266,7 +1268,8 @@ __global__ void lookup_kernel_with_io(
     size_t start_idx = -1;
     uint32_t tile_offset = 0;
 
-    get_key_position<K>(find_key, &bkt_idx, &start_idx, buckets_num, bucket_max_size);
+    get_key_position<K>(find_key, &bkt_idx, &start_idx, buckets_num,
+                        bucket_max_size);
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
 
@@ -1274,10 +1277,10 @@ __global__ void lookup_kernel_with_io(
         g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
 
     if (key_pos >= 0) {
-      //        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+      lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
       copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
                                        (float*)(values + key_idx));
-      //        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+      unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
       break;
     }
 
