@@ -1211,7 +1211,7 @@ __forceinline__ __device__ void copy_vector_n(
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 8>
 __forceinline__ __device__ int find_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M, DIM>* bucket,
-    K find_key, uint32_t tile_offset, const size_t bucket_max_size) {
+    const K find_key, uint32_t tile_offset, const uint32_t start_idx, const size_t bucket_max_size) {
   uint32_t key_offset = 0;
   K current_key = 0;
 
@@ -1223,19 +1223,20 @@ __forceinline__ __device__ int find_in_bucket(
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       int src_lane = __ffs(found_vote) - 1;
-      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      return key_pos;
+      return (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
     }
 
     if (g.any(current_key == EMPTY_KEY)) {
       return -1;
     }
   }
+  return -1;
 }
 
 template <class K>
 __forceinline__ __device__ void get_key_position(K key, size_t* bkt_idx,
                                                  size_t* start_idx,
+                                                 const size_t buckets_num, 
                                                  const size_t bucket_max_size) {
   uint32_t hashed_key = Murmur3HashDevice(key);
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
@@ -1264,12 +1265,12 @@ __global__ void lookup_kernel_with_io(
     size_t bkt_idx = -1;
     size_t start_idx = -1;
 
-    get_key_position<K>(key, &bkt_idx, &start_idx, bucket_max_size);
+    get_key_position<K>(find_key, &bkt_idx, &start_idx, buckets_num, bucket_max_size);
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
 
     const int key_pos = find_in_bucket<K, V, DIM, TILE_SIZE>(
-        g, bucket, find_key, tile_offset, bucket_max_size);
+        g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
 
     if (key_pos >= 0) {
       //        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
