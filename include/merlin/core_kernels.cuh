@@ -1201,11 +1201,46 @@ __global__ void accum_kernel(
 }
 
 template <class V, size_t DIM, uint32_t TILE_SIZE = 8>
-__forceinline__ __device__ void copy_vector_n(cg::thread_block_tile<TILE_SIZE> g,
-                                            const float* src, float* dst) {
+__forceinline__ __device__ void copy_vector_n(
+    cg::thread_block_tile<TILE_SIZE> g, const float* src, float* dst) {
   for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
     dst[i] = src[i];
   }
+}
+
+template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 8>
+__forceinline__ __device__ int find_in_bucket(
+    cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M, DIM>* bucket,
+    K find_key, uint32_t tile_offset, const size_t bucket_max_size) {
+  uint32_t key_offset = 0;
+  K current_key = 0;
+
+#pragma unroll
+  for (tile_offset = 0; tile_offset < bucket_max_size;
+       tile_offset += TILE_SIZE) {
+    key_offset = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+    current_key = *(bucket->keys + key_offset);
+    auto const found_vote = g.ballot(find_key == current_key);
+    if (found_vote) {
+      int src_lane = __ffs(found_vote) - 1;
+      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+      return key_pos;
+    }
+
+    if (g.any(current_key == EMPTY_KEY)) {
+      return -1;
+    }
+  }
+}
+
+template <class K>
+__forceinline__ __device__ void get_key_position(K key, size_t* bkt_idx,
+                                                 size_t* start_idx,
+                                                 const size_t bucket_max_size) {
+  uint32_t hashed_key = Murmur3HashDevice(key);
+  size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
+  *bkt_idx = global_idx / bucket_max_size;
+  *start_idx = global_idx % bucket_max_size;
 }
 
 /* lookup with IO operation. This kernel is
@@ -1223,53 +1258,35 @@ __global__ void lookup_kernel_with_io(
   for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
     int key_idx = t / TILE_SIZE;
-    int key_pos = -1;
-//    bool local_found = false;
 
-    K find_key = keys[key_idx];
-    uint32_t hashed_key = Murmur3HashDevice(find_key);
-    size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
-    size_t bkt_idx = global_idx / bucket_max_size;
-    size_t start_idx = global_idx % bucket_max_size;
+    const K find_key = keys[key_idx];
 
-    int src_lane = -1;
+    size_t bkt_idx = -1;
+    size_t start_idx = -1;
+
+    get_key_position<K>(key, &bkt_idx, &start_idx, bucket_max_size);
 
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
 
-    uint32_t tile_offset = 0;
-    uint32_t key_offset = 0;
-    K current_key = 0;
-#pragma unroll
-    for (tile_offset = 0; tile_offset < bucket_max_size;
-         tile_offset += TILE_SIZE) {
-      key_offset = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
-      current_key = *(bucket->keys + key_offset);
-      auto const found_vote = g.ballot(find_key == current_key);
-      if (found_vote) {
-        src_lane = __ffs(found_vote) - 1;
-        key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+    const int key_pos = find_in_bucket<K, V, DIM, TILE_SIZE>(
+        g, bucket, find_key, tile_offset, bucket_max_size);
 
-//        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
-        copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
+    if (key_pos >= 0) {
+      //        lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+      copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
                                        (float*)(values + key_idx));
-//        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
-        break;
-      }
-
-      if (g.any(current_key == EMPTY_KEY)) {
-        break;
-      }
+      //        unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+      break;
     }
 
-//    if (rank == 0) {
-//      if (metas != nullptr && local_found) {
-//        *(metas + key_idx) = bucket->metas[key_pos].val;
-//      }
-//      if (found != nullptr) {
-//        *(found + key_idx) = local_found;
-//      }
-//    }
-
+    //    if (rank == 0) {
+    //      if (metas != nullptr && local_found) {
+    //        *(metas + key_idx) = bucket->metas[key_pos].val;
+    //      }
+    //      if (found != nullptr) {
+    //        *(found + key_idx) = local_found;
+    //      }
+    //    }
   }
 }
 
@@ -1369,29 +1386,29 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
                               int* __restrict buckets_size,
                               const size_t bucket_max_size,
                               const size_t buckets_num, size_t N) {
-//  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+  //  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   auto grid = cooperative_groups::this_grid();
   auto block = cooperative_groups::this_thread_block();
   auto tile = cooperative_groups::tiled_partition<TILE_SIZE>(block);
 
   int rank = tile.thread_rank();
 
-
-  for (auto key_idx = tile.meta_group_size() * block.group_index().x + tile.meta_group_rank();
-       key_idx < 1024 *1024; key_idx += tile.meta_group_size() * grid.group_dim().x) {
+  for (auto key_idx = tile.meta_group_size() * block.group_index().x +
+                      tile.meta_group_rank();
+       key_idx < 1024 * 1024;
+       key_idx += tile.meta_group_size() * grid.group_dim().x) {
     int key_pos = -1;
-//    bool local_found = false;
+    //    bool local_found = false;
 
-//    K find_key = keys[key_idx];
+    //    K find_key = keys[key_idx];
     K find_key = keys[key_idx];
     uint32_t hashed_key = Murmur3HashDevice(find_key);
     size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
     size_t bkt_idx = global_idx / bucket_max_size;
     size_t start_idx = global_idx % bucket_max_size;
 
-
     Bucket<K, V, M, DIM>* bucket = buckets + bkt_idx;
-//    lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+    //    lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
 
     uint32_t tile_offset = 0;
     uint32_t key_offset = 0;
@@ -1405,9 +1422,9 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
         auto const src_lane = __ffs(found_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
         if (tile.thread_rank() == src_lane) {
-//          atomicAdd(count, 1);
+          //          atomicAdd(count, 1);
           *(bucket->keys + key_pos) = RECLAIM_KEY;
-//          buckets_size[bkt_idx]--;
+          //          buckets_size[bkt_idx]--;
         }
         break;
       }
@@ -1416,7 +1433,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
         break;
       }
     }
-//    unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+    //    unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
   }
 }
 

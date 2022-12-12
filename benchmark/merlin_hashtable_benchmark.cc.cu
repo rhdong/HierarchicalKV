@@ -62,7 +62,11 @@ void create_random_keys(K* h_keys, M* h_metas, const int key_num_per_op) {
 }
 
 template <class K, class M>
-void create_random_keys_by_power_law(K* h_keys, M* h_metas, const size_t key_num_per_op, const float alpha = 1.05, const size_t cache_size=2 * 1024 * 1024 * 1024) {
+void create_random_keys_by_power_law(K* h_keys, M* h_metas,
+                                     const size_t key_num_per_op,
+                                     const float alpha = 1.05,
+                                     const size_t cache_size = 2 * 1024 * 1024 *
+                                                               1024) {
   std::unordered_set<K> numbers;
   std::random_device rd;
   std::mt19937_64 eng(rd());
@@ -74,7 +78,8 @@ void create_random_keys_by_power_law(K* h_keys, M* h_metas, const size_t key_num
   const float pMin = 1.;
 
   while (numbers.size() < key_num_per_op) {
-    K lookup_keys = (K)std::pow(1.0 * (1 - distr(eng)) * (pMax - pMin) + pMin, 1. / gamma);
+    K lookup_keys =
+        (K)std::pow(1.0 * (1 - distr(eng)) * (pMax - pMin) + pMin, 1. / gamma);
     numbers.insert(lookup_keys);
   }
   for (const K num : numbers) {
@@ -205,9 +210,10 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
 
     cur_load_factor = table->load_factor(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-//    if (start == 0) {
-//      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
-//    }
+    //    if (start == 0) {
+    //      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase
+    //      kernel.
+    //    }
     start += key_num_per_op;
   }
 
@@ -219,8 +225,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
 
   start_insert_or_assign = std::chrono::steady_clock::now();
   table->insert_or_assign(key_num_per_op, d_keys,
-                          reinterpret_cast<float*>(d_vectors), d_metas,
-                          stream);
+                          reinterpret_cast<float*>(d_vectors), d_metas, stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   end_insert_or_assign = std::chrono::steady_clock::now();
   diff_insert_or_assign = end_insert_or_assign - start_insert_or_assign;

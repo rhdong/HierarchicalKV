@@ -603,8 +603,8 @@ class HashTable {
     }
 
     size_type count = 0;
-    cudaMemcpyAsync(&count, d_count, sizeof(size_type),
-                               cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(&count, d_count, sizeof(size_type), cudaMemcpyDeviceToHost,
+                    stream);
     cudaFreeAsync(d_count, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
