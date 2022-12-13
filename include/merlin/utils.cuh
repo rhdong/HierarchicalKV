@@ -318,9 +318,9 @@ template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = true>
 __forceinline__ __device__ void lock(
     const cg::thread_block_tile<TILE_SIZE>& tile, mutex& set_mutex) {
   if (THREAD_SAFE) {
-//    if (tile.thread_rank() == 0) {
-      set_mutex.acquire(tile, 0);
-//    }
+    if (tile.thread_rank() == 0) {
+      set_mutex.acquire();
+    }
     tile.sync();
   }
 }
@@ -329,10 +329,10 @@ template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = true>
 __forceinline__ __device__ void unlock(
     const cg::thread_block_tile<TILE_SIZE>& tile, mutex& set_mutex) {
   if (THREAD_SAFE) {
-//    tile.sync();
-//    if (tile.thread_rank() == 0) {
-      set_mutex.release(tile, 0);
-//    }
+    tile.sync();
+    if (tile.thread_rank() == 0) {
+      set_mutex.release();
+    }
   }
 }
 

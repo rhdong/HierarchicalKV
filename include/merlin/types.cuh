@@ -52,34 +52,34 @@ struct Bucket {
   int min_pos;
 };
 
-template <cuda::thread_scope Scope>
-class det_lock {
-  mutable cuda::atomic<int, Scope> _lock;
+//template <cuda::thread_scope Scope>
+//class det_lock {
+//  mutable cuda::atomic<int, Scope> _lock;
+//
+// public:
+//  __device__ det_lock() : _lock{0} {}
+//
+//  template <typename CG>
+//  __device__ void acquire(CG const &g, unsigned long long lane = 0) const {
+//    if (g.thread_rank() == lane) {
+//      int expected = 1;
+//      while (!_lock.compare_exchange_weak(expected, 2, cuda::std::memory_order_acquire)) {
+//        expected = 1;
+//      }
+//    }
+//    g.sync();
+//  }
+//
+//  template <typename CG>
+//  __device__ void release(CG const &g, unsigned long long lane = 0) const {
+//    if (g.thread_rank() == lane) {
+//      _lock.store(1, cuda::std::memory_order_release);
+//    }
+//  }
+//};
 
- public:
-  __device__ det_lock() : _lock{0} {}
-
-  template <typename CG>
-  __device__ void acquire(CG const &g, unsigned long long lane = 0) const {
-    if (g.thread_rank() == lane) {
-      int expected = 1;
-      while (!_lock.compare_exchange_weak(expected, 2, cuda::std::memory_order_acquire)) {
-        expected = 1;
-      }
-    }
-    g.sync();
-  }
-
-  template <typename CG>
-  __device__ void release(CG const &g, unsigned long long lane = 0) const {
-    if (g.thread_rank() == lane) {
-      _lock.store(1, cuda::std::memory_order_release);
-    }
-  }
-};
-
-//using Mutex = cuda::binary_semaphore<cuda::thread_scope_device>;
-using Mutex = det_lock<cuda::thread_scope_device>;
+using Mutex = cuda::binary_semaphore<cuda::thread_scope_device>;
+//using Mutex = det_lock<cuda::thread_scope_block>;
 
 template <class K, class V, class M, size_t DIM>
 struct Table {
