@@ -112,7 +112,7 @@ void initialize_buckets(Table<K, V, M, DIM>** table, const size_t start,
     const size_t block_size = 512;
     const size_t N = (*table)->buckets_num;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-    create_locks<Mutex><<<grid_size, block_size>>>((*table)->locks, start, end);
+    create_locks<Mutex><<<grid_size, block_size>>>((*table)->locks, start, end * (*table)->bucket_max_size);
   }
   CudaCheckError();
 }
@@ -152,7 +152,7 @@ void create_table(Table<K, V, M, DIM>** table,
   (*table)->primary = primary;
 
   CUDA_CHECK(cudaMalloc((void**)&((*table)->locks),
-                        (*table)->buckets_num * sizeof(Mutex)));
+                        (*table)->buckets_num * sizeof(Mutex) * (*table)->bucket_max_size));
   std::cout << "----------" << sizeof(Mutex) << std::endl;
 //  CUDA_CHECK(
 //      cudaMemset((*table)->locks, 0, (*table)->buckets_num * sizeof(Mutex)));
@@ -176,8 +176,8 @@ void create_table(Table<K, V, M, DIM>** table,
  * rehash_kernel. */
 template <class K, class V, class M, size_t DIM>
 void double_capacity(Table<K, V, M, DIM>** table) {
-  realloc<Mutex*>(&((*table)->locks), (*table)->buckets_num * sizeof(Mutex),
-                  (*table)->buckets_num * sizeof(Mutex) * 2);
+  realloc<Mutex*>(&((*table)->locks), (*table)->buckets_num * sizeof(Mutex) * (*table)->bucket_max_size,
+                  (*table)->buckets_num * sizeof(Mutex) * 2 * (*table)->bucket_max_size);
   realloc<int*>(&((*table)->buckets_size), (*table)->buckets_num * sizeof(int),
                 (*table)->buckets_num * sizeof(int) * 2);
 
@@ -213,7 +213,7 @@ void destroy_table(Table<K, V, M, DIM>** table) {
     const size_t N = (*table)->buckets_num;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
     release_locks<Mutex>
-        <<<grid_size, block_size>>>((*table)->locks, 0, (*table)->buckets_num);
+        <<<grid_size, block_size>>>((*table)->locks, 0, (*table)->buckets_num * (*table)->bucket_max_size);
   }
   CUDA_CHECK(cudaFree((*table)->slices));
   CUDA_CHECK(cudaFree((*table)->buckets_size));
@@ -1278,10 +1278,10 @@ __global__ void lookup_kernel_with_io(
         g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
 
     if (key_pos >= 0) {
-      lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+      lock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx * bucket_max_size + key_pos]);
       copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
                                        (float*)(values + key_idx));
-      unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
+      unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx * bucket_max_size + key_pos]);
       break;
     }
 
