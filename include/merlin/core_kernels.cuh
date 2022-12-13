@@ -34,9 +34,7 @@ __global__ void create_locks(M* __restrict mutex, const size_t start,
                              const size_t end) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
-    for(int i = 0; i < 128; i++){
-      new (mutex + (start + tid) * 128 + i) M(1);
-    }
+    new (mutex + start + tid) M();
   }
 }
 
@@ -45,9 +43,7 @@ __global__ void release_locks(M* __restrict mutex, const size_t start,
                               const size_t end) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
-    for(int i = 0; i < 128; i++){
-      (mutex + (start + tid) * 128 + i)->~M();
-    }
+    (mutex + start + tid)->~M();
   }
 }
 
@@ -156,7 +152,7 @@ void create_table(Table<K, V, M, DIM>** table,
   (*table)->primary = primary;
 
   CUDA_CHECK(cudaMalloc((void**)&((*table)->locks),
-                        (*table)->buckets_num * sizeof(Mutex) * (*table)->bucket_max_size));
+                        (*table)->buckets_num * sizeof(Mutex)));
   std::cout << "----------" << sizeof(Mutex) << std::endl;
 //  CUDA_CHECK(
 //      cudaMemset((*table)->locks, 0, (*table)->buckets_num * sizeof(Mutex)));
@@ -180,8 +176,8 @@ void create_table(Table<K, V, M, DIM>** table,
  * rehash_kernel. */
 template <class K, class V, class M, size_t DIM>
 void double_capacity(Table<K, V, M, DIM>** table) {
-  realloc<Mutex*>(&((*table)->locks), (*table)->buckets_num * sizeof(Mutex) * (*table)->bucket_max_size,
-                  (*table)->buckets_num * sizeof(Mutex) * 2 * (*table)->bucket_max_size);
+  realloc<Mutex*>(&((*table)->locks), (*table)->buckets_num * sizeof(Mutex),
+                  (*table)->buckets_num * sizeof(Mutex) * 2);
   realloc<int*>(&((*table)->buckets_size), (*table)->buckets_num * sizeof(int),
                 (*table)->buckets_num * sizeof(int) * 2);
 
@@ -217,7 +213,7 @@ void destroy_table(Table<K, V, M, DIM>** table) {
     const size_t N = (*table)->buckets_num;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
     release_locks<Mutex>
-        <<<grid_size, block_size>>>((*table)->locks, 0, (*table)->buckets_num * (*table)->bucket_max_size);
+        <<<grid_size, block_size>>>((*table)->locks, 0, (*table)->buckets_num);
   }
   CUDA_CHECK(cudaFree((*table)->slices));
   CUDA_CHECK(cudaFree((*table)->buckets_size));

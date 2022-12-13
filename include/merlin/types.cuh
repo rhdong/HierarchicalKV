@@ -79,8 +79,8 @@ class det_lock {
   }
 };
 
-using Mutex = cuda::binary_semaphore<cuda::thread_scope_device>;
-//using Mutex = det_lock<cuda::thread_scope_block>;
+//using Mutex = cuda::binary_semaphore<cuda::thread_scope_device>;
+using Mutex = det_lock<cuda::thread_scope_device>;
 
 template <class K, class V, class M, size_t DIM>
 struct Table {
