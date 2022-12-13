@@ -1280,10 +1280,10 @@ __global__ void lookup_kernel_with_io(
 //    const float * src = (float*)(bucket->vectors + key_pos);
 
     if (key_pos >= 0) {
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx * bucket_max_size + key_pos]);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
                                        (float*)(values + key_idx));
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx * bucket_max_size + key_pos]);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       break;
     }
 
