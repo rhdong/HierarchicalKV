@@ -1281,9 +1281,11 @@ __global__ void lookup_kernel_with_io(
     const int key_pos = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
         g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
 
+    const float * src = (float*)(bucket->vectors + key_pos);
+
     if (key_pos >= 0) {
 //      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx * bucket_max_size + key_pos]);
-      copy_vector_n<V, DIM, TILE_SIZE>(g, (float*)(bucket->vectors + key_pos),
+      copy_vector_n<V, DIM, TILE_SIZE>(g, src,
                                        (float*)(values + key_idx));
 //      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx * bucket_max_size + key_pos]);
       break;
