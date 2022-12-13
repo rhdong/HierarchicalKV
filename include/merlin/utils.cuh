@@ -336,17 +336,6 @@ __forceinline__ __device__ void unlock(
   }
 }
 
-template <typename mutex, uint32_t TILE_SIZE, bool THREAD_SAFE = true>
-__forceinline__ __device__ void lock(
-    const cg::thread_block_tile<TILE_SIZE>& tile, mutex& set_mutex) {
-  if (THREAD_SAFE) {
-//    if (tile.thread_rank() == 0) {
-      set_mutex.acquire(tile, 0);
-//    }
-//    tile.sync();
-  }
-}
-
 inline void free_pointers(cudaStream_t stream, int n, ...) {
   va_list args;
   va_start(args, n);
