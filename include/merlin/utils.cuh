@@ -321,7 +321,7 @@ __forceinline__ __device__ void lock(
 //    if (tile.thread_rank() == 0) {
       set_mutex.acquire(tile, 0);
 //    }
-    tile.sync();
+//    tile.sync();
   }
 }
 
