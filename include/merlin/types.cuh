@@ -57,7 +57,7 @@ class det_lock {
   mutable cuda::atomic<int, Scope> _lock;
 
  public:
-  __device__ det_lock() : _lock{0} {}
+  __device__ det_lock() : _lock{1} {}
 
   template <typename CG>
   __device__ void acquire(CG const &g, unsigned long long lane = 0) const {
