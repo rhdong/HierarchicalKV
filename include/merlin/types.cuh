@@ -54,7 +54,7 @@ struct Bucket {
 
 template <cuda::thread_scope Scope>
 class det_lock {
-  mutable cuda::atomic<unsigned char, Scope> _lock;
+  mutable cuda::atomic<unsigned short, Scope> _lock;
 
  public:
   __device__ det_lock() : _lock{1} {}
