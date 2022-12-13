@@ -72,7 +72,7 @@ class det_lock {
 
   template <typename CG>
   __device__ void release(CG const &g, unsigned long long lane = 0) const {
-//    g.sync();
+    g.sync();
     if (g.thread_rank() == lane) {
       _lock.store(1, cuda::std::memory_order_release);
     }
