@@ -153,8 +153,8 @@ void create_table(Table<K, V, M, DIM>** table,
 
   CUDA_CHECK(cudaMalloc((void**)&((*table)->locks),
                         (*table)->buckets_num * sizeof(Mutex)));
-  CUDA_CHECK(
-      cudaMemset((*table)->locks, 0, (*table)->buckets_num * sizeof(Mutex)));
+//  CUDA_CHECK(
+//      cudaMemset((*table)->locks, 0, (*table)->buckets_num * sizeof(Mutex)));
 
   CUDA_CHECK(cudaMalloc((void**)&((*table)->buckets_size),
                         (*table)->buckets_num * sizeof(int)));
