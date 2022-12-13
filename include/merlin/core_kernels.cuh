@@ -34,7 +34,7 @@ __global__ void create_locks(M* __restrict mutex, const size_t start,
                              const size_t end) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
-    new (mutex + start + tid) M(1);
+    new (mutex + start + tid) M();
   }
 }
 
@@ -153,7 +153,6 @@ void create_table(Table<K, V, M, DIM>** table,
 
   CUDA_CHECK(cudaMalloc((void**)&((*table)->locks),
                         (*table)->buckets_num * sizeof(Mutex)));
-  std::cout << "----------------" << sizeof(Mutex) << std::endl;
   CUDA_CHECK(
       cudaMemset((*table)->locks, 0, (*table)->buckets_num * sizeof(Mutex)));
 
