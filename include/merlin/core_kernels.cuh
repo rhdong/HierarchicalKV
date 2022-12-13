@@ -34,7 +34,9 @@ __global__ void create_locks(M* __restrict mutex, const size_t start,
                              const size_t end) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
-    new (mutex + start + tid) M();
+    for(int i = 0; i < 128; i++){
+      new (mutex + (start + tid) * 128 + i) M();
+    }
   }
 }
 
@@ -43,7 +45,9 @@ __global__ void release_locks(M* __restrict mutex, const size_t start,
                               const size_t end) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
-    (mutex + start + tid)->~M();
+    for(int i = 0; i < 128; i++){
+      (mutex + (start + tid) * 128 + i)->~M();
+    }
   }
 }
 
@@ -112,7 +116,7 @@ void initialize_buckets(Table<K, V, M, DIM>** table, const size_t start,
     const size_t block_size = 512;
     const size_t N = (*table)->buckets_num;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-    create_locks<Mutex><<<grid_size, block_size>>>((*table)->locks, start, end * (*table)->bucket_max_size);
+    create_locks<Mutex><<<grid_size, block_size>>>((*table)->locks, start, end);
   }
   CudaCheckError();
 }
