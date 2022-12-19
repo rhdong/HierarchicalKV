@@ -272,13 +272,9 @@ class MemoryPool final {
    public:
     using base_type = Workspace<std::array<alloc_type*, N>>;
 
-    inline StaticWorkspace() : base_type() {}
+    friend class MemoryPool<Allocator>;
 
-    inline StaticWorkspace(pool_type* pool, cudaStream_t stream)
-        : base_type(pool, stream) {
-      auto& buffers = this->buffers_;
-      pool->get_raw(buffers.begin(), buffers.end(), stream);
-    }
+    inline StaticWorkspace() : base_type() {}
 
     StaticWorkspace(const StaticWorkspace&) = delete;
 
@@ -291,20 +287,22 @@ class MemoryPool final {
       base_type::operator=(std::move(other));
       return *this;
     }
+
+   private:
+    inline StaticWorkspace(pool_type* pool, cudaStream_t stream)
+        : base_type(pool, stream) {
+      auto& buffers = this->buffers_;
+      pool->get_raw(buffers.begin(), buffers.end(), stream);
+    }
   };
 
   class DynamicWorkspace final : public Workspace<std::vector<alloc_type*>> {
    public:
     using base_type = Workspace<std::vector<alloc_type*>>;
 
-    inline DynamicWorkspace() : base_type() {}
+    friend class MemoryPool<Allocator>;
 
-    inline DynamicWorkspace(pool_type* pool, size_t n, cudaStream_t stream)
-        : base_type(pool, stream) {
-      auto& buffers = this->buffers_;
-      buffers.resize(n);
-      pool->get_raw(buffers.begin(), buffers.end(), stream);
-    }
+    inline DynamicWorkspace() : base_type() {}
 
     DynamicWorkspace(const DynamicWorkspace&) = delete;
 
@@ -316,6 +314,14 @@ class MemoryPool final {
     inline DynamicWorkspace& operator=(DynamicWorkspace&& other) {
       base_type::operator=(std::move(other));
       return *this;
+    }
+
+   private:
+    inline DynamicWorkspace(pool_type* pool, size_t n, cudaStream_t stream)
+        : base_type(pool, stream) {
+      auto& buffers = this->buffers_;
+      buffers.resize(n);
+      pool->get_raw(buffers.begin(), buffers.end(), stream);
     }
   };
 
