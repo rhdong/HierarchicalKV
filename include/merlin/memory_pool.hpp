@@ -325,29 +325,27 @@ class MemoryPool final {
     }
   };
 
-  const MemoryPoolOptions options;
-
-  MemoryPool(const MemoryPoolOptions& options) : options{options} {
-    MERLIN_CHECK(options.buffer_size > 0,
+  MemoryPool(const MemoryPoolOptions& options) : options_{options} {
+    MERLIN_CHECK(options_.buffer_size > 0,
                  "[HierarchicalKV] Memory pool buffer size invalid!");
     MERLIN_CHECK(
-        options.base_stock <= options.max_stock,
+        options_.base_stock <= options_.max_stock,
         "[hierarchicalKV] Initial reserve cannot exceed maximum reserve!");
 
     // Create initial buffer stock.
-    stock_.reserve(options.max_stock);
-    while (stock_.size() < options.base_stock) {
-      stock_.emplace_back(Allocator::alloc(options.buffer_size));
+    stock_.reserve(options_.max_stock);
+    while (stock_.size() < options_.base_stock) {
+      stock_.emplace_back(Allocator::alloc(options_.buffer_size));
     }
 
     // Create enough events, so we have one per potentially pending buffer.
-    ready_events_.resize(options.max_pending);
+    ready_events_.resize(options_.max_pending);
     for (auto& ready_event : ready_events_) {
       CUDA_CHECK(cudaEventCreate(&ready_event));
     }
 
     // Preallocate pending.
-    pending_.reserve(options.max_pending);
+    pending_.reserve(options_.max_pending);
   }
 
   ~MemoryPool() {
@@ -364,10 +362,10 @@ class MemoryPool final {
     }
   }
 
-  inline size_t buffer_size() const { return options.buffer_size; }
+  inline size_t buffer_size() const { return options_.buffer_size; }
 
   inline size_t max_batch_size(size_t max_item_size) const {
-    return options.buffer_size / max_item_size;
+    return options_.buffer_size / max_item_size;
   }
 
   template <class T>
@@ -400,7 +398,7 @@ class MemoryPool final {
 
   void replenish(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stock_.size() >= options.base_stock) {
+    if (stock_.size() >= options_.base_stock) {
       return;
     }
 
@@ -408,8 +406,8 @@ class MemoryPool final {
     collect_pending_unsafe(stream);
 
     // Fill up until we reach the base stock.
-    while (stock_.size() < options.base_stock) {
-      stock_.emplace_back(Allocator::alloc(options.buffer_size, stream));
+    while (stock_.size() < options_.base_stock) {
+      stock_.emplace_back(Allocator::alloc(options_.buffer_size, stream));
     }
 
     // To avoid trouble downstream, make sure the buffers have materialized.
@@ -464,7 +462,7 @@ class MemoryPool final {
           switch (event_state) {
             case cudaSuccess:
               // Stock buffers and destroy those that are no longer needed.
-              if (stock_.size() < options.max_stock) {
+              if (stock_.size() < options_.max_stock) {
                 stock_.emplace_back(pair.first);
               } else {
                 Allocator::free(pair.first, stream);
@@ -506,7 +504,7 @@ class MemoryPool final {
 
     // Forge new buffers until request can be filled.
     for (; first != last; ++first) {
-      *first = Allocator::alloc(options.buffer_size, stream);
+      *first = Allocator::alloc(options_.buffer_size, stream);
     }
   }
 
@@ -541,7 +539,7 @@ class MemoryPool final {
 
       for (; first != last; ++first) {
         // Stock buffers and destroy those that are no longer needed.
-        if (stock_.size() < options.max_stock) {
+        if (stock_.size() < options_.max_stock) {
           stock_.emplace_back(*first);
         } else {
           Allocator::free(*first);
@@ -549,6 +547,8 @@ class MemoryPool final {
       }
     }
   }
+
+  const MemoryPoolOptions options_;
 
   mutable std::mutex mutex_;
   std::vector<alloc_type*> stock_;
