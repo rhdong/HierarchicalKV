@@ -1074,7 +1074,7 @@ class HashTable {
     // Step through table, dumping contents in batches.
     size_type total_count = 0;
     for (size_type offset = 0; offset < total_size; offset += N) {
-      // Dump the next batch to workspace.
+      // Dump the next batch to workspace, and write it to the file.
       CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
 
       dump_kernel<key_type, vector_type, meta_type, DIM>
@@ -1086,7 +1086,6 @@ class HashTable {
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
-      // Move workspace to host memory.
       CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, sizeof(key_type) * count,
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaMemcpyAsync(h_values, d_vectors,
