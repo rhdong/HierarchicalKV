@@ -1096,7 +1096,6 @@ class HashTable {
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
-      // Store permanently.
       file->write(count, h_keys, h_values, h_metas);
       total_count += count;
     }
