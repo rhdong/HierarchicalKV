@@ -558,36 +558,37 @@ class MemoryPool final {
 
 template <class Allocator>
 std::ostream& operator<<(std::ostream& os, const MemoryPool<Allocator>& pool) {
-  for (size_t i = 0; i < 80; ++i) os << '-';
+  std::lock_guard<std::mutex> lock(pool.mutex_);
+
+  for (size_t i = 0; i < 80; ++i) {
+    os << '-';
+  }
   os << std::endl << "Stock =" << std::endl;
 
-  {
-    std::lock_guard<std::mutex> lock(pool.mutex_);
-
-    // Current stock.
-    for (size_t i = 0; i < pool.stock_.size(); ++i) {
-      os << "[ " << i << " ] " << static_cast<void*>(pool.stock_[i])
-         << std::endl;
-    }
-
-    // Pending buffers.
-    os << std::endl << "Pending =" << std::endl;
-    for (size_t i = 0; i < pool.pending_.size(); ++i) {
-      os << "[ " << i
-         << " ] buffer = " << static_cast<void*>(pool.pending_[i].first)
-         << ", ready_event = " << static_cast<void*>(pool.pending_[i].second)
-         << std::endl;
-    }
-
-    // Available ready events.
-    os << std::endl << "Ready Events =" << std::endl;
-    for (size_t i = 0; i < pool.ready_events_.size(); ++i) {
-      os << "[ " << i << " ] " << static_cast<void*>(pool.ready_events_[i])
-         << std::endl;
-    }
+  // Current stock.
+  for (size_t i = 0; i < pool.stock_.size(); ++i) {
+    os << "[ " << i << " ] " << static_cast<void*>(pool.stock_[i]) << std::endl;
   }
 
-  for (size_t i = 0; i < 80; ++i) os << '-';
+  // Pending buffers.
+  os << std::endl << "Pending =" << std::endl;
+  for (size_t i = 0; i < pool.pending_.size(); ++i) {
+    os << "[ " << i
+       << " ] buffer = " << static_cast<void*>(pool.pending_[i].first)
+       << ", ready_event = " << static_cast<void*>(pool.pending_[i].second)
+       << std::endl;
+  }
+
+  // Available ready events.
+  os << std::endl << "Ready Events =" << std::endl;
+  for (size_t i = 0; i < pool.ready_events_.size(); ++i) {
+    os << "[ " << i << " ] " << static_cast<void*>(pool.ready_events_[i])
+       << std::endl;
+  }
+
+  for (size_t i = 0; i < 80; ++i) {
+    os << '-';
+  }
   os << std::endl;
 
   return os;
