@@ -563,9 +563,9 @@ std::ostream& operator<<(std::ostream& os, const MemoryPool<Allocator>& pool) {
   for (size_t i = 0; i < 80; ++i) {
     os << '-';
   }
-  os << std::endl << "Stock =" << std::endl;
 
   // Current stock.
+  os << std::endl << "Stock =" << std::endl;
   for (size_t i = 0; i < pool.stock_.size(); ++i) {
     os << "[ " << i << " ] " << static_cast<void*>(pool.stock_[i]) << std::endl;
   }
@@ -589,8 +589,8 @@ std::ostream& operator<<(std::ostream& os, const MemoryPool<Allocator>& pool) {
   for (size_t i = 0; i < 80; ++i) {
     os << '-';
   }
-  os << std::endl;
 
+  os << std::endl;
   return os;
 }
 
