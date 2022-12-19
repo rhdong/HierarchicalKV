@@ -136,9 +136,9 @@ struct MemoryPoolOptions {
   size_t buffer_size =
       256L * 1024 * 1024;  ///< Size in bytes for buffers produced by this pool.
   size_t max_stock = 4;    ///< Amount of buffers to keep in reserve.
-  size_t base_stock = 3;   ///< Amount of buffers to create right away.
-  size_t max_pending = 16;  ///< Maximum amount of awaitable buffers. If this
-                            ///< limit is exceeded threads will start to block.
+  size_t initial_stock = 3;  ///< Amount of buffers to create right away.
+  size_t max_pending = 16;   ///< Maximum amount of awaitable buffers. If this
+                             ///< limit is exceeded threads will start to block.
 };
 
 /**
@@ -329,12 +329,12 @@ class MemoryPool final {
     MERLIN_CHECK(options_.buffer_size > 0,
                  "[HierarchicalKV] Memory pool buffer size invalid!");
     MERLIN_CHECK(
-        options_.base_stock <= options_.max_stock,
+        options_.initial_stock <= options_.max_stock,
         "[hierarchicalKV] Initial reserve cannot exceed maximum reserve!");
 
     // Create initial buffer stock.
     stock_.reserve(options_.max_stock);
-    while (stock_.size() < options_.base_stock) {
+    while (stock_.size() < options_.initial_stock) {
       stock_.emplace_back(Allocator::alloc(options_.buffer_size));
     }
 
@@ -398,7 +398,7 @@ class MemoryPool final {
 
   void replenish(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stock_.size() >= options_.base_stock) {
+    if (stock_.size() >= options_.initial_stock) {
       return;
     }
 
@@ -406,7 +406,7 @@ class MemoryPool final {
     collect_pending_unsafe(stream);
 
     // Fill up until we reach the base stock.
-    while (stock_.size() < options_.base_stock) {
+    while (stock_.size() < options_.initial_stock) {
       stock_.emplace_back(Allocator::alloc(options_.buffer_size, stream));
     }
 

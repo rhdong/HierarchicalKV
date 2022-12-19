@@ -59,7 +59,8 @@ void print_pool_options(const MemoryPoolOptions& opt) {
   print_divider();
   std::cout << "opt.buffer_size : " << opt.buffer_size << " bytes" << std::endl;
   std::cout << "opt.max_stock : " << opt.max_stock << " buffers" << std::endl;
-  std::cout << "opt.base_stock : " << opt.base_stock << " buffers" << std::endl;
+  std::cout << "opt.initial_stock : " << opt.initial_stock << " buffers"
+            << std::endl;
   std::cout << "opt.max_pending : " << opt.max_pending << " buffers "
             << std::endl;
   print_divider();
@@ -68,7 +69,7 @@ void print_pool_options(const MemoryPoolOptions& opt) {
 MemoryPoolOptions opt{
     4096,  //< buffer_size
     3,     //< max_stock
-    2,     //< base_stock
+    2,     //< initial_stock
     5,     //< max_pending
 };
 
@@ -245,9 +246,9 @@ void test_deplete_replenish() {
   // print_pool_options(opt);
   MemoryPool<Allocator> pool(opt);
 
-  // Should have base_stock available after startup.
+  // Should have initial_stock available after startup.
   std::cout << ".:: Initial state ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Should have no stock left after deplete.
@@ -258,7 +259,7 @@ void test_deplete_replenish() {
   // After replenish initial state should be restored.
   std::cout << ".:: Replenish ::." << std::endl << pool << std::endl;
   pool.replenish();
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
 }
 
 void test_borrow_return_no_context() {
@@ -269,45 +270,45 @@ void test_borrow_return_no_context() {
 
   // Initial status.
   std::cout << ".:: Initial state ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow one buffer.
   {
     auto buffer = pool.get_unique();
     std::cout << ".:: Borrow 1 ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.base_stock - 1);
+    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 1);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
   // Return one buffer.
   std::cout << ".:: Return 1 ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow workspace.
   {
     auto ws = pool.get_workspace<2>();
     std::cout << ".:: Borrow 2 (static) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.base_stock - 2);
+    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
   // Return workspace.
   std::cout << ".:: Return 2 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow dynamic workspace.
   {
-    auto ws = pool.get_workspace(opt.base_stock);
+    auto ws = pool.get_workspace(opt.initial_stock);
     std::cout << ".:: Borrow 2 (dynamic) ::." << std::endl << pool << std::endl;
     ASSERT_EQ(pool.current_stock(), 0);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
   std::cout << ".:: Return 2 (dynamic) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow workspace that exceeds base pool size.
@@ -355,58 +356,58 @@ void test_borrow_return_with_context() {
 
   // Initial status.
   std::cout << ".:: Initial state ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow/return one buffer.
   {
     auto buffer = pool.get_unique(stream);
     std::cout << ".:: Borrow 1 ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.base_stock - 1);
+    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 1);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
   std::cout << ".:: Return 1 ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock - 1);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock - 1);
   ASSERT_EQ(pool.num_pending(), 1);
 
   pool.await_pending();
   std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow/return a workspace.
   {
     auto ws = pool.get_workspace<2>(stream);
     std::cout << ".:: Borrow 2 (static) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.base_stock - 2);
+    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
   std::cout << ".:: Return 2 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock - 2);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
   ASSERT_EQ(pool.num_pending(), 2);
 
   pool.await_pending();
   std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow dynamic workspace.
   {
-    auto ws = pool.get_workspace(opt.base_stock, stream);
+    auto ws = pool.get_workspace(opt.initial_stock, stream);
     std::cout << ".:: Borrow 2 (dynamic) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.base_stock - 2);
+    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
   std::cout << ".:: Return 2 (dynamic) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock - 2);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
   ASSERT_EQ(pool.num_pending(), 2);
 
   pool.await_pending();
   std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.base_stock);
+  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow workspace that exceeds base pool size.
