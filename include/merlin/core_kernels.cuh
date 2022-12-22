@@ -757,6 +757,7 @@ __global__ void upsert_kernel_with_io(
         get_key_position<K>(buckets, insert_key, &bkt_idx, &start_idx,
                             buckets_num, bucket_max_size);
 
+    lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     local_size = buckets_size[bkt_idx];
 
     unsigned unoccupied_vote = 0;
@@ -765,7 +766,6 @@ __global__ void upsert_kernel_with_io(
             g, bucket, insert_key, tile_offset, start_idx, bucket_max_size,
             unoccupied_vote, unoccupied_tile_offset);
 
-    lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
       const int key_pos =
