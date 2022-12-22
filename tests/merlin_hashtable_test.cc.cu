@@ -143,7 +143,7 @@ __forceinline__ __device__ bool export_if_pred(const K& key, M& meta,
 template <class K, class M>
 __device__ Table::Pred ExportIfPred = export_if_pred<K, M>;
 
-void test_basic() {
+void test_basic(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 64 * 1024 * 1024UL;
   constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
   constexpr uint64_t KEY_NUM = 1 * 1024 * 1024UL;
@@ -158,7 +158,7 @@ void test_basic() {
 
   options.init_capacity = INIT_CAPACITY;
   options.max_capacity = MAX_CAPACITY;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
   CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
@@ -282,7 +282,7 @@ void test_basic() {
   CudaCheckError();
 }
 
-void test_basic_when_full() {
+void test_basic_when_full(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 1 * 1024 * 1024UL;
   constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
   constexpr uint64_t KEY_NUM = 1 * 1024 * 1024UL;
@@ -297,7 +297,7 @@ void test_basic_when_full() {
 
   options.init_capacity = INIT_CAPACITY;
   options.max_capacity = MAX_CAPACITY;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
   CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
@@ -384,7 +384,7 @@ void test_basic_when_full() {
   CudaCheckError();
 }
 
-void test_erase_if_pred() {
+void test_erase_if_pred(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 256UL;
   constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
   constexpr uint64_t KEY_NUM = 128UL;
@@ -400,7 +400,7 @@ void test_erase_if_pred() {
 
   options.init_capacity = INIT_CAPACITY;
   options.max_capacity = MAX_CAPACITY;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
@@ -506,7 +506,7 @@ void test_erase_if_pred() {
   CudaCheckError();
 }
 
-void test_rehash() {
+void test_rehash(size_t max_hbm_for_vectors) {
   constexpr uint64_t BUCKET_MAX_SIZE = 128ul;
   constexpr uint64_t INIT_CAPACITY = BUCKET_MAX_SIZE;
   constexpr uint64_t MAX_CAPACITY = 4 * INIT_CAPACITY;
@@ -522,7 +522,7 @@ void test_rehash() {
   options.init_capacity = INIT_CAPACITY;
   options.max_capacity = MAX_CAPACITY;
   options.max_bucket_size = BUCKET_MAX_SIZE;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
   CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
@@ -636,7 +636,7 @@ void test_rehash() {
   CudaCheckError();
 }
 
-void test_rehash_on_big_batch() {
+void test_rehash_on_big_batch(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 1024;
   constexpr uint64_t MAX_CAPACITY = 16 * 1024;
   constexpr uint64_t INIT_KEY_NUM = 1024;
@@ -652,7 +652,7 @@ void test_rehash_on_big_batch() {
   options.max_capacity = MAX_CAPACITY;
   options.max_bucket_size = 128;
   options.max_load_factor = 0.6;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
   CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
@@ -770,7 +770,7 @@ void test_rehash_on_big_batch() {
   CudaCheckError();
 }
 
-void test_dynamic_rehash_on_multi_threads() {
+void test_dynamic_rehash_on_multi_threads(size_t max_hbm_for_vectors) {
   constexpr uint64_t BUCKET_MAX_SIZE = 128ul;
   constexpr uint64_t INIT_CAPACITY = 1 * 1024;
   constexpr uint64_t MAX_CAPACITY = 128 * 1024 * INIT_CAPACITY;
@@ -785,7 +785,7 @@ void test_dynamic_rehash_on_multi_threads() {
   options.max_capacity = MAX_CAPACITY;
   options.max_load_factor = 0.50f;
   options.max_bucket_size = BUCKET_MAX_SIZE;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kLru;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
@@ -883,7 +883,7 @@ void test_dynamic_rehash_on_multi_threads() {
   ASSERT_TRUE(table->capacity() == MAX_CAPACITY);
 }
 
-void test_export_batch_if() {
+void test_export_batch_if(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 256UL;
   constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
   constexpr uint64_t KEY_NUM = 128UL;
@@ -898,7 +898,7 @@ void test_export_batch_if() {
 
   options.init_capacity = INIT_CAPACITY;
   options.max_capacity = MAX_CAPACITY;
-  options.max_hbm_for_vectors = nv::merlin::GB(16);
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
@@ -1141,15 +1141,32 @@ void test_basic_for_cpu_io() {
   CudaCheckError();
 }
 
-TEST(MerlinHashTableTest, test_basic) { test_basic(); }
-TEST(MerlinHashTableTest, test_basic_when_full) { test_basic_when_full(); }
-TEST(MerlinHashTableTest, test_erase_if_pred) { test_erase_if_pred(); }
-TEST(MerlinHashTableTest, test_rehash) { test_rehash(); }
+TEST(MerlinHashTableTest, test_basic) {
+  test_basic(16);
+  test_basic(0);
+}
+TEST(MerlinHashTableTest, test_basic_when_full) {
+  test_basic_when_full(16);
+  test_basic_when_full(0);
+}
+TEST(MerlinHashTableTest, test_erase_if_pred) {
+  test_erase_if_pred(16);
+  test_erase_if_pred(0);
+}
+TEST(MerlinHashTableTest, test_rehash) {
+  test_rehash(16);
+  test_rehash(0);
+}
 TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
-  test_rehash_on_big_batch();
+  test_rehash_on_big_batch(16);
+  test_rehash_on_big_batch(0);
 }
 TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
-  test_dynamic_rehash_on_multi_threads();
+  test_dynamic_rehash_on_multi_threads(16);
+  test_dynamic_rehash_on_multi_threads(0);
 }
-TEST(MerlinHashTableTest, test_export_batch_if) { test_export_batch_if(); }
+TEST(MerlinHashTableTest, test_export_batch_if) {
+  test_export_batch_if(16);
+  test_export_batch_if(0);
+}
 TEST(MerlinHashTableTest, test_basic_for_cpu_io) { test_basic_for_cpu_io(); }

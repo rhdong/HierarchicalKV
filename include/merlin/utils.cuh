@@ -83,7 +83,7 @@ namespace nv {
 namespace merlin {
 
 inline void __cudaCheckError(const char* file, const int line) {
-#ifdef CUDA_ERROR_CHECK
+  //#ifdef CUDA_ERROR_CHECK
   cudaError err = cudaGetLastError();
   if (cudaSuccess != err) {
     fprintf(stderr, "cudaCheckError() failed at %s:%i : %s\n", file, line,
@@ -99,7 +99,7 @@ inline void __cudaCheckError(const char* file, const int line) {
             line, cudaGetErrorString(err));
     exit(-1);
   }
-#endif
+  //#endif
 
   return;
 }
