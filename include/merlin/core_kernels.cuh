@@ -54,7 +54,7 @@ __global__ void create_atomic_keys(Bucket<K, V, M, DIM>* __restrict buckets,
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
     for (size_t i = 0; i < bucket_max_size; i++)
-      new (&buckets[start + tid].keys[i]) AtomicKey<K>{EMPTY_KEY};
+      new (&(buckets[start + tid].keys[i])) AtomicKey<K>{EMPTY_KEY};
   }
 }
 
@@ -121,14 +121,14 @@ void initialize_buckets(Table<K, V, M, DIM>** table, const size_t start,
 
   {
     const size_t block_size = 512;
-    const size_t N = (*table)->buckets_num;
+    const size_t N = end - start + 1;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
     create_locks<Mutex><<<grid_size, block_size>>>((*table)->locks, start, end);
   }
 
   {
     const size_t block_size = 512;
-    const size_t N = (*table)->buckets_num;
+    const size_t N = end - start + 1;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
     create_atomic_keys<K, V, M, DIM><<<grid_size, block_size>>>(
         (*table)->buckets, start, end, (*table)->bucket_max_size);
