@@ -974,7 +974,7 @@ void test_export_batch_if(size_t max_hbm_for_vectors) {
                           cudaMemcpyDeviceToHost));
 
     for (int i = 0; i < h_dump_counter; i++) {
-      ASSERT_GREATER(h_metas[i], threshold);
+      ASSERT_GT(h_metas[i], threshold);
     }
 
     table->clear(stream);
