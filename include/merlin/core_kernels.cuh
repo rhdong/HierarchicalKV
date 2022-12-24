@@ -704,12 +704,12 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
 
 template <class K>
 __device__ constexpr K& get_empty_key() {
-  return static_cast<K>(EMPTY_KEY);
+  return static_cast<K>(0);
 }
 
 template <class K>
 __device__ constexpr K& get_reclaimed_key() {
-  return static_cast<K>(RECLAIM_KEY);
+  return static_cast<K>(1);
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
