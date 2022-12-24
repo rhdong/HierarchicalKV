@@ -712,8 +712,7 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
   unsigned unoccupied_vote = 0;
 
   if (bucket_size == bucket_max_size) return 0;
-  K empty_key = static_cast<K>(EMPTY_KEY);
-  K reclaimed_key = static_cast<K>(RECLAIM_KEY);
+  K expected_key = static_cast<K>(EMPTY_KEY);
 
 #pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
@@ -728,12 +727,16 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
         if (bucket->keys[key_offset].compare_exchange_strong(
-                empty_key, find_key, cuda::std::memory_order_relaxed)) {
+                expected_key, find_key, cuda::std::memory_order_relaxed)) {
           return unoccupied_vote;
         }
-
-        if (bucket->keys[key_offset].compare_exchange_strong(
-                reclaimed_key, find_key, cuda::std::memory_order_relaxed)) {
+        if (expected_key == static_cast<K>(RECLAIM_KEY)) {
+          if (bucket->keys[key_offset].compare_exchange_strong(
+                  reclaimed_key, find_key, cuda::std::memory_order_relaxed)) {
+            return unoccupied_vote;
+          }
+        }
+        if (expected_key == key) {
           return unoccupied_vote;
         }
       }
