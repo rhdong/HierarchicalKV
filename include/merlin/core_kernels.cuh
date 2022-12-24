@@ -736,7 +736,7 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
             return unoccupied_vote;
           }
         }
-        if (expected_key == key) {
+        if (expected_key == find_key) {
           return unoccupied_vote;
         }
       }
