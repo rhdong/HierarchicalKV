@@ -701,16 +701,6 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
   return 0;
 }
 
-template <class K>
-__device__ constexpr K get_empty_key() {
-  return static_cast<K>(EMPTY_KEY);
-}
-
-template <class K>
-__device__ constexpr K get_reclaimed_key() {
-  return static_cast<K>(RECLAIM_KEY);
-}
-
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g,
@@ -807,7 +797,6 @@ __global__ void upsert_kernel_with_io(
         get_key_position<K>(buckets, insert_key, &bkt_idx, &start_idx,
                             buckets_num, bucket_max_size);
 
-    lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     local_size = buckets_size[bkt_idx];
 
     const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
@@ -826,6 +815,7 @@ __global__ void upsert_kernel_with_io(
         refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                      bucket_max_size);
       }
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
 
@@ -852,6 +842,7 @@ __global__ void upsert_kernel_with_io(
         refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                      bucket_max_size);
       }
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
@@ -865,6 +856,8 @@ __global__ void upsert_kernel_with_io(
       update_meta(bucket, key_pos, metas, key_idx);
     }
     refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
+    
+    lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                    bucket->vectors + key_pos);
     unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
