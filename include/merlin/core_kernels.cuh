@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 #include <thread>
@@ -736,12 +737,12 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
         if (bucket->keys[key_offset].compare_exchange_strong(
-                find_key, find_key, cuda::std::memory_order_relaxed)) {
+                get_empty_key<K>(), find_key, cuda::std::memory_order_relaxed)) {
           return unoccupied_vote;
         }
 
         if (bucket->keys[key_offset].compare_exchange_strong(
-                find_key, find_key, cuda::std::memory_order_relaxed)) {
+                get_reclaimed_key<K>(), find_key, cuda::std::memory_order_relaxed)) {
           return unoccupied_vote;
         }
       }
