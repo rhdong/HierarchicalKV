@@ -701,6 +701,47 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
   return 0;
 }
 
+template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+__forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
+    cg::thread_block_tile<TILE_SIZE> g,
+    const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
+    uint32_t& tile_offset, const uint32_t start_idx, const size_t bucket_size,
+    const size_t bucket_max_size) {
+  uint32_t key_offset = 0;
+  K current_key = 0;
+  unsigned unoccupied_vote = 0;
+
+  if (bucket_size == bucket_max_size) return 0;
+
+#pragma unroll
+  for (tile_offset = 0; tile_offset < bucket_max_size;
+       tile_offset += TILE_SIZE) {
+    key_offset =
+        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+    current_key =
+        bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
+    unoccupied_vote =
+        g.ballot(current_key == EMPTY_KEY || current_key == RECLAIM_KEY);
+    if (unoccupied_vote) {
+      int src_lane = __ffs(unoccupied_vote) - 1;
+      const int key_pos =
+          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+      if (src_lane == g.thread_rank()) {
+        if (bucket->keys[key_offset].compare_exchange_strong(
+                EMPTY_KEY, find_key, cuda::std::memory_order_relaxed)) {
+          return unoccupied_vote;
+        }
+
+        if (bucket->keys[key_offset].compare_exchange_strong(
+                EMPTY_KEY, find_key, cuda::std::memory_order_relaxed)) {
+          return unoccupied_vote;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 template <class K, class V, class M, size_t DIM>
 __forceinline__ __device__ Bucket<K, V, M, DIM>* get_key_position(
     Bucket<K, V, M, DIM>* __restrict buckets, const K key, size_t* bkt_idx,
@@ -750,7 +791,6 @@ __global__ void upsert_kernel_with_io(
     size_t bkt_idx = 0;
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
-    uint32_t unoccupied_tile_offset = 0;
     int src_lane = -1;
 
     Bucket<K, V, M, DIM>* bucket =
@@ -760,11 +800,8 @@ __global__ void upsert_kernel_with_io(
     lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     local_size = buckets_size[bkt_idx];
 
-    unsigned unoccupied_vote = 0;
-    const unsigned found_vote =
-        find_in_bucket_with_unoccupied<K, V, M, DIM, TILE_SIZE>(
-            g, bucket, insert_key, tile_offset, start_idx, bucket_max_size,
-            unoccupied_vote, unoccupied_tile_offset);
+    const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
+        g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
 
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
@@ -785,14 +822,18 @@ __global__ void upsert_kernel_with_io(
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       continue;
     }
+    const unsigned unoccupied_vote =
+        find_unoccupied_and_occupy_in_bucket<K, V, M, DIM, TILE_SIZE>(
+            g, bucket, insert_key, tile_offset, start_idx, local_size,
+            bucket_max_size);
 
     if (unoccupied_vote) {
       src_lane = __ffs(unoccupied_vote) - 1;
-      const int key_pos = (start_idx + unoccupied_tile_offset + src_lane) &
-                          (bucket_max_size - 1);
+      const int key_pos =
+          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       if (rank == src_lane) {
-        bucket->keys[key_pos].store(insert_key,
-                                    cuda::std::memory_order_relaxed);
+        //        bucket->keys[key_pos].store(insert_key,
+        //                                    cuda::std::memory_order_relaxed);
         update_meta(bucket, key_pos, metas, key_idx);
         buckets_size[bkt_idx]++;
       }

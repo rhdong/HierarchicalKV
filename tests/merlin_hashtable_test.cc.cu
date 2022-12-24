@@ -241,17 +241,17 @@ void test_basic(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  KEY_NUM);
+    ASSERT_EQ(total_size, KEY_NUM);
 
     table->erase(KEY_NUM >> 1, d_keys, stream);
     size_t total_size_after_erase = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size_after_erase,  total_size >> 1);
+    ASSERT_EQ(total_size_after_erase, total_size >> 1);
 
     table->clear(stream);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -260,7 +260,7 @@ void test_basic(size_t max_hbm_for_vectors) {
                                        reinterpret_cast<float*>(d_vectors),
                                        d_metas, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(dump_counter,  KEY_NUM);
+    ASSERT_EQ(dump_counter, KEY_NUM);
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
@@ -342,7 +342,7 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
     table->init(options);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -354,7 +354,7 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
     table->erase(KEY_NUM, d_keys, stream);
     size_t total_size_after_erase = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size_after_erase,  0);
+    ASSERT_EQ(total_size_after_erase, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -362,7 +362,7 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
 
     uint64_t total_size_after_reinsert = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size_after_insert,  total_size_after_reinsert);
+    ASSERT_EQ(total_size_after_insert, total_size_after_reinsert);
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
@@ -439,7 +439,7 @@ void test_erase_if_pred(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -447,7 +447,7 @@ void test_erase_if_pred(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  BUCKET_MAX_SIZE);
+    ASSERT_EQ(total_size, BUCKET_MAX_SIZE);
 
     K pattern = 100;
     M threshold = 0;
@@ -455,7 +455,7 @@ void test_erase_if_pred(size_t max_hbm_for_vectors) {
         table->erase_if(EraseIfPred<K, M>, pattern, threshold, stream);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ((erase_num + total_size),  BUCKET_MAX_SIZE);
+    ASSERT_EQ((erase_num + total_size), BUCKET_MAX_SIZE);
 
     table->find(KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_found,
                 d_metas, stream);
@@ -474,19 +474,19 @@ void test_erase_if_pred(size_t max_hbm_for_vectors) {
     for (int i = 0; i < KEY_NUM; i++) {
       if (h_found[i]) {
         found_num++;
-        ASSERT_EQ(h_metas[i],  h_keys[i]);
+        ASSERT_EQ(h_metas[i], h_keys[i]);
         for (int j = 0; j < DIM; j++) {
           ASSERT_EQ(h_vectors[i].value[j],
-                      static_cast<float>(h_keys[i] * 0.00001));
+                    static_cast<float>(h_keys[i] * 0.00001));
         }
       }
     }
-    ASSERT_EQ(found_num,  (BUCKET_MAX_SIZE - erase_num));
+    ASSERT_EQ(found_num, (BUCKET_MAX_SIZE - erase_num));
 
     table->clear(stream);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
@@ -561,7 +561,7 @@ void test_rehash(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -604,19 +604,19 @@ void test_rehash(size_t max_hbm_for_vectors) {
     for (int i = 0; i < BUCKET_MAX_SIZE; i++) {
       if (h_found[i]) {
         found_num++;
-        ASSERT_EQ(h_metas[i],  h_keys[i]);
+        ASSERT_EQ(h_metas[i], h_keys[i]);
         for (int j = 0; j < DIM; j++) {
           ASSERT_EQ(h_vectors[i].value[j],
-                      static_cast<float>(h_keys[i] * 0.00001));
+                    static_cast<float>(h_keys[i] * 0.00001));
         }
       }
     }
-    ASSERT_EQ(found_num,  BUCKET_MAX_SIZE);
+    ASSERT_EQ(found_num, BUCKET_MAX_SIZE);
 
     table->clear(stream);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
@@ -739,19 +739,19 @@ void test_rehash_on_big_batch(size_t max_hbm_for_vectors) {
   for (int i = 0; i < KEY_NUM; i++) {
     if (h_found[i]) {
       found_num++;
-      ASSERT_EQ(h_metas[i],  h_keys[i]);
+      ASSERT_EQ(h_metas[i], h_keys[i]);
       for (int j = 0; j < DIM; j++) {
         ASSERT_EQ(h_vectors[i].value[j],
-                    static_cast<float>(h_keys[i] * 0.00001));
+                  static_cast<float>(h_keys[i] * 0.00001));
       }
     }
   }
-  ASSERT_EQ(found_num,  KEY_NUM);
+  ASSERT_EQ(found_num, KEY_NUM);
 
   table->clear(stream);
   total_size = table->size(stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
-  ASSERT_EQ(total_size,  0);
+  ASSERT_EQ(total_size, 0);
   CUDA_CHECK(cudaStreamDestroy(stream));
 
   CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors, KEY_NUM * sizeof(Vector),
@@ -846,7 +846,7 @@ void test_dynamic_rehash_on_multi_threads(size_t max_hbm_for_vectors) {
           found_num++;
           for (int j = 0; j < DIM; j++) {
             ASSERT_EQ(h_vectors[i].value[j],
-                        static_cast<float>(h_keys[i] * 0.00001));
+                      static_cast<float>(h_keys[i] * 0.00001));
           }
         }
       }
@@ -880,7 +880,7 @@ void test_dynamic_rehash_on_multi_threads(size_t max_hbm_for_vectors) {
   for (auto& th : threads) {
     th.join();
   }
-  ASSERT_EQ(table->capacity(),  MAX_CAPACITY);
+  ASSERT_EQ(table->capacity(), MAX_CAPACITY);
 }
 
 void test_export_batch_if(size_t max_hbm_for_vectors) {
@@ -937,7 +937,7 @@ void test_export_batch_if(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -945,7 +945,7 @@ void test_export_batch_if(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  KEY_NUM);
+    ASSERT_EQ(total_size, KEY_NUM);
 
     K pattern = 100;
     M threshold = h_metas[size_t(KEY_NUM / 2)];
@@ -980,7 +980,7 @@ void test_export_batch_if(size_t max_hbm_for_vectors) {
     table->clear(stream);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
   }
   CUDA_CHECK(cudaDeviceSynchronize());
   CUDA_CHECK(cudaStreamDestroy(stream));
@@ -1063,7 +1063,7 @@ void test_basic_for_cpu_io() {
     table->init(options);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -1071,7 +1071,7 @@ void test_basic_for_cpu_io() {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  KEY_NUM);
+    ASSERT_EQ(total_size, KEY_NUM);
 
     CUDA_CHECK(cudaMemset(d_vectors, 2, KEY_NUM * sizeof(Vector)));
     table->insert_or_assign(
@@ -1080,7 +1080,7 @@ void test_basic_for_cpu_io() {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  KEY_NUM);
+    ASSERT_EQ(total_size, KEY_NUM);
 
     table->find(KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_found,
                 nullptr, stream);
@@ -1092,7 +1092,7 @@ void test_basic_for_cpu_io() {
     for (int i = 0; i < KEY_NUM; i++) {
       if (h_found[i]) found_num++;
     }
-    ASSERT_EQ(found_num,  KEY_NUM);
+    ASSERT_EQ(found_num, KEY_NUM);
 
     table->accum_or_assign(KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors),
                            d_found, d_metas, stream);
@@ -1100,17 +1100,17 @@ void test_basic_for_cpu_io() {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  KEY_NUM);
+    ASSERT_EQ(total_size, KEY_NUM);
 
     table->erase(KEY_NUM >> 1, d_keys, stream);
     size_t total_size_after_erase = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size_after_erase,  total_size >> 1);
+    ASSERT_EQ(total_size_after_erase, total_size >> 1);
 
     table->clear(stream);
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size,  0);
+    ASSERT_EQ(total_size, 0);
 
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -1119,7 +1119,7 @@ void test_basic_for_cpu_io() {
                                        reinterpret_cast<float*>(d_vectors),
                                        d_metas, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(dump_counter,  KEY_NUM);
+    ASSERT_EQ(dump_counter, KEY_NUM);
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
