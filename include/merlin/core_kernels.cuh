@@ -732,7 +732,7 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
         }
         if (expected_key == static_cast<K>(RECLAIM_KEY)) {
           if (bucket->keys[key_offset].compare_exchange_strong(
-                  reclaimed_key, find_key, cuda::std::memory_order_relaxed)) {
+                  expected_key, find_key, cuda::std::memory_order_relaxed)) {
             return unoccupied_vote;
           }
         }
