@@ -722,7 +722,7 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
     current_key =
         bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
     unoccupied_vote =
-        g.ballot(current_key == EMPTY_KEY || current_key == RECLAIM_KEY);
+        g.ballot(current_key == static_cast<K>(EMPTY_KEY) || current_key == static_cast<K>(RECLAIM_KEY));
     if (unoccupied_vote) {
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
