@@ -701,6 +701,16 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
   return 0;
 }
 
+template <class K>
+__device__ constexpr K get_empty_key() const noexcept {
+  return EMPTY_KEY;
+}
+
+template <class K>
+__device__ constexpr K get_reclaimed_key() const noexcept {
+  return RECLAIM_KEY;
+}
+
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g,
@@ -726,12 +736,12 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
         if (bucket->keys[key_offset].compare_exchange_strong(
-                EMPTY_KEY, find_key, cuda::std::memory_order_relaxed)) {
+                get_empty_key<K>(), find_key, cuda::std::memory_order_relaxed)) {
           return unoccupied_vote;
         }
 
         if (bucket->keys[key_offset].compare_exchange_strong(
-                EMPTY_KEY, find_key, cuda::std::memory_order_relaxed)) {
+                get_reclaimed_key<K>(), find_key, cuda::std::memory_order_relaxed)) {
           return unoccupied_vote;
         }
       }
