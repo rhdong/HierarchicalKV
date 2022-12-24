@@ -714,7 +714,7 @@ __device__ constexpr K get_reclaimed_key() {
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
+    const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
     uint32_t& tile_offset, const uint32_t start_idx, const size_t bucket_size,
     const size_t bucket_max_size) {
   uint32_t key_offset = 0;
@@ -794,7 +794,7 @@ __global__ void upsert_kernel_with_io(
     size_t key_idx = t / TILE_SIZE;
     int local_size = 0;
 
-    const K insert_key = keys[key_idx];
+    K insert_key = keys[key_idx];
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
