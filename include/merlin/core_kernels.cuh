@@ -724,8 +724,6 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
         g.ballot(current_key == EMPTY_KEY || current_key == RECLAIM_KEY);
     if (unoccupied_vote) {
       int src_lane = __ffs(unoccupied_vote) - 1;
-      const int key_pos =
-          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       if (src_lane == g.thread_rank()) {
         if (bucket->keys[key_offset].compare_exchange_strong(
                 EMPTY_KEY, find_key, cuda::std::memory_order_relaxed)) {
