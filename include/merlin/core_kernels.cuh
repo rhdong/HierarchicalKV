@@ -722,8 +722,8 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
   unsigned unoccupied_vote = 0;
 
   if (bucket_size == bucket_max_size) return 0;
-  const K empty_key = static_cast<K>(EMPTY_KEY);
-  const K reclaimed_key = static_cast<K>(RECLAIM_KEY);
+  K empty_key = static_cast<K>(EMPTY_KEY);
+  K reclaimed_key = static_cast<K>(RECLAIM_KEY);
 
 #pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
