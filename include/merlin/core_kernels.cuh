@@ -701,27 +701,27 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
   return 0;
 }
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ unsigned try_occupy(
+__forceinline__ __device__ bool try_occupy(
     cg::thread_block_tile<TILE_SIZE> g,
     const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
     uint32_t key_offset) {
 
-  unsigned unoccupied_vote = 0;
+  bool unoccupied = false;
   K expected_key = static_cast<K>(EMPTY_KEY);
   if (bucket->keys[key_offset].compare_exchange_strong(
           expected_key, find_key, cuda::std::memory_order_relaxed)) {
-    return unoccupied_vote;
+    return true;
   }
   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
     if (bucket->keys[key_offset].compare_exchange_strong(
             expected_key, find_key, cuda::std::memory_order_relaxed)) {
-      return unoccupied_vote;
+      return true;
     }
   }
   if (expected_key == find_key) {
-    return unoccupied_vote;
+    return false;
   }
-  return 0;
+  return false;
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
@@ -745,14 +745,15 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
         bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
     unoccupied_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
                                current_key == static_cast<K>(RECLAIM_KEY));
+    bool occupied = false;
     if (unoccupied_vote) {
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
-        unoccupied_vote = try_occupy<K, V, M, DIM, TILE_SIZE>(
+        occupied = try_occupy<K, V, M, DIM, TILE_SIZE>(
             g, bucket, find_key, key_offset);
       };
-      unoccupied_vote = g.shfl(unoccupied_vote, src_lane);
-      if (unoccupied_vote) {
+      occupied = g.shfl(occupied, src_lane);
+      if (occupied) {
         return unoccupied_vote;
       }
     }
