@@ -868,6 +868,8 @@ __global__ void upsert_kernel_with_io(
       continue;
     }
 
+
+    std::cout << "xxx" << std::endl;
     src_lane = (bucket->min_pos % TILE_SIZE);
     key_pos = bucket->min_pos;
     if (rank == src_lane) {
