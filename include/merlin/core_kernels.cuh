@@ -867,7 +867,6 @@ __global__ void upsert_kernel_with_io(
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 
 
-    printf("yy\n");
       continue;
     }
 
