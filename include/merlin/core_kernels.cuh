@@ -705,7 +705,7 @@ __forceinline__ __device__ unsigned try_occupy(
     cg::thread_block_tile<TILE_SIZE> g,
     const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
     uint32_t key_offset) {
-  
+
   unsigned unoccupied_vote = 0;
   K expected_key = static_cast<K>(EMPTY_KEY);
   if (bucket->keys[key_offset].compare_exchange_strong(
@@ -721,6 +721,7 @@ __forceinline__ __device__ unsigned try_occupy(
   if (expected_key == find_key) {
     return unoccupied_vote;
   }
+  return 0;
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
