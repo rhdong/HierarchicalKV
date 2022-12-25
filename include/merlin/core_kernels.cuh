@@ -865,11 +865,14 @@ __global__ void upsert_kernel_with_io(
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+
+
+    printf("yy\n");
       continue;
     }
 
 
-    std::cout << "xxx" << std::endl;
+    printf("xxx\n");
     src_lane = (bucket->min_pos % TILE_SIZE);
     key_pos = bucket->min_pos;
     if (rank == src_lane) {
