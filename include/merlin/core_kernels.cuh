@@ -854,7 +854,8 @@ __global__ void upsert_kernel_with_io(
         //        bucket->keys[key_pos].store(insert_key,
         //                                    cuda::std::memory_order_relaxed);
         update_meta(bucket, key_pos, metas, key_idx);
-        buckets_size[bkt_idx]++;
+//        buckets_size[bkt_idx]++;
+        atomicAdd(&(buckets_size[bkt_idx]), 1);
       }
       local_size++;
       if (local_size >= bucket_max_size) {
@@ -871,7 +872,6 @@ __global__ void upsert_kernel_with_io(
     }
 
 
-    printf("xxx\n");
     src_lane = (bucket->min_pos % TILE_SIZE);
     key_pos = bucket->min_pos;
     if (rank == src_lane) {
