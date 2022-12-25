@@ -225,7 +225,7 @@ void test_basic(size_t max_hbm_for_vectors) {
       if (h_found[i]) found_num++;
     }
     ASSERT_EQ(found_num, KEY_NUM);
-                       
+
     CUDA_CHECK(cudaMemset(d_vectors, 2, KEY_NUM * sizeof(Vector)));
     table->insert_or_assign(
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
@@ -238,7 +238,6 @@ void test_basic(size_t max_hbm_for_vectors) {
     table->find(KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_found,
                 nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    int found_num = 0;
     CUDA_CHECK(cudaMemcpy(h_found, d_found, KEY_NUM * sizeof(bool),
                           cudaMemcpyDeviceToHost));
 
