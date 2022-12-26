@@ -212,7 +212,7 @@ void test_basic(size_t max_hbm_for_vectors) {
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size, KEY_NUM);
+    ASSERT_EQ(total_size, KEY_NUM - 1);
 
     table->find(KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_found,
                 nullptr, stream);
