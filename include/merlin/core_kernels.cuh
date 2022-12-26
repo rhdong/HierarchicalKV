@@ -704,15 +704,15 @@ template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ bool try_occupy(
     cg::thread_block_tile<TILE_SIZE> g,
     const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
-    AtomicKey<K> &current_atomic_key) {
+    AtomicKey<K> *current_atomic_key) {
 
   K expected_key = static_cast<K>(EMPTY_KEY);
-  if (current_atomic_key.compare_exchange_strong(
+  if (current_atomic_key->compare_exchange_strong(
           expected_key, find_key, cuda::std::memory_order_relaxed)) {
     return true;
   }
   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
-    if (current_atomic_key.compare_exchange_strong(
+    if (current_atomic_key->compare_exchange_strong(
             expected_key, find_key, cuda::std::memory_order_relaxed)) {
       return true;
     }
@@ -740,9 +740,9 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
        tile_offset += TILE_SIZE) {
     key_offset =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    AtomicKey<K> &current_atomic_key = bucket->keys[key_offset];
+    AtomicKey<K> *current_atomic_key = &(bucket->keys[key_offset]);
     current_key =
-        current_atomic_key.load(cuda::std::memory_order_relaxed);
+        current_atomic_key->load(cuda::std::memory_order_relaxed);
     unoccupied_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
                                current_key == static_cast<K>(RECLAIM_KEY));
     if (unoccupied_vote) {
