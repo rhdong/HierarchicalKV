@@ -740,7 +740,7 @@ __forceinline__ __device__ unsigned find_unoccupied_and_occupy_in_bucket(
        tile_offset += TILE_SIZE) {
     key_offset =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    AtomicKey<K> current_atomic_key = bucket->keys[key_offset];
+    AtomicKey<K> &current_atomic_key = bucket->keys[key_offset];
     current_key =
         current_atomic_key.load(cuda::std::memory_order_relaxed);
     unoccupied_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
