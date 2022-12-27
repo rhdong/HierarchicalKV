@@ -54,7 +54,7 @@ __global__ void create_atomic_keys(Bucket<K, V, M, DIM>* __restrict buckets,
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
     for (size_t i = 0; i < bucket_max_size; i++)
-      new (&(buckets[start + tid].keys[i])) AtomicKey<K>{EMPTY_KEY};
+      new (&(buckets[start + tid].keys[i])) AtomicKey<K>{static_cast<K>(EMPTY_KEY)};
   }
 }
 
