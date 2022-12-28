@@ -742,7 +742,7 @@ __forceinline__ __device__ unsigned find_vacant_and_occupy(
     key_offset =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
     AtomicKey<K>& current_atomic_key = bucket->keys[key_offset];
-    current_key = current_atomic_key.load(cuda::std::memory_order_relaxed);
+    current_key = current_atomic_key->load(cuda::std::memory_order_relaxed);
     unoccupied_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
                                current_key == static_cast<K>(RECLAIM_KEY));
     if (unoccupied_vote) {
@@ -750,7 +750,7 @@ __forceinline__ __device__ unsigned find_vacant_and_occupy(
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
         occupied = try_occupy<K, V, M, DIM, TILE_SIZE>(g, bucket, find_key,
-                                                       &current_atomic_key);
+                                                       current_atomic_key);
       }
       occupied = g.shfl(occupied, src_lane);
       if (occupied) {
