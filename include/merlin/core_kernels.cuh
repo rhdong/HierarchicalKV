@@ -705,14 +705,15 @@ template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ bool try_occupy(
     cg::thread_block_tile<TILE_SIZE> g,
     const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
-    AtomicKey<K>& current_atomic_key) {
+    AtomicKey<K>* current_atomic_key) {
+
   K expected_key = static_cast<K>(EMPTY_KEY);
-  if (current_atomic_key.compare_exchange_strong(
+  if (current_atomic_key->compare_exchange_strong(
           expected_key, find_key, cuda::std::memory_order_relaxed)) {
     return true;
   }
   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
-    if (current_atomic_key.compare_exchange_strong(
+    if (current_atomic_key->compare_exchange_strong(
             expected_key, find_key, cuda::std::memory_order_relaxed)) {
       return true;
     }
@@ -749,7 +750,7 @@ __forceinline__ __device__ unsigned find_vacant_and_occupy(
       int src_lane = __ffs(unoccupied_vote) - 1;
       if (src_lane == g.thread_rank()) {
         occupied = try_occupy<K, V, M, DIM, TILE_SIZE>(g, bucket, find_key,
-                                                       current_atomic_key);
+                                                       &current_atomic_key);
       }
       occupied = g.shfl(occupied, src_lane);
       if (occupied) {
