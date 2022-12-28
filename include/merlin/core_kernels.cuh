@@ -755,9 +755,12 @@ __forceinline__ __device__ unsigned find_vacant_and_occupy(
       occupied = g.shfl(occupied, src_lane);
       if (occupied) {
         return unoccupied_vote;
+      } else {
+        printf("xx\n");
       }
     }
   }
+  printf("yyy\n");
   return 0;
 }
 
