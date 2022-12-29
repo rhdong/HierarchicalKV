@@ -841,8 +841,7 @@ __global__ void upsert_kernel_with_io(
         InsertResult status{InsertResult::CONTINUE};
         src_lane = __ffs(find_empty_vote) - 1;
 
-        key_pos =
-            (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+        key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
         AtomicKey<K>* current_atomic_key = &(bucket->keys[key_pos]);
 
         if (rank == src_lane) {
@@ -930,10 +929,16 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
     }
 
     local_size = buckets_size[bkt_idx];
-
-    const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-        g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
-
+    const unsigned found_vote = 0;
+#pragma unroll
+    for (tile_offset = 0; tile_offset < bucket_max_size;
+         tile_offset += TILE_SIZE) {
+      found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
+          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+      if (found_vote) {
+        break;
+      }
+    }
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
       const int key_pos =
@@ -1102,8 +1107,17 @@ __global__ void lookup_kernel_with_io(
     Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-        g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
+    const unsigned found_vote = 0;
+
+#pragma unroll
+    for (tile_offset = 0; tile_offset < bucket_max_size;
+         tile_offset += TILE_SIZE) {
+      found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
+          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+      if (found_vote) {
+        break;
+      }
+    }
 
     if (found_vote) {
       const int src_lane = __ffs(found_vote) - 1;
@@ -1238,8 +1252,16 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
     Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-        g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
+    const unsigned found_vote = 0;
+#pragma unroll
+    for (tile_offset = 0; tile_offset < bucket_max_size;
+         tile_offset += TILE_SIZE) {
+      found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
+          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+      if (found_vote) {
+        break;
+      }
+    }
 
     if (found_vote) {
       const int src_lane = __ffs(found_vote) - 1;
