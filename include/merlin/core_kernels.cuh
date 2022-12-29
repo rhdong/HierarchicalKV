@@ -614,12 +614,7 @@ template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ unsigned find_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g,
     const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
-    const uint32_t tile_offset, const uint32_t start_idx,
-    const size_t bucket_max_size) {
-  const uint32_t key_offset =
-      (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-  const K current_key =
-      bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
+    const K current_key) {
   const unsigned found_vote = g.ballot(find_key == current_key);
   if (found_vote) {
     return found_vote;
@@ -810,8 +805,14 @@ __global__ void upsert_kernel_with_io(
 
     local_size = buckets_size[bkt_idx];
     while (tile_offset < bucket_max_size) {
+      key_pos =
+          (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+
+      const K current_key =
+          bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+
       const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket, insert_key, current_key);
 
       if (found_vote) {
         src_lane = __ffs(found_vote) - 1;
@@ -930,11 +931,22 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
 
     local_size = buckets_size[bkt_idx];
     const unsigned found_vote = 0;
+
+    const K current_key =
+        bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+
 #pragma unroll
     for (tile_offset = 0; tile_offset < bucket_max_size;
          tile_offset += TILE_SIZE) {
+
+      key_pos =
+          (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+
+      const K current_key =
+        bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket, insert_key, current_key);
       if (found_vote) {
         break;
       }
@@ -1112,8 +1124,13 @@ __global__ void lookup_kernel_with_io(
 #pragma unroll
     for (tile_offset = 0; tile_offset < bucket_max_size;
          tile_offset += TILE_SIZE) {
+      key_pos =
+          (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+
+      const K current_key =
+        bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket, insert_key, current_key);
       if (found_vote) {
         break;
       }
@@ -1244,6 +1261,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
        t += blockDim.x * gridDim.x) {
     int key_idx = t / TILE_SIZE;
     K find_key = keys[key_idx];
+    int key_pos = -1;
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -1256,8 +1274,15 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
 #pragma unroll
     for (tile_offset = 0; tile_offset < bucket_max_size;
          tile_offset += TILE_SIZE) {
+
+      key_pos =
+          (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+
+      const K current_key =
+        bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket, insert_key, current_key);
       if (found_vote) {
         break;
       }
