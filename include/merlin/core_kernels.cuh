@@ -614,29 +614,20 @@ template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ unsigned find_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g,
     const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
-    uint32_t& tile_offset, const uint32_t start_idx,
+    const uint32_t tile_offset, const uint32_t start_idx,
     const size_t bucket_max_size) {
-  uint32_t key_offset = 0;
-  K current_key = 0;
-  unsigned found_vote = 0;
-
-#pragma unroll
-  for (tile_offset = 0; tile_offset < bucket_max_size;
-       tile_offset += TILE_SIZE) {
-    key_offset =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    current_key =
-        bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
-    found_vote = g.ballot(find_key == current_key);
-    if (found_vote) {
-      return found_vote;
-    }
-
-    if (g.any(current_key == EMPTY_KEY)) {
-      return 0;
-    }
+  const uint32_t key_offset =
+      (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+  const K current_key =
+      bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
+  const unsigned found_vote = g.ballot(find_key == current_key);
+  if (found_vote) {
+    return found_vote;
   }
-  return 0;
+
+  if (g.any(current_key == EMPTY_KEY)) {
+    return 0;
+  }
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
@@ -702,67 +693,66 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
   return 0;
 }
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ bool try_occupy(
-    cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
-    AtomicKey<K>* current_atomic_key) {
-
+__forceinline__ __device__ InsertResult
+try_occupy(cg::thread_block_tile<TILE_SIZE> g,
+           const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
+           AtomicKey<K>* current_atomic_key) {
   K expected_key = static_cast<K>(EMPTY_KEY);
   if (current_atomic_key->compare_exchange_strong(
           expected_key, find_key, cuda::std::memory_order_relaxed)) {
-    return true;
+    return InsertResult::OCCUPIED_EMPTY;
   }
   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
     if (current_atomic_key->compare_exchange_strong(
             expected_key, find_key, cuda::std::memory_order_relaxed)) {
-      return true;
+      return InsertResult::OCCUPIED_RECLAIMED;
     }
   }
   if (expected_key == find_key) {
-    return false;
+    return InsertResult::DUPLICATE;
   }
-  return false;
+  return InsertResult::CONTINUE;
 }
-
-template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ unsigned find_vacant_and_occupy(
-    cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
-    uint32_t& tile_offset, const uint32_t start_idx, const size_t bucket_size,
-    const size_t bucket_max_size) {
-  uint32_t key_offset = 0;
-  K current_key = 0;
-  unsigned unoccupied_vote = 0;
-
-  if (bucket_size == bucket_max_size) return 0;
-
-#pragma unroll
-  for (tile_offset = 0; tile_offset < bucket_max_size;
-       tile_offset += TILE_SIZE) {
-    key_offset =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    AtomicKey<K>* current_atomic_key = &(bucket->keys[key_offset]);
-    current_key = current_atomic_key->load(cuda::std::memory_order_relaxed);
-    unoccupied_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
-                               current_key == static_cast<K>(RECLAIM_KEY));
-    if (unoccupied_vote) {
-      bool occupied = false;
-      int src_lane = __ffs(unoccupied_vote) - 1;
-      if (src_lane == g.thread_rank()) {
-        occupied = try_occupy<K, V, M, DIM, TILE_SIZE>(g, bucket, find_key,
-                                                       current_atomic_key);
-      }
-      occupied = g.shfl(occupied, src_lane);
-      if (occupied) {
-        return unoccupied_vote;
-      } else {
-        printf("xx\n");
-      }
-    }
-  }
-  printf("yyy\n");
-  return 0;
-}
+//
+// template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+//__forceinline__ __device__ unsigned find_vacant_and_occupy(
+//    cg::thread_block_tile<TILE_SIZE> g,
+//    const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
+//    uint32_t& tile_offset, const uint32_t start_idx, const size_t bucket_size,
+//    const size_t bucket_max_size) {
+//  uint32_t key_offset = 0;
+//  K current_key = 0;
+//  unsigned unoccupied_vote = 0;
+//
+//  if (bucket_size == bucket_max_size) return 0;
+//
+//#pragma unroll
+//  for (tile_offset = 0; tile_offset < bucket_max_size;
+//       tile_offset += TILE_SIZE) {
+//    key_offset =
+//        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+//    AtomicKey<K>* current_atomic_key = &(bucket->keys[key_offset]);
+//    current_key = current_atomic_key->load(cuda::std::memory_order_relaxed);
+//    unoccupied_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
+//                               current_key == static_cast<K>(RECLAIM_KEY));
+//    if (unoccupied_vote) {
+//      bool occupied = false;
+//      int src_lane = __ffs(unoccupied_vote) - 1;
+//      if (src_lane == g.thread_rank()) {
+//        occupied = try_occupy<K, V, M, DIM, TILE_SIZE>(g, bucket, find_key,
+//                                                       current_atomic_key);
+//      }
+//      occupied = g.shfl(occupied, src_lane);
+//      if (occupied) {
+//        return unoccupied_vote;
+//      } else {
+//        printf("xx\n");
+//      }
+//    }
+//  }
+//  printf("yyy\n");
+//  return 0;
+//}
 
 template <class K, class V, class M, size_t DIM>
 __forceinline__ __device__ Bucket<K, V, M, DIM>* get_key_position(
@@ -815,63 +805,78 @@ __global__ void upsert_kernel_with_io(
     uint32_t tile_offset = 0;
     int src_lane = -1;
 
-    Bucket<K, V, M, DIM>* bucket =
-        get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
-                            buckets_num, bucket_max_size);
+    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
+        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    //    lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     local_size = buckets_size[bkt_idx];
+    while (tile_offset < bucket_max_size) {
+      const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
+          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
 
-    //    const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-    //        g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
-    //
-    //    if (found_vote) {
-    //      src_lane = __ffs(found_vote) - 1;
-    //      const int key_pos =
-    //          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-    //      if (rank == src_lane) {
-    //        bucket->keys[key_pos].store(insert_key,
-    //                                    cuda::std::memory_order_relaxed);
-    //        update_meta(bucket, key_pos, metas, key_idx);
-    //      }
-    //      if (local_size >= bucket_max_size) {
-    //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-    //                                                     bucket_max_size);
-    //      }
-    //      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-    //      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-    //                                     bucket->vectors + key_pos);
-    //
-    //      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-    //      continue;
-    //    }
-    const unsigned unoccupied_vote =
-        find_vacant_and_occupy<K, V, M, DIM, TILE_SIZE>(
-            g, bucket, insert_key, tile_offset, start_idx, local_size,
-            bucket_max_size);
+      if (found_vote) {
+        src_lane = __ffs(found_vote) - 1;
+        const int key_pos =
+            (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+        if (rank == src_lane) {
+          bucket->keys[key_pos].store(insert_key,
+                                      cuda::std::memory_order_relaxed);
+          update_meta(bucket, key_pos, metas, key_idx);
+        }
+        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        if (local_size >= bucket_max_size) {
+          refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+                                                       bucket_max_size);
+        }
+        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                       bucket->vectors + key_pos);
 
-    if (unoccupied_vote) {
-      src_lane = __ffs(unoccupied_vote) - 1;
-      const int key_pos =
-          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      if (rank == src_lane) {
-        //        bucket->keys[key_pos].store(insert_key,
-        //                                    cuda::std::memory_order_relaxed);
-        update_meta(bucket, key_pos, metas, key_idx);
-        //        buckets_size[bkt_idx]++;
-        atomicAdd(&(buckets_size[bkt_idx]), 1);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+
+        break;
       }
-      local_size++;
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-                                                     bucket_max_size);
-      }
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-                                     bucket->vectors + key_pos);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      const unsigned find_empty_vote =
+          g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
+                   current_key == static_cast<K>(RECLAIM_KEY));
+      if (find_empty_vote) {
+        InsertResult status{InsertResult::CONTINUE};
+        src_lane = __ffs(find_empty_vote) - 1;
 
-      continue;
+        key_pos =
+            (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+        AtomicKey<K>* current_atomic_key = &(bucket->keys[key_pos]);
+
+        if (rank == src_lane) {
+          status = try_occupy(g, bucket, insert_key, current_atomic_key);
+        }
+
+        status = g.shfl(status, src_lane);
+
+        if (status == InsertResult::OCCUPIED_EMPTY ||
+            status == InsertResult::OCCUPIED_RECLAIMED) {
+          key_pos =
+              (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+          if (rank == src_lane) {
+            update_meta(bucket, key_pos, metas, key_idx);
+            //        buckets_size[bkt_idx]++;
+            atomicAdd(&(buckets_size[bkt_idx]), 1);
+          }
+          local_size++;
+          if (local_size >= bucket_max_size) {
+            refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+                                                         bucket_max_size);
+          }
+          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                         bucket->vectors + key_pos);
+          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          break;
+        } else if (status == insert_result::DUPLICATE) {
+          break;
+        } else if (status == insert_result::CONTINUE) {
+          continue;
+        }
+        tile_offset += TILE_SIZE;
+      }
     }
 
     src_lane = (bucket->min_pos % TILE_SIZE);
@@ -916,9 +921,8 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
     uint32_t tile_offset = 0;
     int src_lane = -1;
 
-    Bucket<K, V, M, DIM>* bucket =
-        get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
-                            buckets_num, bucket_max_size);
+    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
+        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     if (rank == 0 && src_offset != nullptr) {

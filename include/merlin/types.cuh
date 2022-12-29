@@ -167,5 +167,12 @@ class BaseKVFile {
                        const M* metas) = 0;
 };
 
+enum class InsertResult {
+  CONTINUE,        ///< Insert did not succeed, continue trying to insert
+  OCCUPIED_EMPTY,  ///< New pair inserted successfully
+  OCCUPIED_RECLAIMED,
+  DUPLICATE  ///< Insert did not succeed, key is already present
+};
+
 }  // namespace merlin
 }  // namespace nv
