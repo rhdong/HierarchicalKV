@@ -971,7 +971,7 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
     }
 
     local_size = buckets_size[bkt_idx];
-    const unsigned found_vote = 0;
+    unsigned found_vote = 0;
 
     const K current_key =
         bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
@@ -987,7 +987,7 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
         bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
 
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, current_key);
+          g, bucket, insert_key, current_key, tile_offset, start_idx, bucket_max_size);
       if (found_vote) {
         break;
       }
@@ -1153,6 +1153,7 @@ __global__ void lookup_kernel_with_io(
 
     const K find_key = keys[key_idx];
 
+    int key_pos = -1;
     size_t bkt_idx = 0;
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
@@ -1160,7 +1161,7 @@ __global__ void lookup_kernel_with_io(
     Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    const unsigned found_vote = 0;
+    unsigned found_vote = 0;
 
 #pragma unroll
     for (tile_offset = 0; tile_offset < bucket_max_size;
@@ -1171,7 +1172,7 @@ __global__ void lookup_kernel_with_io(
       const K current_key =
         bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, current_key);
+          g, bucket, insert_key, current_key, tile_offset, start_idx, bucket_max_size);
       if (found_vote) {
         break;
       }
@@ -1179,7 +1180,7 @@ __global__ void lookup_kernel_with_io(
 
     if (found_vote) {
       const int src_lane = __ffs(found_vote) - 1;
-      const int key_pos =
+      key_pos =
           (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       const V* src = bucket->vectors + key_pos;
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
