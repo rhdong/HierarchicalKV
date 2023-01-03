@@ -886,7 +886,7 @@ __global__ void upsert_kernel_with_io(
         AtomicKey<K>* current_atomic_key = &(bucket->keys[key_pos]);
 
         if (rank == src_lane) {
-          status = try_occupy(g, bucket, insert_key, current_atomic_key);
+          status = try_occupy<K, V, M, DIM, TILE_SIZE>(g, bucket, insert_key, current_atomic_key);
         }
 
         status = g.shfl(status, src_lane);
