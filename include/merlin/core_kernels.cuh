@@ -987,7 +987,7 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
         bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
 
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, current_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
       if (found_vote) {
         break;
       }
@@ -1172,7 +1172,7 @@ __global__ void lookup_kernel_with_io(
       const K current_key =
         bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, current_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
       if (found_vote) {
         break;
       }
