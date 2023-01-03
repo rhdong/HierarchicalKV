@@ -914,8 +914,8 @@ __global__ void upsert_kernel_with_io(
         } else if (status == InsertResult::CONTINUE) {
           continue;
         }
-        tile_offset += TILE_SIZE;
       }
+      tile_offset += TILE_SIZE;
     }
 
     if (status == InsertResult::CONTINUE) {
