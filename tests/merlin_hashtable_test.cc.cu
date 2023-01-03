@@ -1158,26 +1158,26 @@ TEST(MerlinHashTableTest, test_basic) {
 }
 TEST(MerlinHashTableTest, test_basic_when_full) {
   test_basic_when_full(16);
-//  test_basic_when_full(0);
+  //  test_basic_when_full(0);
 }
 TEST(MerlinHashTableTest, test_erase_if_pred) {
   test_erase_if_pred(16);
-//  test_erase_if_pred(0);
+  //  test_erase_if_pred(0);
 }
 TEST(MerlinHashTableTest, test_rehash) {
   test_rehash(16);
-//  test_rehash(0);
+  //  test_rehash(0);
 }
 TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
   test_rehash_on_big_batch(16);
-//  test_rehash_on_big_batch(0);
+  //  test_rehash_on_big_batch(0);
 }
 TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
   test_dynamic_rehash_on_multi_threads(16);
-//  test_dynamic_rehash_on_multi_threads(0);
+  //  test_dynamic_rehash_on_multi_threads(0);
 }
 TEST(MerlinHashTableTest, test_export_batch_if) {
   test_export_batch_if(16);
-//  test_export_batch_if(0);
+  //  test_export_batch_if(0);
 }
 TEST(MerlinHashTableTest, test_basic_for_cpu_io) { test_basic_for_cpu_io(); }
