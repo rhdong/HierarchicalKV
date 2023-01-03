@@ -1312,7 +1312,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
     Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    const unsigned found_vote = 0;
+    unsigned found_vote = 0;
 #pragma unroll
     for (tile_offset = 0; tile_offset < bucket_max_size;
          tile_offset += TILE_SIZE) {
@@ -1329,7 +1329,7 @@ __global__ void remove_kernel(const Table<K, V, M, DIM>* __restrict table,
       }
 
       if (g.any(current_key == EMPTY_KEY)) {
-        return 0;
+        break;
       }
     }
 
