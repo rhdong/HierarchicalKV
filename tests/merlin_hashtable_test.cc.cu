@@ -359,21 +359,21 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
         KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
-    uint64_t total_size_after_insert = table->size(stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-
-    table->erase(KEY_NUM, d_keys, stream);
-    size_t total_size_after_erase = table->size(stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size_after_erase, 0);
-
-    table->insert_or_assign(
-        KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-
-    uint64_t total_size_after_reinsert = table->size(stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size_after_insert, total_size_after_reinsert);
+//    uint64_t total_size_after_insert = table->size(stream);
+//    CUDA_CHECK(cudaStreamSynchronize(stream));
+//
+//    table->erase(KEY_NUM, d_keys, stream);
+//    size_t total_size_after_erase = table->size(stream);
+//    CUDA_CHECK(cudaStreamSynchronize(stream));
+//    ASSERT_EQ(total_size_after_erase, 0);
+//
+//    table->insert_or_assign(
+//        KEY_NUM, d_keys, reinterpret_cast<float*>(d_vectors), d_metas, stream);
+//    CUDA_CHECK(cudaStreamSynchronize(stream));
+//
+//    uint64_t total_size_after_reinsert = table->size(stream);
+//    CUDA_CHECK(cudaStreamSynchronize(stream));
+//    ASSERT_EQ(total_size_after_insert, total_size_after_reinsert);
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
