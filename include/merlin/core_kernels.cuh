@@ -808,7 +808,7 @@ __global__ void upsert_kernel_with_io(
     size_t key_idx = t / TILE_SIZE;
     int local_size = 0;
 
-    K insert_key = keys[key_idx];
+    const K insert_key = keys[key_idx];
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -921,15 +921,14 @@ __global__ void upsert_kernel_with_io(
     if (status == InsertResult::CONTINUE) {
       src_lane = (bucket->min_pos % TILE_SIZE);
       key_pos = bucket->min_pos;
+
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       if (rank == src_lane) {
         bucket->keys[key_pos].store(insert_key, cuda::std::memory_order_relaxed);
         update_meta(bucket, key_pos, metas, key_idx);
       }
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
-
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-                                     bucket->vectors + key_pos);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     }
   }

@@ -240,7 +240,7 @@ void test_basic(size_t max_hbm_for_vectors) {
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CUDA_CHECK(cudaMemcpy(h_found, d_found, KEY_NUM * sizeof(bool),
                           cudaMemcpyDeviceToHost));
-
+    found_num = 0;
     for (int i = 0; i < KEY_NUM; i++) {
       if (h_found[i]) found_num++;
     }
