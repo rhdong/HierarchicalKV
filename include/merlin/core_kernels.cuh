@@ -330,7 +330,6 @@ __forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
   }
   __pipeline_commit();
   __pipeline_wait_prior(0);
-  __syncthreads();
 }
 
 /* Write the N data from src to each address in *dst by using CPU threads,
