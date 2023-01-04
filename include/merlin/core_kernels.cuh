@@ -314,12 +314,20 @@ __forceinline__ __device__ void refresh_bucket_meta(
   }
 }
 
+//template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
+//__forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
+//                                            const V* src, V* dst) {
+//  for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
+//    dst->values[i] = src->values[i];
+//  }
+//}
+
 template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
                                             const V* src, V* dst) {
-  for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
-    dst->values[i] = src->values[i];
-  }
+  __pipeline_memcpy_async(dst->values, src->values, DIM * sizeof(V));
+  __pipeline_commit();
+  __pipeline_wait_prior(0);
 }
 
 /* Write the N data from src to each address in *dst by using CPU threads,
@@ -870,8 +878,8 @@ __global__ void upsert_kernel_with_io(
                                                        bucket_max_size);
         }
         lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-//        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-//                                       bucket->vectors + key_pos);
+        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                       bucket->vectors + key_pos);
 
         unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 
@@ -908,8 +916,8 @@ __global__ void upsert_kernel_with_io(
                                                          bucket_max_size);
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-//          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-//                                         bucket->vectors + key_pos);
+          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                         bucket->vectors + key_pos);
           unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
         } else if (status == InsertResult::DUPLICATE) {
@@ -932,8 +940,8 @@ __global__ void upsert_kernel_with_io(
       }
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
-//      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-//                                     bucket->vectors + key_pos);
+      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                     bucket->vectors + key_pos);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     }
   }
