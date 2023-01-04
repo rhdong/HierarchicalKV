@@ -837,8 +837,8 @@ __global__ void upsert_kernel_with_io(
         refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                      bucket_max_size);
       }
-      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-                                     bucket->vectors + key_pos);
+//      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+//                                     bucket->vectors + key_pos);
 
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       continue;
@@ -903,11 +903,11 @@ __global__ void upsert_kernel_with_io(
           }
           local_size++;
 
-          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           if (local_size >= bucket_max_size) {
             refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                          bucket_max_size);
           }
+          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 //          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
 //                                         bucket->vectors + key_pos);
           unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
