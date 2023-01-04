@@ -259,7 +259,7 @@ void print_title() {
 }
 
 int main() {
-  size_t key_num_per_op = 1 * 1024 * 1024UL;
+  size_t key_num_per_op = 1024UL;
   cudaDeviceProp props;
   CUDA_CHECK(cudaGetDeviceProperties(&props, 0));
   cout << endl
