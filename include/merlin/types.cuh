@@ -83,6 +83,30 @@ class Lock {
   }
 };
 
+template <cuda::thread_scope Scope>
+class new_lock {
+  mutable cuda::atomic<int64_t, Scope> _lock;
+
+public:
+  __device__ lock() : _lock{0} {}
+
+  __device__ void acquire(int pos) const {
+    int64_t expected, b;
+    do {
+      expected = expected & (~(1l << pos));
+      b = expected | (1l << pos);
+    } while(_lock.compare_exchange_weak(expected, b, cuda::std::memory_order_acquire));
+  }
+
+  __device__ void release(int pos) const {
+    int64_t a, expected;
+    do {
+      a = a & (~(1l << pos));
+      expected = a | (1l << pos);
+    } while(_lock.compare_exchange_weak(expected, a, cuda::std::memory_order_release));
+  }
+};
+
 using Mutex = Lock<cuda::thread_scope_device>;
 
 template <class K, class V, class M, size_t DIM>

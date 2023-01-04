@@ -771,7 +771,7 @@ template <class K, class V, class M, size_t DIM>
 __forceinline__ __device__ Bucket<K, V, M, DIM>* get_key_position(
     Bucket<K, V, M, DIM>* __restrict buckets, const K key, size_t& bkt_idx,
     size_t& start_idx, const size_t buckets_num, const size_t bucket_max_size) {
-  uint32_t hashed_key = (key);
+  uint32_t hashed_key = Murmur3HashDevice(key);
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
   bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
