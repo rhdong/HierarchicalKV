@@ -870,8 +870,8 @@ __global__ void upsert_kernel_with_io(
                                                        bucket_max_size);
         }
         lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-                                       bucket->vectors + key_pos);
+//        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+//                                       bucket->vectors + key_pos);
 
         unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 
@@ -908,8 +908,8 @@ __global__ void upsert_kernel_with_io(
                                                          bucket_max_size);
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-                                         bucket->vectors + key_pos);
+//          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+//                                         bucket->vectors + key_pos);
           unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
         } else if (status == InsertResult::DUPLICATE) {
