@@ -100,7 +100,7 @@ class Lock {
       one = 1;
       pos = pos >> 2;
       do {
-                printf("xx1, %d, %d\n", expected, b);
+//                printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
         b = (expected | (one << pos));
         //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
