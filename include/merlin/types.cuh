@@ -101,7 +101,7 @@ class Lock {
       pos = pos >> 2;
       do {
         //        printf("xx1, %d, %d\n", expected, b);
-        expected = (expected & (~(1l << pos)));
+        expected = (expected & (~(one << pos)));
         b = (expected | (one << pos));
         //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
       } while (!_lock.compare_exchange_weak(expected, b,
