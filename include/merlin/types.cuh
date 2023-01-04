@@ -96,7 +96,7 @@ class Lock {
   __device__ void acquire(CG const& g, int pos,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      register T expected, b;
+      T expected, b;
       pos = pos >> 2;
       do {
         printf("xx1, %d, %d\n", expected, b);
@@ -114,10 +114,10 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      register T a, expected;
+      T a, expected;
       pos = pos >> 2;
       do {
-        printf("yy, %lld, %lld, %d\n", expected, a, pos);
+//        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         a = (a & (~(1l << pos)));
         expected = (a | (1l << pos));
       } while (_lock.compare_exchange_weak(expected, a,
