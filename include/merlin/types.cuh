@@ -117,7 +117,7 @@ class Lock {
       T a, expected;
       pos = pos >> 1;
       do {
-        printf("yy, %lld, %lld, %d\n", expected, a, pos);
+//        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         a = (a & (~(1l << pos)));
         expected = (a | (1l << pos));
       } while (!_lock.compare_exchange_weak(expected, a,
