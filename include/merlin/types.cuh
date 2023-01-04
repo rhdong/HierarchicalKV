@@ -87,7 +87,7 @@ struct Bucket {
 
 template <cuda::thread_scope Scope>
 class Lock {
-  mutable cuda::atomic<int64_t, Scope> _lock;
+  mutable cuda::atomic<int, Scope> _lock;
 
  public:
   __forceinline__ __device__ Lock() : _lock{0} {}
@@ -96,8 +96,8 @@ class Lock {
   __forceinline__ __device__ void acquire(CG const& g, int pos,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      int64_t expected, b;
-      pos = pos >> 1;
+      int expected, b;
+      pos = pos >> 2;
       do {
         expected = expected & (~(1l << pos));
         b = expected | (1l << pos);
@@ -112,8 +112,8 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      int64_t a, expected;
-      pos = pos >> 1;
+      int a, expected;
+      pos = pos >> 2;
       do {
         a = a & (~(1l << pos));
         expected = a | (1l << pos);
