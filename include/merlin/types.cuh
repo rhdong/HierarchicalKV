@@ -85,7 +85,7 @@ struct Bucket {
 //  }
 //};
 
-template <cuda::thread_scope Scope, class T = int>
+template <cuda::thread_scope Scope, class T = uint64_t>
 class Lock {
   mutable cuda::atomic<T, Scope> _lock;
 
@@ -97,9 +97,9 @@ class Lock {
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
       T expected, b;
-      pos = pos >> 2;
+      pos = pos >> 1;
       do {
-        printf("xx, %d, %d, %d\n", expected, b, pos);
+        printf("xx, %lld, %lld, %d\n", expected, b, pos);
         expected = expected & (~(1l << pos));
         b = expected | (1l << pos);
       } while (_lock.compare_exchange_weak(expected, b,
@@ -114,9 +114,9 @@ class Lock {
     g.sync();
     if (g.thread_rank() == lane) {
       T a, expected;
-      pos = pos >> 2;
+      pos = pos >> 1;
       do {
-        printf("yy, %d, %d, %d\n", expected, a, pos);
+        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         a = a & (~(1l << pos));
         expected = a | (1l << pos);
       } while (_lock.compare_exchange_weak(expected, a,
