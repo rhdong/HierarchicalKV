@@ -96,10 +96,8 @@ class Lock {
   __forceinline__ __device__ void acquire(CG const& g, int pos,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      T b;
+      T expected, b;
       pos = pos >> 2;
-
-      T expected = _lock.load(cuda::std::memory_order_relaxed);
       do {
         expected = expected & (~(1l << pos));
         b = expected | (1l << pos);
@@ -114,8 +112,7 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T a;
-      T expected = _lock.load(cuda::std::memory_order_relaxed);
+      T a, expected;
       pos = pos >> 2;
       do {
         a = a & (~(1l << pos));
