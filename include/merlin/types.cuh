@@ -103,7 +103,7 @@ class Lock {
         expected = (expected & (~(1l << pos)));
         b = (expected | (1l << pos));
 //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
-      } while (_lock.compare_exchange_weak(expected, b,
+      } while (!_lock.compare_exchange_weak(expected, b,
                                             cuda::std::memory_order_acquire));
     }
     g.sync();
@@ -117,7 +117,7 @@ class Lock {
       register T a, expected;
       pos = pos >> 2;
       do {
-//        printf("yy, %lld, %lld, %d\n", expected, a, pos);
+        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         a = (a & (~(1l << pos)));
         expected = (a | (1l << pos));
       } while (_lock.compare_exchange_weak(expected, a,
