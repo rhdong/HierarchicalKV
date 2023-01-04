@@ -18,7 +18,8 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
-#include <cuda_pipeline.h>
+#include <cooperative_groups/memcpy_async.h>
+
 #include <thread>
 #include <vector>
 #include "types.cuh"
@@ -313,24 +314,14 @@ __forceinline__ __device__ void refresh_bucket_meta(
   }
 }
 
-// template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
-//__forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE>
-//g,
-//                                            const V* src, V* dst) {
-//  for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
-//    dst->values[i] = src->values[i];
-//  }
-//}
-
 template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
                                             const V* src, V* dst) {
   for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
-    __pipeline_memcpy_async(&(dst->values[i]), &(src->values[i]), 4);
+    dst->values[i] = src->values[i];
   }
-  __pipeline_commit();
-  __pipeline_wait_prior(0);
 }
+
 
 /* Write the N data from src to each address in *dst by using CPU threads,
  * usually called by upsert kernel.
@@ -780,7 +771,7 @@ template <class K, class V, class M, size_t DIM>
 __forceinline__ __device__ Bucket<K, V, M, DIM>* get_key_position(
     Bucket<K, V, M, DIM>* __restrict buckets, const K key, size_t& bkt_idx,
     size_t& start_idx, const size_t buckets_num, const size_t bucket_max_size) {
-  uint32_t hashed_key = Murmur3HashDevice(key);
+  uint32_t hashed_key = (key);
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
   bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
@@ -940,8 +931,8 @@ __global__ void upsert_kernel_with_io(
                                     cuda::std::memory_order_relaxed);
         update_meta(bucket, key_pos, metas, key_idx);
       }
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
