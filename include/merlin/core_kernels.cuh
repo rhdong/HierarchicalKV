@@ -897,8 +897,8 @@ __global__ void upsert_kernel_with_io(
               (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
           if (rank == src_lane) {
             update_meta(bucket, key_pos, metas, key_idx);
-            buckets_size[bkt_idx] += 1;
-//            atomicAdd(&(buckets_size[bkt_idx]), 1);
+//            buckets_size[bkt_idx] += 1;
+            atomicAdd(&(buckets_size[bkt_idx]), 1);
           }
           local_size++;
           if (local_size >= bucket_max_size) {
