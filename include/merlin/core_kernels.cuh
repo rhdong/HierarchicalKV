@@ -17,9 +17,8 @@
 #pragma once
 
 #include <cooperative_groups.h>
-#include <cooperative_groups/reduce.h>
 #include <cooperative_groups/memcpy_async.h>
-
+#include <cooperative_groups/reduce.h>
 #include <thread>
 #include <vector>
 #include "types.cuh"
@@ -321,7 +320,6 @@ __forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
     dst->values[i] = src->values[i];
   }
 }
-
 
 /* Write the N data from src to each address in *dst by using CPU threads,
  * usually called by upsert kernel.
@@ -837,11 +835,11 @@ __global__ void upsert_kernel_with_io(
         refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                      bucket_max_size);
       }
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
 
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
       continue;
     }
 
@@ -870,11 +868,11 @@ __global__ void upsert_kernel_with_io(
           refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                        bucket_max_size);
         }
-        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
         copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                        bucket->vectors + key_pos);
 
-        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
 
         break;
       }
@@ -908,10 +906,10 @@ __global__ void upsert_kernel_with_io(
             refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                          bucket_max_size);
           }
-          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
           copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                          bucket->vectors + key_pos);
-          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
           break;
         } else if (status == InsertResult::DUPLICATE) {
           break;
@@ -932,10 +930,10 @@ __global__ void upsert_kernel_with_io(
         update_meta(bucket, key_pos, metas, key_idx);
       }
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], key_pos);
     }
   }
 }

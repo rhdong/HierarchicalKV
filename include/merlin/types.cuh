@@ -55,55 +55,71 @@ struct Bucket {
   int min_pos;
 };
 
+//template <cuda::thread_scope Scope>
+//class Lock {
+//  mutable cuda::atomic<int, Scope> _lock;
+//
+// public:
+//  __device__ Lock() : _lock{1} {}
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void acquire(CG const& g,
+//                                          unsigned long long lane = 0) const {
+//    if (g.thread_rank() == lane) {
+//      int expected = 1;
+//      while (!_lock.compare_exchange_weak(expected, 2,
+//                                          cuda::std::memory_order_acquire)) {
+//        expected = 1;
+//      }
+//    }
+//    g.sync();
+//  }
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void release(CG const& g,
+//                                          unsigned long long lane = 0) const {
+//    g.sync();
+//    if (g.thread_rank() == lane) {
+//      _lock.store(1, cuda::std::memory_order_release);
+//    }
+//  }
+//};
+
 template <cuda::thread_scope Scope>
 class Lock {
-  mutable cuda::atomic<int, Scope> _lock;
-
- public:
-  __device__ Lock() : _lock{1} {}
-
-  template <typename CG>
-  __device__ void acquire(CG const& g, unsigned long long lane = 0) const {
-    if (g.thread_rank() == lane) {
-      int expected = 1;
-      while (!_lock.compare_exchange_weak(expected, 2,
-                                          cuda::std::memory_order_acquire)) {
-        expected = 1;
-      }
-    }
-    g.sync();
-  }
-
-  template <typename CG>
-  __device__ void release(CG const& g, unsigned long long lane = 0) const {
-    g.sync();
-    if (g.thread_rank() == lane) {
-      _lock.store(1, cuda::std::memory_order_release);
-    }
-  }
-};
-
-template <cuda::thread_scope Scope>
-class new_lock {
   mutable cuda::atomic<uint64_t, Scope> _lock;
 
-public:
-  __device__ new_lock() : _lock{0} {}
+ public:
+  __forceinline__ __device__ Lock() : _lock{0} {}
 
-  __device__ void acquire(int pos) const {
-    uint64_t expected, b;
-    do {
-      expected = expected & (~(1l << pos));
-      b = expected | (1l << pos);
-    } while(_lock.compare_exchange_weak(expected, b, cuda::std::memory_order_acquire));
+  template <typename CG>
+  __forceinline__ __device__ void acquire(CG const& g, int pos,
+                                          unsigned long long lane = 0) const {
+    if (g.thread_rank() == lane) {
+      uint64_t expected, b;
+      pos = pos >> 1;
+      do {
+        expected = expected & (~(1l << pos));
+        b = expected | (1l << pos);
+      } while (_lock.compare_exchange_weak(expected, b,
+                                           cuda::std::memory_order_acquire));
+    }
+    g.sync();
   }
 
-  __device__ void release(int pos) const {
-    uint64_t a, expected;
-    do {
-      a = a & (~(1l << pos));
-      expected = a | (1l << pos);
-    } while(_lock.compare_exchange_weak(expected, a, cuda::std::memory_order_release));
+  template <typename CG>
+  __device__ void release(CG const& g, int pos,
+                          unsigned long long lane = 0) const {
+    g.sync();
+    if (g.thread_rank() == lane) {
+      int64_t a, expected;
+      pos = pos >> 1;
+      do {
+        a = a & (~(1l << pos));
+        expected = a | (1l << pos);
+      } while (_lock.compare_exchange_weak(expected, a,
+                                           cuda::std::memory_order_release));
+    }
   }
 };
 
