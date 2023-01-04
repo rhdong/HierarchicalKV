@@ -100,7 +100,7 @@ class Lock {
       pos = pos >> 1;
       do {
 //        printf("xx1, %lld, %lld, %d\n", expected, b, pos);
-        expected = expected & (~(1l << pos));
+        expected = (expected & (~(1l << pos)));
         b = (expected | (1l << pos));
 //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
       } while (_lock.compare_exchange_strong(expected, b,
@@ -118,8 +118,8 @@ class Lock {
       pos = pos >> 1;
       do {
         printf("yy, %lld, %lld, %d\n", expected, a, pos);
-        a = a & (~(1l << pos));
-        expected = a | (1l << pos);
+        a = (a & (~(1l << pos)));
+        expected = (a | (1l << pos));
       } while (_lock.compare_exchange_strong(expected, a,
                                            cuda::std::memory_order_release));
     }
