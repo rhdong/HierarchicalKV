@@ -18,7 +18,7 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
-#include <cuda_pipeline.h>
+
 
 #include <thread>
 #include <vector>
@@ -326,7 +326,7 @@ template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
                                             const V* src, V* dst) {
   for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
-    __pipeline_memcpy_async(dst->values + i, src->values + i, sizeof(V));
+    __pipeline_memcpy_async(&(dst->values[i]), &(src->values[i]), 4);
   }
   __pipeline_commit();
   __pipeline_wait_prior(0);
