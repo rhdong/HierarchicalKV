@@ -18,8 +18,7 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
-
-
+#include <cuda_pipeline.h>
 #include <thread>
 #include <vector>
 #include "types.cuh"
@@ -314,8 +313,9 @@ __forceinline__ __device__ void refresh_bucket_meta(
   }
 }
 
-//template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
-//__forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
+// template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
+//__forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE>
+//g,
 //                                            const V* src, V* dst) {
 //  for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
 //    dst->values[i] = src->values[i];
