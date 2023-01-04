@@ -863,7 +863,7 @@ __global__ void upsert_kernel_with_io(
                                       cuda::std::memory_order_relaxed);
           update_meta(bucket, key_pos, metas, key_idx);
         }
-        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
         if (local_size >= bucket_max_size) {
           refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                        bucket_max_size);
@@ -871,7 +871,7 @@ __global__ void upsert_kernel_with_io(
         copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                        bucket->vectors + key_pos);
 
-        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 
         break;
       }
@@ -897,7 +897,6 @@ __global__ void upsert_kernel_with_io(
               (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
           if (rank == src_lane) {
             update_meta(bucket, key_pos, metas, key_idx);
-//            buckets_size[bkt_idx] += 1;
             atomicAdd(&(buckets_size[bkt_idx]), 1);
           }
           local_size++;
@@ -905,10 +904,10 @@ __global__ void upsert_kernel_with_io(
             refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                          bucket_max_size);
           }
-          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                          bucket->vectors + key_pos);
-          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
         } else if (status == InsertResult::DUPLICATE) {
           break;
@@ -928,11 +927,11 @@ __global__ void upsert_kernel_with_io(
                                     cuda::std::memory_order_relaxed);
         update_meta(bucket, key_pos, metas, key_idx);
       }
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     }
   }
 }
