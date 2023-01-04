@@ -55,8 +55,8 @@ struct Bucket {
   int min_pos;
 };
 
-//template <cuda::thread_scope Scope>
-//class Lock {
+// template <cuda::thread_scope Scope>
+// class Lock {
 //  mutable cuda::atomic<int, Scope> _lock;
 //
 // public:
@@ -94,15 +94,16 @@ class Lock {
 
   template <typename CG>
   __device__ void acquire(CG const& g, int pos,
-                                          unsigned long long lane = 0) const {
+                          unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      T expected, b;
+      T expected, b, one;
+      one = 1;
       pos = pos >> 2;
       do {
-        printf("xx1, %d, %d\n", expected, b);
+        //        printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(1l << pos)));
-        b = (expected | (1l << pos));
-//        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
+        b = (expected | (one << pos));
+        //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
       } while (!_lock.compare_exchange_weak(expected, b,
                                             cuda::std::memory_order_acquire));
     }
@@ -114,14 +115,15 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T a, expected;
+      T a, expected, one;
+      one = 1;
       pos = pos >> 2;
       do {
-//        printf("yy, %lld, %lld, %d\n", expected, a, pos);
-        a = (a & (~(1l << pos)));
-        expected = (a | (1l << pos));
+        //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
+        a = (a & (~(one << pos)));
+        expected = (a | (one << pos));
       } while (_lock.compare_exchange_weak(expected, a,
-                                            cuda::std::memory_order_release));
+                                           cuda::std::memory_order_release));
     }
   }
 };
