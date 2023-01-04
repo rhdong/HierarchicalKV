@@ -93,7 +93,7 @@ class Lock {
   __forceinline__ __device__ Lock() : _lock{0} {}
 
   template <typename CG>
-  __forceinline__ __device__ void acquire(CG const& g, int pos,
+  __device__ void acquire(CG const& g, int pos,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
       register T expected, b;
