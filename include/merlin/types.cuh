@@ -85,13 +85,13 @@ class Lock {
 
 template <cuda::thread_scope Scope>
 class new_lock {
-  mutable cuda::atomic<int64_t, Scope> _lock;
+  mutable cuda::atomic<uint64_t, Scope> _lock;
 
 public:
   __device__ new_lock() : _lock{0} {}
 
   __device__ void acquire(int pos) const {
-    int64_t expected, b;
+    uint64_t expected, b;
     do {
       expected = expected & (~(1l << pos));
       b = expected | (1l << pos);
@@ -99,7 +99,7 @@ public:
   }
 
   __device__ void release(int pos) const {
-    int64_t a, expected;
+    uint64_t a, expected;
     do {
       a = a & (~(1l << pos));
       expected = a | (1l << pos);
