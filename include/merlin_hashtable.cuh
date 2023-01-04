@@ -849,7 +849,8 @@ class HashTable {
     const size_type step = static_cast<size_type>(
         std::numeric_limits<int>::max() / options_.max_bucket_size);
 
-    thrust::device_ptr<int> size_ptr(table_->buckets_size);
+    thrust::device_ptr<int> size_ptr(
+        reinterpret_cast<int*>(table_->buckets_size));
 
     for (size_type start_i = 0; start_i < N; start_i += step) {
       size_type end_i = std::min(start_i + step, N);
@@ -1103,7 +1104,8 @@ class HashTable {
     }
     size_t N = std::min(table_->buckets_num, 1024UL);
 
-    thrust::device_ptr<int> size_ptr(table_->buckets_size);
+    thrust::device_ptr<int> size_ptr(
+        reinterpret_cast<int*>(table_->buckets_size));
 
     int size = thrust::reduce(thrust_par.on(stream), size_ptr, size_ptr + N, 0,
                               thrust::plus<int>());

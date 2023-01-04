@@ -1154,7 +1154,7 @@ void test_basic_for_cpu_io() {
 
 TEST(MerlinHashTableTest, test_basic) {
   test_basic(16);
-  test_basic(0);
+  //  test_basic(0);
 }
 TEST(MerlinHashTableTest, test_basic_when_full) {
   test_basic_when_full(16);

@@ -36,6 +36,9 @@ constexpr uint64_t EMPTY_META = UINT64_C(0);
 template <class K>
 using AtomicKey = cuda::atomic<K, cuda::thread_scope_device>;
 
+template <class T>
+using AtomicCounter = cuda::atomic<T, cuda::thread_scope_device>;
+
 template <class K, class V, class M, size_t DIM>
 struct Bucket {
   AtomicKey<K>* keys;  // HBM
@@ -88,12 +91,12 @@ using Mutex = Lock<cuda::thread_scope_device>;
 template <class K, class V, class M, size_t DIM>
 struct Table {
   Bucket<K, V, M, DIM>* buckets;
-  Mutex* locks;                 // mutex for write buckets
-  int* buckets_size;            // size of each buckets.
-  V** slices;                   // Handles of the HBM/ HMEM slices.
-  size_t bytes_per_slice;       // Size by byte of one slice.
-  size_t num_of_memory_slices;  // Number of vectors memory slices.
-  size_t capacity = 134217728;  // Initial capacity.
+  Mutex* locks;                      // mutex for write buckets
+  AtomicCounter<int>* buckets_size;  // size of each buckets.
+  V** slices;                        // Handles of the HBM/ HMEM slices.
+  size_t bytes_per_slice;            // Size by byte of one slice.
+  size_t num_of_memory_slices;       // Number of vectors memory slices.
+  size_t capacity = 134217728;       // Initial capacity.
   size_t max_size =
       std::numeric_limits<uint64_t>::max();  // Up limit of the table capacity.
   size_t buckets_num;                        // Number of the buckets.
