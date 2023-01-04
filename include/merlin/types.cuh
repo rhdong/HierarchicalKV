@@ -88,7 +88,7 @@ class new_lock {
   mutable cuda::atomic<int64_t, Scope> _lock;
 
 public:
-  __device__ lock() : _lock{0} {}
+  __device__ new_lock() : _lock{0} {}
 
   __device__ void acquire(int pos) const {
     int64_t expected, b;
