@@ -99,9 +99,11 @@ class Lock {
     assert(pos >= 0);
     if (g.thread_rank() == lane) {
       T expected, b, one;
+      int counter = 0;
       one = 1;
       pos = pos >> 2;
       do {
+        if(counter++ >= 1)
                 printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
         b = (expected | (one << pos));
