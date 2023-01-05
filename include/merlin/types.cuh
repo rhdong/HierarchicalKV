@@ -122,8 +122,7 @@ class Lock {
       pos = pos >> 2;
       do {
         //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
-        assert(pos > 128);
-        a = (a & (~(one << pos)));
+        a = (expected & (~(one << pos)));
         expected = (a | (one << pos));
       } while (_lock.compare_exchange_weak(expected, a,
                                            cuda::std::memory_order_release));
