@@ -824,8 +824,7 @@ __global__ void upsert_kernel_with_io(
 
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
-      const int key_pos =
-          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       if (rank == src_lane) {
         bucket->keys[key_pos].store(insert_key,
                                     cuda::std::memory_order_relaxed);
@@ -857,8 +856,7 @@ __global__ void upsert_kernel_with_io(
 
       if (found_vote) {
         src_lane = __ffs(found_vote) - 1;
-        const int key_pos =
-            (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+        key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
         if (rank == src_lane) {
           bucket->keys[key_pos].store(insert_key,
                                       cuda::std::memory_order_relaxed);
