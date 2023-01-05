@@ -100,9 +100,12 @@ class Lock {
       T expected, b, one;
       int counter = 0;
       one = 1;
+      assert(pos < 128);
+      assert(pos >= 0);
       pos = pos >> 2;
       do {
       counter++;
+
       assert(counter < 10);
 //        if(counter++ == 1)
 //                printf("xx1, %d, %d\n", expected, b);
@@ -125,6 +128,8 @@ class Lock {
       T a, expected, one;
       one = 1;
       pos = pos >> 2;
+      assert(pos < 128);
+      assert(pos >= 0);
       do {
         //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         a = (a & (~(one << pos)));
