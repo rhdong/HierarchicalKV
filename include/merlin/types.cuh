@@ -149,7 +149,7 @@ class Lock {
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
       pos = pos >> 4;
-      int expected = 0;
+      T expected = 0;
       while (!_lock[pos].compare_exchange_weak(expected, 1,
                                           cuda::std::memory_order_acquire)) {
         expected = 0;
