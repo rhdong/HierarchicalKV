@@ -56,81 +56,80 @@ struct Bucket {
   int min_pos;
 };
 
-// template <cuda::thread_scope Scope>
-// class Lock {
-//  mutable cuda::atomic<int, Scope> _lock;
-//
-// public:
-//  __device__ Lock() : _lock{1} {}
-//
-//  template <typename CG>
-//  __forceinline__ __device__ void acquire(CG const& g,
-//                                          unsigned long long lane = 0) const {
-//    if (g.thread_rank() == lane) {
-//      int expected = 1;
-//      while (!_lock.compare_exchange_weak(expected, 2,
-//                                          cuda::std::memory_order_acquire)) {
-//        expected = 1;
-//      }
-//    }
-//    g.sync();
-//  }
-//
-//  template <typename CG>
-//  __forceinline__ __device__ void release(CG const& g,
-//                                          unsigned long long lane = 0) const {
-//    g.sync();
-//    if (g.thread_rank() == lane) {
-//      _lock.store(1, cuda::std::memory_order_release);
-//    }
-//  }
-//};
-
-template <cuda::thread_scope Scope, class T = int>
-class Lock {
+ template <cuda::thread_scope Scope, class T = unsigned short>
+ class Lock {
   mutable cuda::atomic<T, Scope> _lock;
 
  public:
-  __forceinline__ __device__ Lock() : _lock{0} {}
+  __device__ Lock() : _lock{1} {}
 
   template <typename CG>
-  __forceinline__ __device__ void acquire(CG const& g, int pos,
+  __forceinline__ __device__ void acquire(CG const& g,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      T expected = 0;
-      T desired = 0;
-      T one = 1;
-      pos = pos >> 2;
-      one = (one << pos);
-      do {
-        expected = (expected & (~one));
-        desired = (expected | one);
-
-      } while (!_lock.compare_exchange_weak(expected, desired,
-                                            cuda::std::memory_order_acquire));
+      T expected = 1;
+      while (!_lock.compare_exchange_weak(expected, 2,
+                                          cuda::std::memory_order_acquire)) {
+        expected = 1;
+      }
     }
     g.sync();
   }
 
   template <typename CG>
-  __forceinline__ __device__ void release(CG const& g, int pos,
+  __forceinline__ __device__ void release(CG const& g,
                                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T desired = 0;
-      T expected = 0;
-      T one = 1;
-      pos = pos >> 2;
-      one = (one << pos);
-      do {
-        expected = (expected | one);
-        desired = (expected & (~one));
-      } while (!_lock.compare_exchange_weak(expected, desired,
-                                            cuda::std::memory_order_release));
+      _lock.store(1, cuda::std::memory_order_release);
     }
   }
 };
 
+//template <cuda::thread_scope Scope, class T = int>
+//class Lock {
+//  mutable cuda::atomic<T, Scope> _lock;
+//
+// public:
+//  __forceinline__ __device__ Lock() : _lock{0} {}
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void acquire(CG const& g, int pos,
+//                                          unsigned long long lane = 0) const {
+//    if (g.thread_rank() == lane) {
+//      T expected = 0;
+//      T desired = 0;
+//      T one = 1;
+//      pos = pos >> 2;
+//      one = (one << pos);
+//      do {
+//        expected = (expected & (~one));
+//        desired = (expected | one);
+//
+//      } while (!_lock.compare_exchange_weak(expected, desired,
+//                                            cuda::std::memory_order_acquire));
+//    }
+//    g.sync();
+//  }
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void release(CG const& g, int pos,
+//                                          unsigned long long lane = 0) const {
+//    g.sync();
+//    if (g.thread_rank() == lane) {
+//      T desired = 0;
+//      T expected = 0;
+//      T one = 1;
+//      pos = pos >> 2;
+//      one = (one << pos);
+//      do {
+//        expected = (expected | one);
+//        desired = (expected & (~one));
+//      } while (!_lock.compare_exchange_weak(expected, desired,
+//                                            cuda::std::memory_order_release));
+//    }
+//  }
+//};
 
 //template <cuda::thread_scope Scope, class T = int>
 //class Lock {
