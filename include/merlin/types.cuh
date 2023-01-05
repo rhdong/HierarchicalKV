@@ -102,7 +102,6 @@ class Lock {
       assert(pos < 128 && pos >= 0);
       pos = pos >> 2;
       do {
-      counter++;
 
 //        if(counter++ == 1)
 //                printf("xx1, %d, %d\n", expected, b);
