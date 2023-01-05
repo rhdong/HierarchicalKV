@@ -56,7 +56,7 @@ struct Bucket {
   int min_pos;
 };
 
- template <cuda::thread_scope Scope, class T = bool>
+ template <cuda::thread_scope Scope, class T = int>
  class Lock {
   mutable cuda::atomic<T, Scope> _lock;
 
