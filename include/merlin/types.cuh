@@ -98,21 +98,18 @@ class Lock {
                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
       T expected, b, one;
-      int counter = 0;
       one = 1;
       assert(pos < 128 && pos >= 0);
       pos = pos >> 2;
       do {
       counter++;
 
-      assert(counter < 10);
 //        if(counter++ == 1)
 //                printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
         b = (expected | (one << pos));
         //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
 
-        assert(b == (expected | (one << pos)));
       } while (!_lock.compare_exchange_weak(expected, b,
                                             cuda::std::memory_order_acquire));
     }
