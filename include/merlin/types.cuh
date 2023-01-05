@@ -101,7 +101,6 @@ class Lock {
       int counter = 0;
       one = 1;
       assert(pos < 128 && pos >= 0);
-      assert();
       pos = pos >> 2;
       do {
       counter++;
