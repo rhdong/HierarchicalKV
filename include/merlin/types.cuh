@@ -138,7 +138,11 @@ class Lock {
   mutable cuda::atomic<T, Scope> _lock[8];
 
  public:
-  __forceinline__ __device__ Lock() : _lock{0} {}
+  __forceinline__ __device__ Lock() {
+    for(int i = 0; i < 8; i++){
+      _lock[i] = 0;
+    }
+  }
 
   template <typename CG>
   __forceinline__ __device__ void acquire(CG const& g, int pos,
