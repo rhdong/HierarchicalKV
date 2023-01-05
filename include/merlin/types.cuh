@@ -126,7 +126,7 @@ class Lock {
         //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         expected = (expected | (one << pos));
         a = (expected & (~(one << pos)));
-      } while (_lock.compare_exchange_weak(expected, a,
+      } while (!_lock.compare_exchange_weak(expected, a,
                                            cuda::std::memory_order_release));
     }
   }
