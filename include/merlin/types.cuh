@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <assert.h>
 #include <stddef.h>
 #include <cstdint>
 #include <cuda/std/semaphore>
@@ -95,12 +96,13 @@ class Lock {
   template <typename CG>
   __device__ void acquire(CG const& g, int pos,
                           unsigned long long lane = 0) const {
+    assert(pos >= 0);
     if (g.thread_rank() == lane) {
       T expected, b, one;
       one = 1;
       pos = pos >> 2;
       do {
-//                printf("xx1, %d, %d\n", expected, b);
+        //        printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
         b = (expected | (one << pos));
         //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
