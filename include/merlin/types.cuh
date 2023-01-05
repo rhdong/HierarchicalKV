@@ -86,9 +86,56 @@ struct Bucket {
 //  }
 //};
 
+//template <cuda::thread_scope Scope, class T = char>
+//class Lock {
+//  mutable cuda::atomic<T, Scope> _lock;
+//
+// public:
+//  __forceinline__ __device__ Lock() : _lock{0} {}
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void acquire(CG const& g, int pos,
+//                                          unsigned long long lane = 0) const {
+//    if (g.thread_rank() == lane) {
+//      register T expected = 0;
+//      register T desired = 0;
+//      register T one = 1;
+//      pos = pos >> 2;
+//      one = (one << pos);
+//      do {
+//        expected = (expected & (~one));
+//        desired = (expected | one);
+//
+//      } while (!_lock.compare_exchange_strong(expected, desired,
+//                                            cuda::std::memory_order_acquire));
+//    }
+//    g.sync();
+//  }
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void release(CG const& g, int pos,
+//                                          unsigned long long lane = 0) const {
+//    g.sync();
+//    if (g.thread_rank() == lane) {
+//      register T desired = 0;
+//      register T expected = 0;
+//      register T one = 1;
+//      pos = pos >> 2;
+//      one = (one << pos);
+//      do {
+//        expected = (expected | one);
+//        desired = (expected & (~one));
+//      } while (!_lock.compare_exchange_strong(expected, desired,
+//                                            cuda::std::memory_order_release));
+//    }
+//  }
+//};
+
+
+
 template <cuda::thread_scope Scope, class T = char>
 class Lock {
-  mutable cuda::atomic<T, Scope> _lock;
+  mutable cuda::atomic<T, Scope> _lock[8];
 
  public:
   __forceinline__ __device__ Lock() : _lock{0} {}
@@ -97,17 +144,12 @@ class Lock {
   __forceinline__ __device__ void acquire(CG const& g, int pos,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      register T expected = 0;
-      register T desired = 0;
-      register T one = 1;
-      pos = pos >> 2;
-      one = (one << pos);
-      do {
-        expected = (expected & (~one));
-        desired = (expected | one);
-
-      } while (!_lock.compare_exchange_strong(expected, desired,
-                                            cuda::std::memory_order_acquire));
+      pos = pos >> 4;
+      int expected = 0;
+      while (!_lock[pos].compare_exchange_weak(expected, 1,
+                                          cuda::std::memory_order_acquire)) {
+        expected = 0;
+      }
     }
     g.sync();
   }
@@ -117,16 +159,8 @@ class Lock {
                                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      register T desired = 0;
-      register T expected = 0;
-      register T one = 1;
-      pos = pos >> 2;
-      one = (one << pos);
-      do {
-        expected = (expected | one);
-        desired = (expected & (~one));
-      } while (!_lock.compare_exchange_strong(expected, desired,
-                                            cuda::std::memory_order_release));
+      pos = pos >> 4;
+      _lock[pos].store(0, cuda::std::memory_order_release);
     }
   }
 };
