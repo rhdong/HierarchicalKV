@@ -106,7 +106,7 @@ class Lock {
         expected = (expected & (~one));
         desired = (expected | one);
 
-      } while (!_lock.compare_exchange_weak(expected, desired,
+      } while (!_lock.compare_exchange_strong(expected, desired,
                                             cuda::std::memory_order_acquire));
     }
     g.sync();
@@ -125,7 +125,7 @@ class Lock {
       do {
         expected = (expected | one);
         desired = (expected & (~one));
-      } while (!_lock.compare_exchange_weak(expected, desired,
+      } while (!_lock.compare_exchange_strong(expected, desired,
                                             cuda::std::memory_order_release));
     }
   }
