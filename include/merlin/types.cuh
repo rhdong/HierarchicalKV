@@ -94,19 +94,17 @@ class Lock {
   __forceinline__ __device__ Lock() : _lock{0} {}
 
   template <typename CG>
-  __device__ void acquire(CG const& g, int pos,
-                          unsigned long long lane = 0) const {
+  __forceinline__ __device__ void acquire(CG const& g, int pos,
+                                          unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      T expected = 0;
-      T desired = 0;
-      T one = 1;
+      register T expected = 0;
+      register T desired = 0;
+      register T one = 1;
       pos = pos >> 2;
       one = (one << pos);
       do {
-//                printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~one));
         desired = (expected | one);
-        //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
 
       } while (!_lock.compare_exchange_weak(expected, desired,
                                             cuda::std::memory_order_acquire));
@@ -115,13 +113,13 @@ class Lock {
   }
 
   template <typename CG>
-  __device__ void release(CG const& g, int pos,
-                          unsigned long long lane = 0) const {
+  __forceinline__ __device__ void release(CG const& g, int pos,
+                                          unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T desired = 0;
-      T expected = 0;
-      T one = 1;
+      register T desired = 0;
+      register T expected = 0;
+      register T one = 1;
       pos = pos >> 2;
       one = (one << pos);
       do {
