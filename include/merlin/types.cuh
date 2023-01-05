@@ -61,16 +61,16 @@ struct Bucket {
   mutable cuda::atomic<T, Scope> _lock;
 
  public:
-  __device__ Lock() : _lock{false} {}
+  __device__ Lock() : _lock{1} {}
 
   template <typename CG>
   __forceinline__ __device__ void acquire(CG const& g,
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      T expected = false;
-      while (!_lock.compare_exchange_weak(expected, true,
+      T expected = 1;
+      while (!_lock.compare_exchange_weak(expected, 2,
                                           cuda::std::memory_order_acquire)) {
-        expected = false;
+        expected = 1;
       }
     }
     g.sync();
@@ -81,7 +81,7 @@ struct Bucket {
                                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      _lock.store(false, cuda::std::memory_order_release);
+      _lock.store(1, cuda::std::memory_order_release);
     }
   }
 };
