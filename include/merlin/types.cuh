@@ -103,7 +103,7 @@ class Lock {
       pos = pos >> 2;
       do {
       counter++;
-      assert(counter > 10);
+      assert(counter < 10);
 //        if(counter++ == 1)
 //                printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
