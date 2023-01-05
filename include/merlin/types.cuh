@@ -252,10 +252,11 @@ class BaseKVFile {
 };
 
 enum class InsertResult {
+  INITIAL,         ///< Initial status
   CONTINUE,        ///< Insert did not succeed, continue trying to insert
   OCCUPIED_EMPTY,  ///< New pair inserted successfully
   OCCUPIED_RECLAIMED,
-  DUPLICATE  ///< Insert did not succeed, key is already present
+  DUPLICATE,  ///< Insert did not succeed, key is already present,
 };
 
 }  // namespace merlin

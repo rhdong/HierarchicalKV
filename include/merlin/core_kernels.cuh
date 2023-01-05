@@ -844,7 +844,7 @@ __global__ void upsert_kernel_with_io(
 
     tile_offset = 0;
     local_size = buckets_size[bkt_idx];
-    InsertResult status{InsertResult::CONTINUE};
+    InsertResult status{InsertResult::INITIAL};
 
     while (tile_offset < bucket_max_size && local_size < bucket_max_size) {
       key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
