@@ -97,8 +97,9 @@ class Lock {
   __device__ void acquire(CG const& g, int pos,
                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
-      T expected, b, one;
-      one = 1;
+      T expected = 0;
+      T b = 0;
+      T one = 1;
       pos = pos >> 2;
       do {
 //                printf("xx1, %d, %d\n", expected, b);
@@ -117,13 +118,14 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T a, expected, one;
-      one = 1;
+      T a = 0；
+      T expected = 0;
+      T one = 1;
       pos = pos >> 2;
       do {
         //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
+        expected = (expected | (one << pos));
         a = (expected & (~(one << pos)));
-        expected = (a | (one << pos));
       } while (_lock.compare_exchange_weak(expected, a,
                                            cuda::std::memory_order_release));
     }
