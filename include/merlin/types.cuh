@@ -86,7 +86,7 @@ struct Bucket {
 //  }
 //};
 
-template <cuda::thread_scope Scope, class T = unsigned int>
+template <cuda::thread_scope Scope, class T = char>
 class Lock {
   mutable cuda::atomic<T, Scope> _lock;
 
