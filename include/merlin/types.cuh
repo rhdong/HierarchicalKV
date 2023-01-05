@@ -99,11 +99,8 @@ class Lock {
     if (g.thread_rank() == lane) {
       T expected, b, one;
       one = 1;
-      assert(pos < 128 && pos >= 0);
       pos = pos >> 2;
       do {
-
-//        if(counter++ == 1)
 //                printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
         b = (expected | (one << pos));
@@ -125,6 +122,7 @@ class Lock {
       pos = pos >> 2;
       do {
         //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
+        assert(pos > 128);
         a = (a & (~(one << pos)));
         expected = (a | (one << pos));
       } while (_lock.compare_exchange_weak(expected, a,
