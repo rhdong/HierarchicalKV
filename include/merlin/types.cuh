@@ -101,10 +101,11 @@ class Lock {
       T desired = 0;
       T one = 1;
       pos = pos >> 2;
+      one = (one << pos);
       do {
 //                printf("xx1, %d, %d\n", expected, b);
-        expected = (expected & (~(one << pos)));
-        desired = (expected | (one << pos));
+        expected = (expected & (~one));
+        desired = (expected | one);
         //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
 
       } while (!_lock.compare_exchange_weak(expected, desired,
@@ -122,9 +123,10 @@ class Lock {
       T expected = 0;
       T one = 1;
       pos = pos >> 2;
+      one = (one << pos);
       do {
-        expected = (expected | (one << pos));
-        desired = (expected & (~(one << pos)));
+        expected = (expected | one);
+        desired = (expected & (~one));
       } while (!_lock.compare_exchange_weak(expected, desired,
                                             cuda::std::memory_order_release));
     }
