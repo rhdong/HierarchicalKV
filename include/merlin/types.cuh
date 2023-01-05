@@ -118,7 +118,7 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T a = 0；
+      T a = 0;
       T expected = 0;
       T one = 1;
       pos = pos >> 2;
