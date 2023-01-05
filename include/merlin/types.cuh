@@ -98,16 +98,16 @@ class Lock {
                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
       T expected = 0;
-      T b = 0;
+      T desired = 0;
       T one = 1;
       pos = pos >> 2;
       do {
 //                printf("xx1, %d, %d\n", expected, b);
         expected = (expected & (~(one << pos)));
-        b = (expected | (one << pos));
+        desired = (expected | (one << pos));
         //        printf("xx2, %lld, %lld, %d\n", expected, b, pos);
 
-      } while (!_lock.compare_exchange_weak(expected, b,
+      } while (!_lock.compare_exchange_weak(expected, desired,
                                             cuda::std::memory_order_acquire));
     }
     g.sync();
@@ -118,16 +118,15 @@ class Lock {
                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      T a = 0;
+      T desired = 0;
       T expected = 0;
       T one = 1;
       pos = pos >> 2;
       do {
-        //        printf("yy, %lld, %lld, %d\n", expected, a, pos);
         expected = (expected | (one << pos));
-        a = (expected & (~(one << pos)));
-      } while (!_lock.compare_exchange_weak(expected, a,
-                                           cuda::std::memory_order_release));
+        desired = (expected & (~(one << pos)));
+      } while (!_lock.compare_exchange_weak(expected, desired,
+                                            cuda::std::memory_order_release));
     }
   }
 };
