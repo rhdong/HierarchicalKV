@@ -113,9 +113,9 @@ void initialize_buckets(Table<K, V, M, DIM>** table, const size_t start,
 
   (*table)->num_of_memory_slices += num_of_memory_slices;
   for (int i = start; i < end; i++) {
-    CUDA_CHECK(
-        cudaMalloc(&((*table)->buckets[i].keys),
-                   (*table)->bucket_max_size * (sizeof(AtomicKey<K>) + sizeof(Meta<M>))));
+    CUDA_CHECK(cudaMalloc(
+        &((*table)->buckets[i].keys),
+        (*table)->bucket_max_size * (sizeof(AtomicKey<K>) + sizeof(Meta<M>))));
     (*table)->buckets[i].metas = reinterpret_cast<Meta<M>*>(
         (*table)->buckets[i].keys + (*table)->bucket_max_size);
   }
@@ -217,7 +217,7 @@ template <class K, class V, class M, size_t DIM>
 void destroy_table(Table<K, V, M, DIM>** table) {
   for (int i = 0; i < (*table)->buckets_num; i++) {
     CUDA_CHECK(cudaFree((*table)->buckets[i].keys));
-    CUDA_CHECK(cudaFree((*table)->buckets[i].metas));
+    //    CUDA_CHECK(cudaFree((*table)->buckets[i].metas));
   }
 
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
@@ -826,9 +826,9 @@ __global__ void upsert_kernel_with_io(
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      //      if (rank == src_lane) {
-      //        update_meta(bucket, key_pos, metas, key_idx);
-      //      }
+      if (rank == src_lane) {
+        update_meta(bucket, key_pos, metas, key_idx);
+      }
       if (local_size >= bucket_max_size) {
         refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
                                                      bucket_max_size);
