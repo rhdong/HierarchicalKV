@@ -654,8 +654,7 @@ __forceinline__ __device__ void find_in_bucket_with_io(
        tile_offset += TILE_SIZE) {
     key_pos =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    current_key =
-        bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
+    current_key = bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
     found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       lock<Mutex, TILE_SIZE, true>(g, *lock);
