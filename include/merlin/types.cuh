@@ -56,39 +56,9 @@ struct Bucket {
   int min_pos;
 };
 
-//template <cuda::thread_scope Scope, class T = int>
-//class Lock {
-//  mutable cuda::atomic<T, Scope> _lock;
-//
-// public:
-//  __device__ Lock() : _lock{1} {}
-//
-//  template <typename CG>
-//  __forceinline__ __device__ void acquire(CG const& g,
-//                                          unsigned long long lane = 0) const {
-//    if (g.thread_rank() == lane) {
-//      T expected = 1;
-//      while (!_lock.compare_exchange_weak(expected, 2,
-//                                          cuda::std::memory_order_acquire)) {
-//        expected = 1;
-//      }
-//    }
-//    g.sync();
-//  }
-//
-//  template <typename CG>
-//  __forceinline__ __device__ void release(CG const& g,
-//                                          unsigned long long lane = 0) const {
-//    g.sync();
-//    if (g.thread_rank() == lane) {
-//      _lock.store(1, cuda::std::memory_order_release);
-//    }
-//  }
-//};
-
 template <cuda::thread_scope Scope, class T = int>
 class Lock {
-  mutable T _lock;
+  mutable cuda::atomic<T, Scope> _lock;
 
  public:
   __device__ Lock() : _lock{1} {}
@@ -98,7 +68,8 @@ class Lock {
                                           unsigned long long lane = 0) const {
     if (g.thread_rank() == lane) {
       T expected = 1;
-      while (2 != atomicCAS(&_lock, expected, 2)) {
+      while (!_lock.compare_exchange_weak(expected, 2,
+                                          cuda::std::memory_order_acquire)) {
         expected = 1;
       }
     }
@@ -110,10 +81,39 @@ class Lock {
                                           unsigned long long lane = 0) const {
     g.sync();
     if (g.thread_rank() == lane) {
-      atomicExch(&_lock, 1);
+      _lock.store(1, cuda::std::memory_order_release);
     }
   }
 };
+
+//template <cuda::thread_scope Scope, class T = int>
+//class Lock {
+//  mutable T _lock;
+//
+// public:
+//  __device__ Lock() : _lock{1} {}
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void acquire(CG const& g,
+//                                          unsigned long long lane = 0) const {
+//    if (g.thread_rank() == lane) {
+//      T expected = 1;
+//      while (2 != atomicCAS(&_lock, expected, 2)) {
+//        expected = 1;
+//      }
+//    }
+//    g.sync();
+//  }
+//
+//  template <typename CG>
+//  __forceinline__ __device__ void release(CG const& g,
+//                                          unsigned long long lane = 0) const {
+//    g.sync();
+//    if (g.thread_rank() == lane) {
+//      atomicExch(&_lock, 1);
+//    }
+//  }
+//};
 // template <cuda::thread_scope Scope, class T = int>
 // class Lock {
 //  mutable cuda::atomic<T, Scope> _lock;
