@@ -115,7 +115,7 @@ void initialize_buckets(Table<K, V, M, DIM>** table, const size_t start,
   for (int i = start; i < end; i++) {
     CUDA_CHECK(
         cudaMalloc(&((*table)->buckets[i].keys),
-                   (*table)->bucket_max_size * sizeof(AtomicKey<K> + Meta<M>)));
+                   (*table)->bucket_max_size * (sizeof(AtomicKey<K>) + sizeof(Meta<M>))));
     (*table)->buckets[i].metas = reinterpret_cast<Meta<M>*>(
         (*table)->buckets[i].keys + (*table)->bucket_max_size);
   }
