@@ -642,7 +642,7 @@ __forceinline__ __device__ unsigned find_in_bucket(
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, const V* value, Mutex* lock,
+    const Bucket<K, V, M, DIM>* __restrict bucket, const V* value, Mutex* klock,
     const K find_key, uint32_t& tile_offset, const uint32_t start_idx,
     const size_t bucket_max_size) {
   uint32_t key_pos = 0;
@@ -657,10 +657,10 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     current_key = bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
     found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
-      lock<Mutex, TILE_SIZE, true>(g, *lock);
+      lock<Mutex, TILE_SIZE, true>(g, *klock);
       copy_vector<V, DIM, TILE_SIZE>(g, value, bucket->vectors + key_pos);
 
-      unlock<Mutex, TILE_SIZE, true>(g, *lock);
+      unlock<Mutex, TILE_SIZE, true>(g, *klock);
       return;
     }
 
