@@ -805,7 +805,7 @@ __global__ void upsert_kernel_with_io(
   int rank = g.thread_rank();
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
-    printf("blockDim.x * gridDim.x = %d \n", blockDim.x * gridDim.x)
+    printf("blockDim.x * gridDim.x = %d \n", blockDim.x * gridDim.x);
     int key_pos = -1;
     size_t key_idx = t / TILE_SIZE;
     int local_size = 0;
