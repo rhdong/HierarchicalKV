@@ -803,6 +803,8 @@ __global__ void upsert_kernel_with_io(
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int rank = g.thread_rank();
+  Bucket<K, V, M, DIM>* bucket;
+  const unsigned found_vote;
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
     int key_pos = -1;
@@ -816,10 +818,10 @@ __global__ void upsert_kernel_with_io(
     uint32_t tile_offset = 0;
     int src_lane = -1;
 
-    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
-        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
+    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
+                                 buckets_num, bucket_max_size);
 
-    const unsigned found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
+    found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
         g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
 
     if (found_vote) {
