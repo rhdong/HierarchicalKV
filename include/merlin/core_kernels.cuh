@@ -826,8 +826,6 @@ __global__ void upsert_kernel_with_io(
       src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       if (rank == src_lane) {
-        bucket->keys[key_pos].store(insert_key,
-                                    cuda::std::memory_order_relaxed);
         update_meta(bucket, key_pos, metas, key_idx);
       }
       if (local_size >= bucket_max_size) {
