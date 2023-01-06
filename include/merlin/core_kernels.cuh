@@ -645,23 +645,23 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     const Bucket<K, V, M, DIM>* __restrict bucket, const V* value, Mutex* lock,
     const K find_key, uint32_t& tile_offset, const uint32_t start_idx,
     const size_t bucket_max_size) {
-  uint32_t key_offset = 0;
+  uint32_t key_pos = 0;
   K current_key = 0;
   unsigned found_vote = 0;
 
 #pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
-    key_offset =
+    key_pos =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
     current_key =
         bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
     found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
-      lock<Mutex, TILE_SIZE, true>(g, lock);
+      lock<Mutex, TILE_SIZE, true>(g, *lock);
       copy_vector<V, DIM, TILE_SIZE>(g, value, bucket->vectors + key_pos);
 
-      unlock<Mutex, TILE_SIZE, true>(g, lock);
+      unlock<Mutex, TILE_SIZE, true>(g, *lock);
       return;
     }
 
@@ -1088,22 +1088,15 @@ __global__ void scatter_update_with_io(
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int rank = g.thread_rank();
   Bucket<K, V, M, DIM>* bucket;
-  unsigned found_vote;
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
-    int key_pos = -1;
     size_t key_idx = t / TILE_SIZE;
-    int local_size = 0;
 
     const K insert_key = keys[key_idx];
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
-    int src_lane = -1;
-
-    local_size = buckets_size[bkt_idx];
-    InsertResult status{InsertResult::INITIAL};
 
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
