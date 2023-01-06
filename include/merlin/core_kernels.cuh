@@ -657,10 +657,10 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     current_key = bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
     found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
-//      lock<Mutex, TILE_SIZE, true>(g, *klock);
+      lock<Mutex, TILE_SIZE, true>(g, *klock);
       copy_vector<V, DIM, TILE_SIZE>(g, value, bucket->vectors + key_pos);
 
-//      unlock<Mutex, TILE_SIZE, true>(g, *klock);
+      unlock<Mutex, TILE_SIZE, true>(g, *klock);
       return;
     }
 
