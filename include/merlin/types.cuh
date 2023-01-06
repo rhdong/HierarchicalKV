@@ -86,8 +86,8 @@ class Lock {
   }
 };
 
-//template <cuda::thread_scope Scope, class T = int>
-//class Lock {
+// template <cuda::thread_scope Scope, class T = int>
+// class Lock {
 //  mutable T _lock;
 //
 // public:
