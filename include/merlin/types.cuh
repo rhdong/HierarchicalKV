@@ -88,7 +88,7 @@ struct Bucket {
 
 template <cuda::thread_scope Scope, class T = int>
 class Lock {
-  T _lock;
+  mutable T _lock;
 
  public:
   __device__ Lock() : _lock{1} {}
