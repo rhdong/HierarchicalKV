@@ -804,7 +804,7 @@ __global__ void upsert_kernel_with_io(
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int rank = g.thread_rank();
   Bucket<K, V, M, DIM>* bucket;
-  const unsigned found_vote;
+  unsigned found_vote;
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
     int key_pos = -1;
