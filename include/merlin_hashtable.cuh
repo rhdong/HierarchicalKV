@@ -1012,7 +1012,7 @@ class HashTable {
 
     // Grab enough host memory to hold batch data.
     const size_t host_ws_size = N * kvm_size;
-    auto host_ws = host_memory_pool_->get_workspace<3>(host_ws_size, stream);
+    auto host_ws = host_memory_pool_->get_workspace<1>(host_ws_size, stream);
     auto h_keys = host_ws.get<key_type*>(0);
     auto h_values = reinterpret_cast<V*>(h_keys + N);
     auto h_metas = reinterpret_cast<meta_type*>(h_values + N * DIM);
