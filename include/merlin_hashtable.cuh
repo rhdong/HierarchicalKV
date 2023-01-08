@@ -182,8 +182,8 @@ class HashTable {
     // Erase table.
     if (initialized_) {
       destroy_table<key_type, vector_type, meta_type, DIM>(&table_);
-      device_memory_pool_.reset();
-      host_memory_pool_.reset();
+      dev_mem_pool_.reset();
+      host_mem_pool_.reset();
     }
   }
 
@@ -222,9 +222,9 @@ class HashTable {
                  "`max_hbm_for_vectors` is not 0!");
 
     // Create memory pools.
-    device_memory_pool_ = std::make_unique<MemoryPool<DeviceAllocator<char>>>(
+    dev_mem_pool_ = std::make_unique<MemoryPool<DeviceAllocator<char>>>(
         options_.device_memory_pool);
-    host_memory_pool_ = std::make_unique<MemoryPool<HostAllocator<char>>>(
+    host_mem_pool_ = std::make_unique<MemoryPool<HostAllocator<char>>>(
         options_.host_memory_pool);
 
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -307,13 +307,12 @@ class HashTable {
                 table_->bucket_max_size, table_->buckets_num, N);
       }
     } else {
-      const size_t device_ws_size = n * (sizeof(vector_type*) + sizeof(int));
-      auto device_ws =
-          device_memory_pool_->get_workspace<1>(device_ws_size, stream);
-      auto d_dst = device_ws.get<vector_type**>(0);
+      const size_t dev_ws_size = n * (sizeof(vector_type*) + sizeof(int));
+      auto dev_ws = dev_mem_pool_->get_workspace<1>(dev_ws_size, stream);
+      auto d_dst = dev_ws.get<vector_type**>(0);
       auto d_src_offset = reinterpret_cast<int*>(d_dst + n);
 
-      CUDA_CHECK(cudaMemsetAsync(d_dst, 0, device_ws_size, stream));
+      CUDA_CHECK(cudaMemsetAsync(d_dst, 0, dev_ws_size, stream));
 
       {
         const size_t block_size = options_.block_size;
@@ -347,16 +346,14 @@ class HashTable {
       if (options_.io_by_cpu) {
         const size_t host_ws_size =
             n * (sizeof(vector_type*) + sizeof(int) + sizeof(vector_type));
-        auto host_ws =
-            host_memory_pool_->get_workspace<1>(host_ws_size, stream);
+        auto host_ws = host_mem_pool_->get_workspace<1>(host_ws_size, stream);
         auto h_dst = host_ws.get<vector_type**>(0);
         auto h_src_offset = reinterpret_cast<int*>(h_dst + n);
         auto h_values = reinterpret_cast<vector_type*>(h_src_offset + n);
 
-        CUDA_CHECK(cudaMemcpyAsync(h_dst, d_dst, device_ws_size,
+        CUDA_CHECK(cudaMemcpyAsync(h_dst, d_dst, dev_ws_size,
                                    cudaMemcpyDeviceToHost, stream));
-        CUDA_CHECK(cudaMemcpyAsync(h_values, values,
-                                   host_ws_size - device_ws_size,
+        CUDA_CHECK(cudaMemcpyAsync(h_values, values, host_ws_size - dev_ws_size,
                                    cudaMemcpyDeviceToHost, stream));
         CUDA_CHECK(cudaStreamSynchronize(stream));
 
@@ -442,15 +439,14 @@ class HashTable {
       lock.lock();
     }
 
-    const size_t device_ws_size =
+    const size_t dev_ws_size =
         n * (sizeof(vector_type*) + sizeof(int) + sizeof(bool));
-    auto device_ws =
-        device_memory_pool_->get_workspace<1>(device_ws_size, stream);
-    auto dst = device_ws.get<vector_type**>(0);
+    auto dev_ws = dev_mem_pool_->get_workspace<1>(dev_ws_size, stream);
+    auto dst = dev_ws.get<vector_type**>(0);
     auto src_offset = reinterpret_cast<int*>(dst + n);
     auto founds = reinterpret_cast<bool*>(src_offset + n);
 
-    CUDA_CHECK(cudaMemsetAsync(dst, 0, device_ws_size, stream));
+    CUDA_CHECK(cudaMemsetAsync(dst, 0, dev_ws_size, stream));
 
     {
       const size_t block_size = options_.block_size;
@@ -539,13 +535,12 @@ class HashTable {
               founds, table_->buckets, table_->buckets_size,
               table_->bucket_max_size, table_->buckets_num, N);
     } else {
-      const size_t device_ws_size = n * (sizeof(vector_type*) + sizeof(int));
-      auto device_ws =
-          device_memory_pool_->get_workspace<1>(device_ws_size, stream);
-      auto src = device_ws.get<vector_type**>(0);
+      const size_t dev_ws_size = n * (sizeof(vector_type*) + sizeof(int));
+      auto dev_ws = dev_mem_pool_->get_workspace<1>(dev_ws_size, stream);
+      auto src = dev_ws.get<vector_type**>(0);
       auto dst_offset = reinterpret_cast<int*>(src + n);
 
-      CUDA_CHECK(cudaMemsetAsync(src, 0, device_ws_size, stream));
+      CUDA_CHECK(cudaMemsetAsync(src, 0, dev_ws_size, stream));
 
       {
         const size_t block_size = options_.block_size;
@@ -644,9 +639,8 @@ class HashTable {
     std::unique_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
     lock.lock();
 
-    auto device_ws =
-        device_memory_pool_->get_workspace<1>(sizeof(size_type), stream);
-    auto d_count = device_ws.get<size_type*>(0);
+    auto dev_ws = dev_mem_pool_->get_workspace<1>(sizeof(size_type), stream);
+    auto d_count = dev_ws.get<size_type*>(0);
 
     CUDA_CHECK(cudaMemsetAsync(d_count, 0, sizeof(size_type), stream));
 
@@ -759,9 +753,8 @@ class HashTable {
                          value_type* values,          // (n, DIM)
                          meta_type* metas = nullptr,  // (n)
                          cudaStream_t stream = 0) const {
-    auto device_ws =
-        device_memory_pool_->get_workspace<1>(sizeof(size_type), stream);
-    auto d_counter = device_ws.get<size_type*>(0);
+    auto dev_ws = dev_mem_pool_->get_workspace<1>(sizeof(size_type), stream);
+    auto d_counter = dev_ws.get<size_type*>(0);
 
     CUDA_CHECK(cudaMemsetAsync(d_counter, 0, sizeof(size_type), stream));
 
@@ -1002,17 +995,16 @@ class HashTable {
     const size_type total_size = capacity();
 
     // Grab temporary device workspace.
-    const size_t device_ws_size = N * kvm_size + sizeof(size_type);
-    auto device_ws =
-        device_memory_pool_->get_workspace<1>(device_ws_size, stream);
-    auto d_keys = device_ws.get<key_type*>(0);
+    const size_t dev_ws_size = N * kvm_size + sizeof(size_type);
+    auto dev_ws = dev_mem_pool_->get_workspace<1>(dev_ws_size, stream);
+    auto d_keys = dev_ws.get<key_type*>(0);
     auto d_vectors = reinterpret_cast<vector_type*>(d_keys + N);
     auto d_metas = reinterpret_cast<meta_type*>(d_vectors + N);
     auto d_count = reinterpret_cast<size_type*>(d_metas + N);
 
     // Grab enough host memory to hold batch data.
     const size_t host_ws_size = N * kvm_size;
-    auto host_ws = host_memory_pool_->get_workspace<1>(host_ws_size, stream);
+    auto host_ws = host_mem_pool_->get_workspace<1>(host_ws_size, stream);
     auto h_keys = host_ws.get<key_type*>(0);
     auto h_values = reinterpret_cast<V*>(h_keys + N);
     auto h_metas = reinterpret_cast<meta_type*>(h_values + N * DIM);
@@ -1078,7 +1070,7 @@ class HashTable {
         n * (sizeof(key_type) + sizeof(value_type) + sizeof(meta_type));
 
     // Grab enough host memory to hold batch data.
-    auto host_ws = host_memory_pool_->get_workspace<1>(ws_size, stream);
+    auto host_ws = host_mem_pool_->get_workspace<1>(ws_size, stream);
     auto h_keys = host_ws.get<key_type*>(0);
     auto h_values = reinterpret_cast<V*>(h_keys + n);
     auto h_metas = reinterpret_cast<meta_type*>(h_values + n * DIM);
@@ -1090,8 +1082,8 @@ class HashTable {
     }
 
     // Grab equal amount of device memory as temporary storage.
-    auto device_ws = device_memory_pool_->get_workspace<1>(ws_size, stream);
-    auto d_keys = device_ws.get<key_type*>(0);
+    auto dev_ws = dev_mem_pool_->get_workspace<1>(ws_size, stream);
+    auto d_keys = dev_ws.get<key_type*>(0);
     auto d_values = reinterpret_cast<value_type*>(d_keys + n);
     auto d_metas = reinterpret_cast<meta_type*>(d_values + n);
 
@@ -1177,8 +1169,8 @@ class HashTable {
   bool initialized_ = false;
   mutable std::shared_timed_mutex mutex_;
 
-  std::unique_ptr<DeviceMemoryPool> device_memory_pool_;
-  std::unique_ptr<HostMemoryPool> host_memory_pool_;
+  std::unique_ptr<DeviceMemoryPool> dev_mem_pool_;
+  std::unique_ptr<HostMemoryPool> host_mem_pool_;
 };
 
 }  // namespace merlin
