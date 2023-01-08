@@ -133,12 +133,9 @@ struct DeviceAllocator final : AllocatorBase<T, DeviceAllocator<T>> {
  * Helper structure to configure a memory pool.
  */
 struct MemoryPoolOptions {
-  size_t buffer_size =
-      256L * 1024 * 1024;  ///< Size in bytes for buffers produced by this pool.
-  size_t max_stock = 4;    ///< Amount of buffers to keep in reserve.
-  size_t initial_stock = 3;  ///< Amount of buffers to create right away.
-  size_t max_pending = 16;   ///< Maximum amount of awaitable buffers. If this
-                             ///< limit is exceeded threads will start to block.
+  size_t max_stock = 4;     ///< Amount of buffers to keep in reserve.
+  size_t max_pending = 16;  ///< Maximum amount of awaitable buffers. If this
+                            ///< limit is exceeded threads will start to block.
 };
 
 /**
@@ -206,10 +203,10 @@ class MemoryPool final {
   template <class Container>
   class Workspace {
    public:
-    inline Workspace() : pool_{nullptr}, stream_{0} {}
+    inline Workspace() : pool_{nullptr}, buffer_size_{0}, stream_{0} {}
 
     inline Workspace(pool_type* pool, cudaStream_t stream)
-        : pool_{pool}, stream_{stream} {}
+        : pool_{pool}, buffer_size_{0}, stream_{stream} {}
 
     Workspace(const Workspace&) = delete;
 
@@ -217,14 +214,16 @@ class MemoryPool final {
 
     inline Workspace(Workspace&& other)
         : pool_{other.pool_},
+          buffer_size_{other.buffer_size_},
           stream_{other.stream_},
           buffers_{std::move(other.buffers_)} {}
 
     inline Workspace& operator=(Workspace&& other) {
       if (pool_) {
-        pool_->put_raw(buffers_.begin(), buffers_.end(), stream_);
+        pool_->put_raw(buffers_.begin(), buffers_.end(), buffer_size_, stream_);
       }
       pool_ = other.pool_;
+      buffer_size_ = other.buffer_size_;
       stream_ = other.stream_;
       buffers_ = std::move(other.buffers_);
       other.pool_ = nullptr;
@@ -233,7 +232,7 @@ class MemoryPool final {
 
     inline ~Workspace() {
       if (pool_) {
-        pool_->put_raw(buffers_.begin(), buffers_.end(), stream_);
+        pool_->put_raw(buffers_.begin(), buffers_.end(), buffer_size_, stream_);
       }
     }
 
@@ -263,6 +262,7 @@ class MemoryPool final {
 
    protected:
     pool_type* pool_;
+    size_t buffer_size_;
     cudaStream_t stream_;
     Container buffers_;
   };
@@ -289,10 +289,12 @@ class MemoryPool final {
     }
 
    private:
-    inline StaticWorkspace(pool_type* pool, cudaStream_t stream)
+    inline StaticWorkspace(pool_type* pool, size_t requested_buffer_size,
+                           cudaStream_t stream)
         : base_type(pool, stream) {
       auto& buffers = this->buffers_;
-      pool->get_raw(buffers.begin(), buffers.end(), stream);
+      this->buffer_size_ = pool->get_raw(buffers.begin(), buffers.end(),
+                                         requested_buffer_size, stream);
     }
   };
 
@@ -317,26 +319,19 @@ class MemoryPool final {
     }
 
    private:
-    inline DynamicWorkspace(pool_type* pool, size_t n, cudaStream_t stream)
+    inline DynamicWorkspace(pool_type* pool, size_t requested_buffer_size,
+                            size_t n, cudaStream_t stream)
         : base_type(pool, stream) {
       auto& buffers = this->buffers_;
       buffers.resize(n);
-      pool->get_raw(buffers.begin(), buffers.end(), stream);
+      this->buffer_size_ = pool->get_raw(buffers.begin(), buffers.end(),
+                                         requested_buffer_size, stream);
     }
   };
 
   MemoryPool(const MemoryPoolOptions& options) : options_{options} {
-    MERLIN_CHECK(options_.buffer_size > 0,
-                 "[HierarchicalKV] Memory pool buffer size invalid!");
-    MERLIN_CHECK(
-        options_.initial_stock <= options_.max_stock,
-        "[hierarchicalKV] Initial reserve cannot exceed maximum reserve!");
-
     // Create initial buffer stock.
     stock_.reserve(options_.max_stock);
-    while (stock_.size() < options_.initial_stock) {
-      stock_.emplace_back(Allocator::alloc(options_.buffer_size));
-    }
 
     // Create enough events, so we have one per potentially pending buffer.
     ready_events_.resize(options_.max_pending);
@@ -362,10 +357,10 @@ class MemoryPool final {
     }
   }
 
-  inline size_t buffer_size() const { return options_.buffer_size; }
+  inline size_t buffer_size() const { return buffer_size_; }
 
   inline size_t max_batch_size(size_t max_item_size) const {
-    return options_.buffer_size / max_item_size;
+    return buffer_size_ / max_item_size;
   }
 
   template <class T>
@@ -385,20 +380,12 @@ class MemoryPool final {
 
   void deplete(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    // Collect any pending buffers first.
-    collect_pending_unsafe(stream);
-
-    // Deplete remaining buffers.
-    for (auto& ptr : stock_) {
-      Allocator::free(ptr, stream);
-    }
-    stock_.clear();
+    deplete_unsafe(stream);
   }
 
   void replenish(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stock_.size() >= options_.initial_stock) {
+    if (stock_.size() >= options_.max_stock) {
       return;
     }
 
@@ -406,8 +393,8 @@ class MemoryPool final {
     collect_pending_unsafe(stream);
 
     // Fill up until we reach the base stock.
-    while (stock_.size() < options_.initial_stock) {
-      stock_.emplace_back(Allocator::alloc(options_.buffer_size, stream));
+    while (stock_.size() < options_.max_stock) {
+      stock_.emplace_back(Allocator::alloc(buffer_size_, stream));
     }
 
     // To avoid trouble downstream, make sure the buffers have materialized.
@@ -428,96 +415,145 @@ class MemoryPool final {
   }
 
   inline std::unique_ptr<alloc_type, std::function<void(alloc_type*)>>
-  get_unique(cudaStream_t stream = 0) {
+  get_unique(size_t requested_buffer_size, cudaStream_t stream = 0) {
     alloc_type* ptr;
-    get_raw(&ptr, (&ptr) + 1, stream);
-    return {ptr,
-            [this, stream](alloc_type* p) { put_raw(&p, (&p) + 1, stream); }};
+    const size_t allocation_size =
+        get_raw(&ptr, (&ptr) + 1, requested_buffer_size, stream);
+    return {ptr, [this, allocation_size, stream](alloc_type* p) {
+              put_raw(&p, (&p) + 1, allocation_size, stream);
+            }};
   }
 
-  inline std::shared_ptr<alloc_type> get_shared(cudaStream_t stream = 0) {
+  inline std::shared_ptr<alloc_type> get_shared(size_t requested_buffer_size,
+                                                cudaStream_t stream = 0) {
     alloc_type* ptr;
-    get_raw(&ptr, (&ptr) + 1, stream);
-    return {ptr,
-            [this, stream](alloc_type* p) { put_raw(&p, (&p) + 1, stream); }};
+    const size_t allocation_size =
+        get_raw(&ptr, (&ptr) + 1, requested_buffer_size, stream);
+    return {ptr, [this, allocation_size, stream](alloc_type* p) {
+              put_raw(&p, (&p) + 1, allocation_size, stream);
+            }};
   }
 
   template <size_t N>
-  inline StaticWorkspace<N> get_workspace(cudaStream_t stream = 0) {
-    return {this, stream};
+  inline StaticWorkspace<N> get_workspace(size_t requested_buffer_size,
+                                          cudaStream_t stream = 0) {
+    return {this, requested_buffer_size, stream};
   }
 
-  inline DynamicWorkspace get_workspace(size_t n, cudaStream_t stream = 0) {
-    return {this, n, stream};
+  inline DynamicWorkspace get_workspace(size_t requested_buffer_size, size_t n,
+                                        cudaStream_t stream = 0) {
+    return {this, requested_buffer_size, n, stream};
   }
 
   friend std::ostream& operator<<<Allocator>(std::ostream&, const MemoryPool&);
 
  private:
   inline void collect_pending_unsafe(cudaStream_t stream) {
+    // std::tuple<alloc_type const*, const size_t, const cudaEvent_t>&
     auto it = std::remove_if(
-        pending_.begin(), pending_.end(),
-        [this, stream](const std::pair<alloc_type*, cudaEvent_t>& pair) {
-          const cudaError_t event_state = cudaEventQuery(pair.second);
-          switch (event_state) {
+        pending_.begin(), pending_.end(), [this, stream](const auto& pending) {
+          const cudaError_t state = cudaEventQuery(std::get<2>(pending));
+          switch (state) {
             case cudaSuccess:
-              // Stock buffers and destroy those that are no longer needed.
-              if (stock_.size() < options_.max_stock) {
-                stock_.emplace_back(pair.first);
+              // Stock buffers and destroy those that are no
+              // longer needed, but only if the allocation_size
+              // is still the same as the current buffer_size.
+              if (stock_.size() < options_.max_stock &&
+                  std::get<1>(pending) == buffer_size_) {
+                stock_.emplace_back(std::get<0>(pending));
               } else {
-                Allocator::free(pair.first, stream);
+                Allocator::free(std::get<0>(pending), stream);
               }
-              ready_events_.emplace_back(pair.second);
+              ready_events_.emplace_back(std::get<2>(pending));
               return true;
             case cudaErrorNotReady:
               return false;
             default:
-              CUDA_CHECK(event_state);
+              CUDA_CHECK(state);
               return false;
           }
         });
     pending_.erase(it, pending_.end());
   }
 
+  inline void deplete_unsafe(cudaStream_t stream) {
+    // Collect any pending buffers first.
+    collect_pending_unsafe(stream);
+
+    // Deplete remaining buffers.
+    for (auto& ptr : stock_) {
+      Allocator::free(ptr, stream);
+    }
+    stock_.clear();
+  }
+
   template <class Iterator>
-  inline void get_raw(Iterator first, Iterator const last,
-                      cudaStream_t stream) {
+  inline size_t get_raw(Iterator first, Iterator const last,
+                        size_t requested_buffer_size, cudaStream_t stream) {
     // Get pre-allocated buffers if stock available.
+    size_t allocation_size;
     {
       std::lock_guard<std::mutex> lock(mutex_);
 
-      for (; first != last; ++first) {
-        // If no buffers available, try to make some available.
-        if (stock_.empty()) {
-          collect_pending_unsafe(stream);
+      // If requested_buffer_size is within current buffer_size margins can
+      // reuse current buffers.
+      if (requested_buffer_size <= buffer_size_) {
+        while (first != last) {
+          // If no buffers available, try to make some available.
           if (stock_.empty()) {
-            // No buffers available.
-            break;
+            collect_pending_unsafe(stream);
+            if (stock_.empty()) {
+              // No buffers available.
+              break;
+            }
           }
-        }
 
-        // Just take the next available buffer.
-        *first = stock_.back();
-        stock_.pop_back();
+          // Just take the next available buffer.
+          *first++ = stock_.back();
+          stock_.pop_back();
+        }
+      } else {
+        // Drop the stock because we need more memory.
+        deplete_unsafe(stream);
+        buffer_size_ = requested_buffer_size;
       }
+
+      allocation_size = buffer_size_;
     }
 
     // Forge new buffers until request can be filled.
     for (; first != last; ++first) {
-      *first = Allocator::alloc(options_.buffer_size, stream);
+      *first = Allocator::alloc(allocation_size, stream);
     }
+
+    return allocation_size;
   }
 
   template <class Iterator>
   inline void put_raw(Iterator first, Iterator const last,
-                      cudaStream_t stream) {
+                      size_t allocation_size, cudaStream_t stream) {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    // If allocation_size of the workspace differs from the current buffer_size
+    // (i.e., somebody else requested a larger buffer since the original request
+    // occured), the provided buffers are incompatible and have to be discarded.
+    if (allocation_size != buffer_size_) {
+      while (first != last) {
+        Allocator::free(*first++);
+      }
+      return;
+    }
 
     // If the workspace that borrowed a stream was moved out of the RAII scope
     // where it was created, it could happen that the stream was destroyed when
     // we return the buffer ownershup. This `cudaStreamQuery` will prevent that.
     if (stream && cudaStreamQuery(stream) != cudaErrorInvalidResourceHandle) {
       for (; first != last; ++first) {
+        // Avoid adding already deallocated buffers.
+        if (*first == nullptr) {
+          continue;
+        }
+
         // Spin lock if too many pending buffers (i.e., let CPU wait for GPU).
         while (ready_events_.empty()) {
           collect_pending_unsafe(stream);
@@ -531,13 +567,18 @@ class MemoryPool final {
         cudaEvent_t ready_event = ready_events_.back();
         ready_events_.pop_back();
         CUDA_CHECK(cudaEventRecord(ready_event, stream));
-        pending_.emplace_back(*first, ready_event);
+        pending_.emplace_back(*first, allocation_size, ready_event);
       }
     } else {
       // Without stream context, we must force a hard sync with the GPU.
       CUDA_CHECK(cudaDeviceSynchronize());
 
       for (; first != last; ++first) {
+        // Avoid adding already deallocated buffers.
+        if (*first == nullptr) {
+          continue;
+        }
+
         // Stock buffers and destroy those that are no longer needed.
         if (stock_.size() < options_.max_stock) {
           stock_.emplace_back(*first);
@@ -551,9 +592,24 @@ class MemoryPool final {
   const MemoryPoolOptions options_;
 
   mutable std::mutex mutex_;
+  size_t buffer_size_{1};
   std::vector<alloc_type*> stock_;
   std::vector<cudaEvent_t> ready_events_;
-  std::vector<std::pair<alloc_type*, cudaEvent_t>> pending_;
+
+  /*
+  struct Pending {
+    alloc_type* ptr;
+    size_t allocation_size;
+    cudaEvent_t ready_event;
+
+    Pending(alloc_type* ptr, size_t allocation_size, cudaEvent_t ready_event)
+        : ptr{ptr},
+          allocation_size{allocation_size},
+          ready_event{ready_event} {}
+  };
+  */
+  // std::tuple<alloc_type*, size_t, cudaEvent_t>
+  std::vector<std::tuple<alloc_type*, size_t, cudaEvent_t>> pending_;
 };
 
 template <class Allocator>

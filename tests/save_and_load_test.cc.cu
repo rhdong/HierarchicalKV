@@ -80,11 +80,11 @@ void test_save_to_file() {
   std::string values_path = prefix + ".values";
   std::string metas_path = prefix + ".metas";
   file.open(keys_path, values_path, metas_path, "wb");
-  table_0->save(&file, stream);
+  table_0->save(&file, 64L * 1024, stream);
   file.close();
   printf("table_0 saves.\n");
   file.open(keys_path, values_path, metas_path, "rb");
-  table_1->load(&file, stream);
+  table_1->load(&file, 64L * 1024, stream);
   file.close();
   printf("table_1 loads.\n");
   ASSERT_TRUE(test_util::tables_equal(table_0.get(), table_1.get(), stream));
