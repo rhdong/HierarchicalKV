@@ -1129,12 +1129,12 @@ __global__ void scatter_update_with_io(
     const size_t bucket_max_size, const size_t buckets_num, size_t N) {
   auto grid = cooperative_groups::this_grid();
   auto block = cooperative_groups::this_thread_block();
-  auto tile = cooperative_groups::tiled_partition<tile_size>(block);
+  auto tile = cooperative_groups::tiled_partition<TILE_SIZE>(block);
 
   Bucket<K, V, M, DIM>* bucket;
 
   for (auto key_idx = tile.meta_group_size() * block.group_index().x + tile.meta_group_rank();
-       key_idx < num_keys; key_idx += tile.meta_group_size() * grid.group_dim().x) {
+       key_idx < N / TILE_SIZE; key_idx += tile.meta_group_size() * grid.group_dim().x) {
 
     const K insert_key = keys[key_idx];
 
@@ -1146,7 +1146,7 @@ __global__ void scatter_update_with_io(
                                  buckets_num, bucket_max_size);
 
     find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket, values + key_idx, &(table->locks[bkt_idx]), insert_key,
+        tile, bucket, values + key_idx, &(table->locks[bkt_idx]), insert_key,
         tile_offset, start_idx, bucket_max_size);
 
     //    if (found_vote) {
