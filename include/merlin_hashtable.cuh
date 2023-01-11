@@ -346,25 +346,25 @@ class HashTable {
                       const meta_type* metas = nullptr,  // (n)
                       cudaStream_t stream = 0,
                       bool ignore_evict_strategy = false) {
-    if (n == 0) {
-      return;
-    }
+//    if (n == 0) {
+//      return;
+//    }
+//
+//    while (!reach_max_capacity_ &&
+//           fast_load_factor(n) > options_.max_load_factor) {
+//      reserve(capacity() * 2);
+//    }
+//
+//    if (!ignore_evict_strategy) {
+//      check_evict_strategy(metas);
+//    }
+//
+//    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+//    if (!reach_max_capacity_) {
+//      lock.lock();
+//    }
 
-    while (!reach_max_capacity_ &&
-           fast_load_factor(n) > options_.max_load_factor) {
-      reserve(capacity() * 2);
-    }
-
-    if (!ignore_evict_strategy) {
-      check_evict_strategy(metas);
-    }
-
-    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-    if (!reach_max_capacity_) {
-      lock.lock();
-    }
-
-    if (is_fast_mode()) {
+//    if (is_fast_mode()) {
       const size_t block_size = options_.block_size;
       const size_t N = n * TILE_SIZE;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
@@ -374,10 +374,9 @@ class HashTable {
               table_, keys, reinterpret_cast<const vector_type*>(values), metas,
               table_->buckets, table_->buckets_size, table_->bucket_max_size,
               table_->buckets_num, N);
-    } else {
-    }
+//    }
 
-    CudaCheckError();
+//    CudaCheckError();
   }
   /**
    * Searches for each key in @p keys in the hash table.
