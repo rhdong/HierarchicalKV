@@ -365,7 +365,7 @@ class HashTable {
 //    }
 
 //    if (is_fast_mode()) {
-      const size_t block_size = 256;//options_.block_size;
+      const size_t block_size = 128;//options_.block_size;
       const size_t N = n * TILE_SIZE;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
