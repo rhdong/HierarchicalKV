@@ -1112,12 +1112,12 @@ __global__ void scatter_update_with_io(
           (start_idx + tile_offset + rank) & (bucket_max_size - 1);
       auto const current_key =
           bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
-      auto const found_vote = g.ballot(insert_key == current_key);
+      auto const found_vote = g.ballot(find_key == current_key);
       if (found_vote) {
         auto const src_lane = __ffs(found_vote) - 1;
         auto const dst = g.shfl(bucket->vectors + key_pos, src_lane);
         //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx, dst);
+        copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
         //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
         break;
       }
