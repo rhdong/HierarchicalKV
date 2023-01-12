@@ -661,14 +661,6 @@ __forceinline__ __device__ void find_in_bucket_with_io(
       lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-      
-      if (rank == src_lane) {
-        update_meta(bucket, key_pos, metas, key_idx);
-      }
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-                                                     bucket_max_size);
-      }
       return;
     }
 
