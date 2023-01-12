@@ -1100,32 +1100,10 @@ __global__ void scatter_update_with_io(
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
 
-//    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-//        g, bucket, values + key_idx, nullptr, insert_key,
-//        tile_offset, start_idx, bucket_max_size);
-    uint32_t key_pos = 0;
+    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+        g, bucket, values + key_idx, nullptr, insert_key,
+        tile_offset, start_idx, bucket_max_size);
 
-  #pragma unroll
-    for (tile_offset = 0; tile_offset < bucket_max_size;
-         tile_offset += TILE_SIZE) {
-      key_pos =
-          (start_idx + tile_offset + rank) & (bucket_max_size - 1);
-      auto const current_key =
-          bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
-      auto const found_vote = g.ballot(find_key == current_key);
-      if (found_vote) {
-        auto const src_lane = __ffs(found_vote) - 1;
-        auto const dst = g.shfl(bucket->vectors + key_pos, src_lane);
-        //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-        copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
-        //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-        break;
-      }
-
-      if (g.any(current_key == EMPTY_KEY)) {
-        break;
-      }
-    }
     //    if (found_vote) {
     //      src_lane = __ffs(found_vote) - 1;
     //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size -
