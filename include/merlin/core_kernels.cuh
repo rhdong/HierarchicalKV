@@ -658,9 +658,9 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
+      auto const dst_value = g.shfl(bucket->vectors + key_pos, src_lane);
       //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-      copy_vector<V, DIM, TILE_SIZE>(g, value, bucket->vectors + key_pos);
-
+      copy_vector<V, DIM, TILE_SIZE>(g, value, dst_value);
       //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return;
     }
@@ -1098,12 +1098,12 @@ __global__ void scatter_update_with_io(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
 
-//    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
-//                                 buckets_num, bucket_max_size);
+    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
+                                 buckets_num, bucket_max_size);
 
-//    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-//        g, bucket, values + key_idx, nullptr, insert_key,
-//        tile_offset, start_idx, bucket_max_size);
+    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+        g, bucket, values + key_idx, &(table->locks[bkt_idx]), insert_key,
+        tile_offset, start_idx, bucket_max_size);
 
     //    if (found_vote) {
     //      src_lane = __ffs(found_vote) - 1;
