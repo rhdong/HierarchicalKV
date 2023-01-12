@@ -201,8 +201,8 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
   size_t hmem4values =
       init_capacity * DIM * sizeof(float) / (1024 * 1024 * 1024);
   hmem4values = hmem4values < hbm4values ? 0 : (hmem4values - hbm4values);
-  float insert_tput = diff_insert_or_assign.count() * 1000;
-//      key_num_per_op / diff_insert_or_assign.count() / (1024 * 1024 * 1024.0);
+  float insert_tput = 
+      key_num_per_op / diff_insert_or_assign.count() / (1024 * 1024 * 1024.0);
   float find_tput = key_num_per_op / diff_find.count() / (1024 * 1024 * 1024.0);
   float erase_tput =
       key_num_per_op / diff_erase.count() / (1024 * 1024 * 1024.0);
