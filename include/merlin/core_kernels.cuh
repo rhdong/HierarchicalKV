@@ -652,14 +652,15 @@ __forceinline__ __device__ void find_in_bucket_with_io(
        tile_offset += TILE_SIZE) {
     key_pos =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    auto const current_key = bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+    auto const current_key =
+        bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
       auto const dst = g.shfl(bucket->vectors + key_pos, src_lane);
-      //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
-      //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return;
     }
 
@@ -1103,20 +1104,19 @@ __global__ void scatter_update_with_io(
         g, bucket, values + key_idx, &(table->locks[bkt_idx]), insert_key,
         tile_offset, start_idx, bucket_max_size);
 
-    //    if (found_vote) {
-    //      src_lane = __ffs(found_vote) - 1;
-    //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size -
-    //      1);
-    //      //      if (rank == src_lane) {
-    //      //        update_meta(bucket, key_pos, metas, key_idx);
-    //      //      }
-    //      //      if (local_size >= bucket_max_size) {
-    //      //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-    //      // bucket_max_size);
-    //      //      }
-    //
-    //      continue;
-    //    }
+    if (found_vote) {
+      src_lane = __ffs(found_vote) - 1;
+      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+      if (rank == src_lane) {
+        update_meta(bucket, key_pos, metas, key_idx);
+      }
+      if (local_size >= bucket_max_size) {
+        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+                                                     bucket_max_size);
+      }
+
+      continue;
+    }
   }
 }
 
