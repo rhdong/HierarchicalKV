@@ -64,8 +64,6 @@ foreach(cuda_arch ${cuda_arch_list})
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_${cuda_arch},code=sm_${cuda_arch}")
 endforeach()
 
-SET(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -Xcompiler -Wall --expt-relaxed-constexpr")
-
 include_directories(
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/tests/googletest/googletest/include
