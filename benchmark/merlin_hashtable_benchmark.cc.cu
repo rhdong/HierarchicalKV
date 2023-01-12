@@ -159,7 +159,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
   std::chrono::duration<double> diff_erase;
 
   while (cur_load_factor < load_factor) {
-    create_continuous_keys<K, M>(h_keys, h_metas, key_num_per_op, start);
+    create_random_keys<K, M>(h_keys, h_metas, key_num_per_op);
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
