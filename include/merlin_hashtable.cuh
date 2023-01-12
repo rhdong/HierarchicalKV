@@ -150,7 +150,7 @@ class HashTable {
 
  private:
   using TableCore = nv::merlin::Table<key_type, vector_type, meta_type, DIM>;
-  static constexpr unsigned int TILE_SIZE = 8;
+  static constexpr unsigned int TILE_SIZE = 4;
 
 #if THRUST_VERSION >= 101600
   static constexpr auto thrust_par = thrust::cuda::par_nosync;
@@ -346,37 +346,37 @@ class HashTable {
                       const meta_type* metas = nullptr,  // (n)
                       cudaStream_t stream = 0,
                       bool ignore_evict_strategy = false) {
-    //    if (n == 0) {
-    //      return;
-    //    }
-    //
-    //    while (!reach_max_capacity_ &&
-    //           fast_load_factor(n) > options_.max_load_factor) {
-    //      reserve(capacity() * 2);
-    //    }
-    //
-    //    if (!ignore_evict_strategy) {
-    //      check_evict_strategy(metas);
-    //    }
-    //
-    //    std::shared_lock<std::shared_timed_mutex> lock(mutex_,
-    //    std::defer_lock); if (!reach_max_capacity_) {
-    //      lock.lock();
-    //    }
+//    if (n == 0) {
+//      return;
+//    }
+//
+//    while (!reach_max_capacity_ &&
+//           fast_load_factor(n) > options_.max_load_factor) {
+//      reserve(capacity() * 2);
+//    }
+//
+//    if (!ignore_evict_strategy) {
+//      check_evict_strategy(metas);
+//    }
+//
+//    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+//    if (!reach_max_capacity_) {
+//      lock.lock();
+//    }
 
-    //    if (is_fast_mode()) {
-    const size_t block_size = 256;  // options_.block_size;
-    const size_t N = n * TILE_SIZE;
-    const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+//    if (is_fast_mode()) {
+      const size_t block_size = 256;//options_.block_size;
+      const size_t N = n * TILE_SIZE;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-    scatter_update_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-        <<<grid_size, block_size, 0, stream>>>(
-            table_, keys, reinterpret_cast<const vector_type*>(values), metas,
-            table_->buckets, table_->buckets_size, table_->bucket_max_size,
-            table_->buckets_num, N);
-    //    }
+      scatter_update_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+          <<<grid_size, block_size, 0, stream>>>(
+              table_, keys, reinterpret_cast<const vector_type*>(values), metas,
+              table_->buckets, table_->buckets_size, table_->bucket_max_size,
+              table_->buckets_num, N);
+//    }
 
-    //    CudaCheckError();
+//    CudaCheckError();
   }
   /**
    * Searches for each key in @p keys in the hash table.
