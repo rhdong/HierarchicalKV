@@ -1079,7 +1079,7 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
  * usually used for the pure HBM mode for better performance
  */
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__global__ void scatter_update_with_io_(
+__global__ void scatter_update_with_io(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
     Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict buckets_size,
@@ -1123,7 +1123,7 @@ __global__ void scatter_update_with_io_(
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__global__ void scatter_update_with_io(
+__global__ void scatter_update_with_io_(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
     Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict buckets_size,
