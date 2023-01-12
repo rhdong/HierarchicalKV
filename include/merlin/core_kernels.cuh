@@ -314,9 +314,9 @@ __forceinline__ __device__ void refresh_bucket_meta(
 
 template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> g,
-                                            const float* const src, float* dst) {
+                                            const V* src, V* dst) {
   for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
-    dst[i] = src[i];
+    reinterpret_cast<float*>(dst)[i] = reinterpret_cast<const float*>(src)[i];
   }
 }
 
@@ -659,7 +659,7 @@ __forceinline__ __device__ void find_in_bucket_with_io(
       auto const src_lane = __ffs(found_vote) - 1;
       auto const dst = g.shfl(bucket->vectors + key_pos, src_lane);
       //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-      copy_vector<V, DIM, TILE_SIZE>(g, (const float const*)value, (float*)dst);
+      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return;
     }
