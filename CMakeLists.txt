@@ -61,7 +61,7 @@ if(cuda_arch_list_length EQUAL 0)
   message(STATUS "Assign default GPU architecture sm=80")
 endif()
 foreach(cuda_arch ${cuda_arch_list})
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode --generate-line-info arch=compute_${cuda_arch},code=sm_${cuda_arch}")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -lineinfo -gencode arch=compute_${cuda_arch},code=sm_${cuda_arch}")
 endforeach()
 
 include_directories(
