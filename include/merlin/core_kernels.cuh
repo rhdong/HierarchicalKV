@@ -1092,7 +1092,7 @@ __global__ void scatter_update_with_io(
     size_t key_idx = t / TILE_SIZE;
 
     const K insert_key = keys[key_idx];
-    const V insert_value = values[key_idx];
+    __shared__ V insert_value = values[key_idx];
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
