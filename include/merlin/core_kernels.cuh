@@ -1098,8 +1098,8 @@ __global__ void scatter_update_with_io(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
 
-    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
-                                 buckets_num, bucket_max_size);
+//    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
+//                                 buckets_num, bucket_max_size);
 
 //    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
 //        g, bucket, values + key_idx, nullptr, insert_key,
