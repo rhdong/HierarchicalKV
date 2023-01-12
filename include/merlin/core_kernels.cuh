@@ -658,10 +658,10 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
-//      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, value, bucket->vectors + key_pos);
 
-//      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return;
     }
 
