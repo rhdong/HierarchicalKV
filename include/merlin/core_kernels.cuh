@@ -670,6 +670,10 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //  }
 //  return;
 //}
+    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+        g, bucket->keys, bucket->vectors, insert_value, table->locks[bkt_idx], insert_key,
+        tile_offset, start_idx, bucket_max_size);
+
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void find_in_bucket_with_io(
@@ -1135,7 +1139,7 @@ __global__ void scatter_update_with_io(
         buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, bucket->vectors, insert_value, table->locks[bkt_idx], insert_key,
+        g, bucket->keys, bucket->vectors, insert_value, &(table->locks[bkt_idx]), insert_key,
         tile_offset, start_idx, bucket_max_size);
 
     //    if (found_vote) {
