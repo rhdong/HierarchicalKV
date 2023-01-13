@@ -313,8 +313,8 @@ __forceinline__ __device__ void refresh_bucket_meta(
 }
 
 template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ void copy_vector(cg::thread_block_tile<TILE_SIZE> const& g,
-                                            const V* src, V* dst) {
+__device__ __forceinline__ void copy_vector(
+    cg::thread_block_tile<TILE_SIZE> const& g, const V* src, V* dst) {
   for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
     reinterpret_cast<float*>(dst)[i] = reinterpret_cast<const float*>(src)[i];
   }
@@ -671,16 +671,6 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //  return;
 //}
 
-
-template <class V, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ void update_array(
-    cg::thread_block_tile<TILE_SIZE> &g, uint32_t n, V *t,
-                                             V const *u) {
-  for (auto i = g.thread_rank(); i < n; i += g.size()) {
-    reinterpret_cast<float*>(t)[i] = reinterpret_cast<const float*>(u)[i];
-  }
-}
-
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
@@ -689,7 +679,7 @@ __device__ __forceinline__ void find_in_bucket_with_io(
     const uint32_t& start_idx, const size_t& bucket_max_size) {
   uint32_t key_pos = 0;
 
-  //#pragma unroll
+#pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
     key_pos =
@@ -699,12 +689,11 @@ __device__ __forceinline__ void find_in_bucket_with_io(
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
-      key_pos =  g.shfl(key_pos, src_lane);
+      key_pos = g.shfl(key_pos, src_lane);
       auto dst = bucket_vectors + key_pos;
-      //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-//       copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
-       update_array<V, TILE_SIZE>(g, 4, dst, value);
-      //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
+      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return;
     }
 
