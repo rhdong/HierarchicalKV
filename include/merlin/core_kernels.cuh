@@ -313,9 +313,9 @@ __forceinline__ __device__ void refresh_bucket_meta(
 }
 
 template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ void copy_vector(cg::thread_block_tile<TILE_SIZE> const& g,
+__device__ __forceinline__ void copy_vector(cg::thread_block_tile<TILE_SIZE> const& g,
                                             const V* src, V* dst) {
-  for (auto i = g.thread_rank(); i < 4; i += g.size()) {
+  for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
     reinterpret_cast<float*>(dst)[i] = reinterpret_cast<const float*>(src)[i];
   }
 }
@@ -672,7 +672,7 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //}
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__device__ void find_in_bucket_with_io(
+__device__ __forceinline__ void find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
     const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
     const V* value, Mutex* klock, const K& find_key, uint32_t& tile_offset,
