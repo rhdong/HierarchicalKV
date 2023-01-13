@@ -150,7 +150,8 @@ class HashTable {
 
  private:
   using TableCore = nv::merlin::Table<key_type, vector_type, meta_type, DIM>;
-  static constexpr unsigned int TILE_SIZE = 32;
+  static constexpr unsigned int TILE_SIZE = 4;
+  static constexpr unsigned int TILE_SIZE_Hi = 32;
 
 #if THRUST_VERSION >= 101600
   static constexpr auto thrust_par = thrust::cuda::par_nosync;
