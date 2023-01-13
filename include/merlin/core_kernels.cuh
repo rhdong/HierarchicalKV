@@ -647,7 +647,7 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     const size_t& bucket_max_size) {
   uint32_t key_pos = 0;
 
-#pragma unroll
+//#pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
     key_pos =
