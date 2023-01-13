@@ -641,10 +641,10 @@ __forceinline__ __device__ unsigned find_in_bucket(
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void find_in_bucket_with_io(
-    cg::thread_block_tile<TILE_SIZE> g,
+    cg::thread_block_tile<TILE_SIZE> &g,
     const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors, const V* value, Mutex* klock,
-    const K& find_key, uint32_t& tile_offset, const uint32_t start_idx,
-    const size_t bucket_max_size) {
+    const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
+    const size_t& bucket_max_size) {
   uint32_t key_pos = 0;
 
 #pragma unroll
