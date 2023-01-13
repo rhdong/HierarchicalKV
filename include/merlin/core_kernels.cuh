@@ -670,9 +670,6 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //  }
 //  return;
 //}
-    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, bucket->vectors, insert_value, table->locks[bkt_idx], insert_key,
-        tile_offset, start_idx, bucket_max_size);
 
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
