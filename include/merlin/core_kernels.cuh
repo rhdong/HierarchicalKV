@@ -645,16 +645,12 @@ __device__ void find_in_bucket_with_io_(
     const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors, const V* value, Mutex* klock,
     const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
     const size_t& bucket_max_size) {
-  uint32_t key_pos = 0;
-  const AtomicKey<K>* current_atomic_key = bucket_keys;
+  uint32_t key_pos = (start_idx + g.thread_rank()) & (bucket_max_size - 1);
+  AtomicKey<K> current_atomic_key = bucket_keys[0];
 
 //#pragma unroll
-  for (tile_offset = 0; tile_offset < bucket_max_size;
-       tile_offset += TILE_SIZE) {
+  while (tile_offset < bucket_max_size) {
     auto const current_key = current_atomic_key.load(cuda::std::memory_order_relaxed);
-
-    key_pos =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
@@ -668,7 +664,9 @@ __device__ void find_in_bucket_with_io_(
     if (g.any(current_key == EMPTY_KEY)) {
       return;
     }
-    current_atomic_key += TILE_SIZE;
+    tile_offset += TILE_SIZE;
+    key_pos = (key_pos + TILE_SIZE) & (bucket_max_size - 1);
+    current_atomic_key = bucket_keys[key_pos];
   }
   return;
 }
