@@ -672,7 +672,7 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //}
 
 
-template <V, TILE_SIZE>
+template <class V, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void update_array(
     cg::thread_block_tile<TILE_SIZE> &g, uint32_t n, V *t,
                                              V const *u) {
