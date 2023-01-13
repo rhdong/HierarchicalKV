@@ -372,7 +372,7 @@ class HashTable {
     scatter_update_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
         <<<grid_size, block_size, 0, stream>>>(
             table_, keys, reinterpret_cast<const vector_type*>(values), metas,
-            table_->buckets, table_->buckets_size, table_->bucket_max_size,
+            table_->buckets, table_->buckets_size, 128,
             table_->buckets_num, N);
     //    }
 
