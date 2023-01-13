@@ -692,7 +692,7 @@ __device__ void find_in_bucket_with_io(
       key_pos =  g.shfl(key_pos, src_lane);
       auto dst = bucket_vectors + key_pos;
       //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
+      // copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return;
     }
