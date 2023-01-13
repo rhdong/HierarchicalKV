@@ -314,9 +314,9 @@ __forceinline__ __device__ void refresh_bucket_meta(
 
 template <class V, size_t DIM, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void copy_vector(cg::thread_block_tile<TILE_SIZE> const& g,
-                                            const V* src, V* dst) {
+                                            const V* const src, V* dst) {
   for (auto i = g.thread_rank(); i < DIM; i += g.size()) {
-    reinterpret_cast<float*>(dst)[i] = reinterpret_cast<const float*>(src)[i];
+    reinterpret_cast<float*>(dst)[i] = reinterpret_cast<const float* const>(src)[i];
   }
 }
 
