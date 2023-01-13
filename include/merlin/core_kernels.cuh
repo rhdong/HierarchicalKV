@@ -642,7 +642,7 @@ __forceinline__ __device__ unsigned find_in_bucket(
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, const V* value, Mutex* klock,
+    const K* __restrict bucket_keys, const V* __restrict bucket_vectors, const V* value, Mutex* klock,
     const K find_key, uint32_t& tile_offset, const uint32_t start_idx,
     const size_t bucket_max_size) {
   uint32_t key_pos = 0;
@@ -653,11 +653,11 @@ __forceinline__ __device__ void find_in_bucket_with_io(
     key_pos =
         (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
     auto const current_key =
-        bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+        bucket_keys[key_pos].load(cuda::std::memory_order_relaxed);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
-      auto const dst = bucket->vectors + g.shfl(key_pos, src_lane);
+      auto const dst = bucket_vectors + g.shfl(key_pos, src_lane);
       //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
@@ -1102,7 +1102,7 @@ __global__ void scatter_update_with_io(
                                  buckets_num, bucket_max_size);
 
     find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket, insert_value, nullptr, insert_key,
+        g, bucket->keys, bucket->vectors, insert_value, nullptr, insert_key,
         tile_offset, start_idx, bucket_max_size);
 
     //    if (found_vote) {
