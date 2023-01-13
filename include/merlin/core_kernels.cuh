@@ -639,20 +639,20 @@ __forceinline__ __device__ unsigned find_in_bucket(
   return 0;
 }
 
-//template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+// template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 //__device__ void find_in_bucket_with_io(
 //    cg::thread_block_tile<TILE_SIZE> g,
-//    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors, const V* value, Mutex* klock,
-//    const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
-//    const size_t& bucket_max_size) {
+//    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
+//    const V* value, Mutex* klock, const K& find_key, uint32_t& tile_offset,
+//    const uint32_t& start_idx, const size_t& bucket_max_size) {
 //  uint32_t key_pos = (start_idx + g.thread_rank()) & (bucket_max_size - 1);
 //  AtomicKey<K> current_atomic_key = bucket_keys[0];
 //
 ////#pragma unroll
 //  while (tile_offset < bucket_max_size) {
-//    auto const current_key = current_atomic_key.load(cuda::std::memory_order_relaxed);
-//    auto const found_vote = g.ballot(find_key == current_key);
-//    if (found_vote) {
+//    auto const current_key =
+//    current_atomic_key.load(cuda::std::memory_order_relaxed); auto const
+//    found_vote = g.ballot(find_key == current_key); if (found_vote) {
 //      auto const src_lane = __ffs(found_vote) - 1;
 //      auto dst = bucket_vectors + g.shfl(key_pos, src_lane);
 //      //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
@@ -674,12 +674,12 @@ __forceinline__ __device__ unsigned find_in_bucket(
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __device__ void find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
-    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors, const V* value, Mutex* klock,
-    const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
-    const size_t& bucket_max_size) {
+    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
+    const V* value, Mutex* klock, const K& find_key, uint32_t& tile_offset,
+    const uint32_t& start_idx, const size_t& bucket_max_size) {
   uint32_t key_pos = 0;
 
-//#pragma unroll
+  //#pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
     key_pos =
@@ -689,7 +689,8 @@ __device__ void find_in_bucket_with_io(
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
-      auto dst = bucket_vectors + g.shfl(key_pos, src_lane);
+      key_pos =  g.shfl(key_pos, src_lane);
+      auto dst = bucket_vectors + key_pos;
       //      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
@@ -702,7 +703,6 @@ __device__ void find_in_bucket_with_io(
   }
   return;
 }
-
 
 //
 // template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
@@ -1118,8 +1118,8 @@ __global__ void scatter_update_with_io(
     const size_t bucket_max_size, const size_t buckets_num, size_t N) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
-//  int rank = g.thread_rank();
-//  Bucket<K, V, M, DIM>* bucket;
+  //  int rank = g.thread_rank();
+  //  Bucket<K, V, M, DIM>* bucket;
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
     size_t key_idx = t / TILE_SIZE;
@@ -1131,8 +1131,8 @@ __global__ void scatter_update_with_io(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
 
-    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
-                                 buckets_num, bucket_max_size);
+    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
+        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
         g, bucket->keys, bucket->vectors, insert_value, nullptr, insert_key,
