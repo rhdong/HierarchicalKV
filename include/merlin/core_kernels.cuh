@@ -1085,8 +1085,8 @@ __global__ void scatter_update_with_io(
     const size_t bucket_max_size, const size_t buckets_num, size_t N) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
-  int rank = g.thread_rank();
-  Bucket<K, V, M, DIM>* bucket;
+//  int rank = g.thread_rank();
+//  Bucket<K, V, M, DIM>* bucket;
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
     size_t key_idx = t / TILE_SIZE;
@@ -1098,7 +1098,7 @@ __global__ void scatter_update_with_io(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
 
-    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
+    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
 
     find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
