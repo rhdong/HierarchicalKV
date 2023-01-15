@@ -764,6 +764,7 @@ __global__ void upsert_kernel_with_io(
     int local_size = 0;
 
     const K insert_key = keys[key_idx];
+    const V* insert_value = values + key_idx;
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -774,7 +775,8 @@ __global__ void upsert_kernel_with_io(
                                  buckets_num, bucket_max_size);
 
     found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, bucket->vectors, &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx, bucket_max_size);
+        g, bucket->keys, bucket->vectors, insert_value, &(table->locks[bkt_idx]), insert_key,
+        tile_offset, start_idx, bucket_max_size);
 
     if (found_vote) {
 //      src_lane = __ffs(found_vote) - 1;
