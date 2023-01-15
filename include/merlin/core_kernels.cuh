@@ -745,17 +745,17 @@ __global__ void upsert_kernel_with_io(
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      if (rank == src_lane) {
-        update_meta(bucket, key_pos, metas, key_idx);
-      }
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-                                                     bucket_max_size);
-      }
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//      if (rank == src_lane) {
+//        update_meta(bucket, key_pos, metas, key_idx);
+//      }
+//      if (local_size >= bucket_max_size) {
+//        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+//                                                     bucket_max_size);
+//      }
+//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       continue;
     }
 
