@@ -849,8 +849,7 @@ __global__ void upsert_kernel_with_io(
                                  buckets_num, bucket_max_size);
 
     found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, bucket->vectors, insert_value,
-        insert_key, tile_offset, start_idx,
+        g, bucket->keys, insert_value, insert_key, tile_offset, start_idx,
         bucket_max_size);
 
     if (found_vote) {
