@@ -694,7 +694,7 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
           (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
       auto dst = bucket_vectors + key_pos;
       lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-      copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
+      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       return found_vote;
     }
