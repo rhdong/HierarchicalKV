@@ -688,6 +688,7 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
         bucket_keys[key_pos].load(cuda::std::memory_order_relaxed);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
+      auto const src_lane = __ffs(found_vote) - 1;
       key_pos = g.shfl(key_pos, src_lane);
       key_pos =
           (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
