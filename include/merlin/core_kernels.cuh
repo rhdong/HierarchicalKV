@@ -714,6 +714,39 @@ __forceinline__ __device__ void update_meta(
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+__device__ __forceinline__ unsigned find_in_bucket_with_io(
+    cg::thread_block_tile<TILE_SIZE> g,
+    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
+    const V* value, Mutex* klock, const K& find_key, uint32_t& tile_offset,
+    const uint32_t& start_idx, const size_t& bucket_max_size) {
+  uint32_t key_pos = 0;
+
+#pragma unroll
+  for (tile_offset = 0; tile_offset < bucket_max_size;
+       tile_offset += TILE_SIZE) {
+    key_pos =
+        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+    auto const current_key =
+        bucket_keys[key_pos].load(cuda::std::memory_order_relaxed);
+    auto const found_vote = g.ballot(find_key == current_key);
+    if (found_vote) {
+      auto const src_lane = __ffs(found_vote) - 1;
+      key_pos = g.shfl(key_pos, src_lane);
+      auto dst = bucket_vectors + key_pos;
+      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
+      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
+      return found_vote;
+    }
+
+    if (g.any(current_key == EMPTY_KEY)) {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __global__ void upsert_kernel_with_io(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
@@ -740,23 +773,23 @@ __global__ void upsert_kernel_with_io(
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
 
-    found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, insert_key, tile_offset, start_idx, bucket_max_size);
+    found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+        g, bucket->keys, bucket->vectors, &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx, bucket_max_size);
 
     if (found_vote) {
-      src_lane = __ffs(found_vote) - 1;
-      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      //      if (rank == src_lane) {
-      //        update_meta(bucket, key_pos, metas, key_idx);
-      //      }
-      //      if (local_size >= bucket_max_size) {
-      //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-      //                                                     bucket_max_size);
-      //      }
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
-                                     bucket->vectors + key_pos);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//      src_lane = __ffs(found_vote) - 1;
+//      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+//      if (rank == src_lane) {
+//        update_meta(bucket, key_pos, metas, key_idx);
+//      }
+//      if (local_size >= bucket_max_size) {
+//        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+//                                                     bucket_max_size);
+//      }
+//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+//                                     bucket->vectors + key_pos);
+//      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       continue;
     }
 
