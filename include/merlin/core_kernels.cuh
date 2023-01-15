@@ -740,7 +740,7 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
   return 0;
 }
 //
-//template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+// template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 //__global__ void upsert_kernel_with_io__(
 //    const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
 //    const V* __restrict values, const M* __restrict metas,
@@ -763,7 +763,8 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
 //    uint32_t key_pos = -1;
 //
 //    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
-//        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
+//        buckets, insert_key, bkt_idx, start_idx, buckets_num,
+//        bucket_max_size);
 //
 //    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
 //        g, bucket->keys, bucket->vectors, insert_value,
@@ -779,7 +780,8 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
 //      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
 //      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
 //      //      src_lane = __ffs(found_vote) - 1;
-//      //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
+//      //      key_pos = (start_idx + tile_offset + src_lane) &
+//      (bucket_max_size
 //      //      - 1); if (rank == src_lane) {
 //      //        update_meta(bucket, key_pos, metas, key_idx);
 //      //      }
@@ -829,11 +831,10 @@ __global__ void upsert_kernel_with_io(
     if (found_vote) {
       auto const src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-//      key_pos = g.shfl(key_pos, src_lane);
       auto dst = bucket->vectors + key_pos;
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
-      copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+//      copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
+//      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       //      src_lane = __ffs(found_vote) - 1;
       //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
       //      - 1); if (rank == src_lane) {
