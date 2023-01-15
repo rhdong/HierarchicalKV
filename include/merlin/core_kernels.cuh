@@ -609,38 +609,38 @@ __global__ void read_kernel(V** __restrict src, V* __restrict dst,
     }
   }
 }
+//
+//template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+//__forceinline__ __device__ unsigned find_in_bucket(
+//    cg::thread_block_tile<TILE_SIZE> g,
+//    const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
+//    uint32_t& tile_offset, const uint32_t start_idx,
+//    const size_t bucket_max_size) {
+//  uint32_t key_offset = 0;
+//  K current_key = 0;
+//  unsigned found_vote = 0;
+//
+//#pragma unroll
+//  for (tile_offset = 0; tile_offset < bucket_max_size;
+//       tile_offset += TILE_SIZE) {
+//    key_offset =
+//        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+//    current_key =
+//        bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
+//    found_vote = g.ballot(find_key == current_key);
+//    if (found_vote) {
+//      return found_vote;
+//    }
+//
+//    if (g.any(current_key == EMPTY_KEY)) {
+//      return 0;
+//    }
+//  }
+//  return 0;
+//}
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ unsigned find_in_bucket(
-    cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
-    uint32_t& tile_offset, const uint32_t start_idx,
-    const size_t bucket_max_size) {
-  uint32_t key_offset = 0;
-  K current_key = 0;
-  unsigned found_vote = 0;
-
-#pragma unroll
-  for (tile_offset = 0; tile_offset < bucket_max_size;
-       tile_offset += TILE_SIZE) {
-    key_offset =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    current_key =
-        bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
-    found_vote = g.ballot(find_key == current_key);
-    if (found_vote) {
-      return found_vote;
-    }
-
-    if (g.any(current_key == EMPTY_KEY)) {
-      return 0;
-    }
-  }
-  return 0;
-}
-
-template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ unsigned insert_into_bucket_with_io(
+__device__ __forceinline__ unsigned find_in_bucket(
     cg::thread_block_tile<TILE_SIZE> g,
     const AtomicKey<K>* __restrict bucket_keys,
     const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
@@ -844,7 +844,7 @@ __global__ void upsert_kernel_with_io(
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
 
-    found_vote = insert_into_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+    found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
         g, bucket->keys, insert_key, tile_offset, start_idx,
         bucket_max_size);
 
@@ -1006,7 +1006,7 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
           bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
 
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, insert_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket->keys, insert_key, tile_offset, start_idx, bucket_max_size);
       if (found_vote) {
         break;
       }
@@ -1190,7 +1190,7 @@ __global__ void lookup_kernel_with_io(
       const K current_key =
           bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
       found_vote = find_in_bucket<K, V, M, DIM, TILE_SIZE>(
-          g, bucket, find_key, tile_offset, start_idx, bucket_max_size);
+          g, bucket->keys, find_key, tile_offset, start_idx, bucket_max_size);
       if (found_vote) {
         break;
       }
