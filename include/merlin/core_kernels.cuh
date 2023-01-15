@@ -754,6 +754,50 @@ __global__ void upsert_kernel_with_io(
     const size_t bucket_max_size, const size_t buckets_num, size_t N) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+  //  int rank = g.thread_rank();
+  //  Bucket<K, V, M, DIM>* bucket;
+
+  for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
+    size_t key_idx = t / TILE_SIZE;
+
+    const K insert_key = keys[key_idx];
+    const V* insert_value = values + key_idx;
+
+    size_t bkt_idx = 0;
+    size_t start_idx = 0;
+    uint32_t tile_offset = 0;
+
+    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
+        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
+
+    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+        g, bucket->keys, bucket->vectors, insert_value, &(table->locks[bkt_idx]), insert_key,
+        tile_offset, start_idx, bucket_max_size);
+
+    //    if (found_vote) {
+    //      src_lane = __ffs(found_vote) - 1;
+    //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size -
+    //      1); if (rank == src_lane) {
+    //        update_meta(bucket, key_pos, metas, key_idx);
+    //      }
+    //      if (local_size >= bucket_max_size) {
+    //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+    //                                                     bucket_max_size);
+    //      }
+    //
+    //      continue;
+    //    }
+  }
+}
+
+template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
+__global__ void upsert_kernel_with_io__(
+    const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
+    const V* __restrict values, const M* __restrict metas,
+    Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict buckets_size,
+    const size_t bucket_max_size, const size_t buckets_num, size_t N) {
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int rank = g.thread_rank();
   Bucket<K, V, M, DIM>* bucket;
   unsigned found_vote;
