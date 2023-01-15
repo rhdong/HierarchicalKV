@@ -1183,7 +1183,7 @@ __global__ void scatter_update_with_io(
       //      - 1);
       if (rank == src_lane) {
 //        update_meta(bucket, key_pos, metas, key_idx);
-        *dst_meta = 0;
+        //*dst_meta = 0;
       }
 //      if (local_size >= bucket_max_size) {
 //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
