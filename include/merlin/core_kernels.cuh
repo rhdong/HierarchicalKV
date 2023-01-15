@@ -671,7 +671,6 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //  return;
 //}
 
-
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
@@ -695,14 +694,14 @@ __device__ __forceinline__ void find_in_bucket_with_io(
       lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
       unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-      return;
+      return found_vote;
     }
 
     if (g.any(current_key == EMPTY_KEY)) {
-      return;
+      return 0;
     }
   }
-  return;
+  return 0;
 }
 
 //
@@ -1136,22 +1135,23 @@ __global__ void scatter_update_with_io(
         buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, bucket->vectors, insert_value, &(table->locks[bkt_idx]), insert_key,
-        tile_offset, start_idx, bucket_max_size);
+        g, bucket->keys, bucket->vectors, insert_value,
+        &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx,
+        bucket_max_size);
 
-    //    if (found_vote) {
-    //      src_lane = __ffs(found_vote) - 1;
-    //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size -
-    //      1); if (rank == src_lane) {
-    //        update_meta(bucket, key_pos, metas, key_idx);
-    //      }
-    //      if (local_size >= bucket_max_size) {
-    //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-    //                                                     bucket_max_size);
-    //      }
-    //
-    //      continue;
-    //    }
+    if (found_vote) {
+      //      src_lane = __ffs(found_vote) - 1;
+      //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
+      //      - 1); if (rank == src_lane) {
+      //        update_meta(bucket, key_pos, metas, key_idx);
+      //      }
+      //      if (local_size >= bucket_max_size) {
+      //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+      //                                                     bucket_max_size);
+      //      }
+      //
+      continue;
+    }
   }
 }
 
