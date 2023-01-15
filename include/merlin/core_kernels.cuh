@@ -672,7 +672,7 @@ __forceinline__ __device__ unsigned find_in_bucket(
 //}
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ void find_in_bucket_with_io(
+__device__ __forceinline__ unsigned find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
     const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
     const V* value, Mutex* klock, const K& find_key, uint32_t& tile_offset,
@@ -1134,7 +1134,7 @@ __global__ void scatter_update_with_io(
     Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
         buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    auto const found_vote =  find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+    auto const found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
         g, bucket->keys, bucket->vectors, insert_value,
         &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx,
         bucket_max_size);
