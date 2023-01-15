@@ -1181,7 +1181,7 @@ __global__ void scatter_update_with_io(
       //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
       //      - 1);
       if (rank == src_lane) {
-//        update_meta(bucket, key_pos, metas, key_idx);
+        update_meta(bucket, key_pos, metas, key_idx);
 //        *dst_meta = 0;
       }
 //      if (local_size >= bucket_max_size) {
