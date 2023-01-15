@@ -1155,7 +1155,6 @@ __global__ void scatter_update_with_io(
     const K insert_key = keys[key_idx];
     const V* insert_value = values + key_idx;
     const M insert_meta = metas[key_idx];
-    M * dst_meta = reinterpret_cast<M*>(&(bucket->metas[0]));
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -1163,6 +1162,7 @@ __global__ void scatter_update_with_io(
 
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
+    M * dst_meta = reinterpret_cast<M*>(&(bucket->metas[0]));
 
     auto const found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
         g, bucket->keys, bucket->vectors, insert_value,
