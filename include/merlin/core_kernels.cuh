@@ -1174,14 +1174,14 @@ __global__ void scatter_update_with_io(
       uint32_t key_pos =
           (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       auto dst = bucket->vectors + key_pos;
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
-      copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+//      copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
+//      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       //      src_lane = __ffs(found_vote) - 1;
       //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
       //      - 1);
       if (rank == src_lane) {
-        update_meta(bucket, key_pos, metas, key_idx);
+//        update_meta(bucket, key_pos, metas, key_idx);
 //        *dst_meta = 0;
       }
 //      if (local_size >= bucket_max_size) {
