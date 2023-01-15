@@ -165,11 +165,6 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
                           cudaMemcpyHostToDevice));
 
-    table->insert_or_assign(key_num_per_op, d_keys,
-                            reinterpret_cast<float*>(d_vectors), d_metas,
-                            stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-
     start_insert_or_assign = std::chrono::steady_clock::now();
     table->insert_or_assign(key_num_per_op, d_keys,
                             reinterpret_cast<float*>(d_vectors), d_metas,
