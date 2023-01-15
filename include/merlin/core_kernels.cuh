@@ -831,10 +831,10 @@ __global__ void upsert_kernel_with_io(
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
 //      key_pos = g.shfl(key_pos, src_lane);
       auto dst = bucket->vectors + key_pos;
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       //      src_lane = __ffs(found_vote) - 1;
       //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
       //      - 1); if (rank == src_lane) {
