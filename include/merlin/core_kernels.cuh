@@ -1134,7 +1134,7 @@ __global__ void scatter_update_with_io(
     Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
         buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
-    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+    auto const found_vote =  find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
         g, bucket->keys, bucket->vectors, insert_value,
         &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx,
         bucket_max_size);
