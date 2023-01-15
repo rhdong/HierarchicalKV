@@ -888,6 +888,7 @@ __global__ void upsert_kernel_with_io(
     int local_size = 0;
 
     const K insert_key = keys[key_idx];
+    const V* insert_value = values + key_idx;
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
