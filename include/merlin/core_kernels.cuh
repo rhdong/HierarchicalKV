@@ -640,9 +640,9 @@ __forceinline__ __device__ unsigned find_in_bucket(
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ unsigned find_in_bucket_with_io(
+__device__ __forceinline__ unsigned insert_into_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
-    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
+    const AtomicKey<K>* __restrict bucket_keys,
     const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
     const size_t& bucket_max_size) {
   uint32_t key_pos = 0;
@@ -656,9 +656,6 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
         bucket_keys[key_pos].load(cuda::std::memory_order_relaxed);
     auto const found_vote = g.ballot(find_key == current_key);
     if (found_vote) {
-      auto const src_lane = __ffs(found_vote) - 1;
-      key_pos = g.shfl(key_pos, src_lane);
-      auto dst = bucket_vectors + key_pos;
       return found_vote;
     }
 
@@ -838,7 +835,6 @@ __global__ void upsert_kernel_with_io(
     int local_size = 0;
 
     const K insert_key = keys[key_idx];
-    const V* insert_value = values + key_idx;
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -848,8 +844,8 @@ __global__ void upsert_kernel_with_io(
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
 
-    found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, insert_value, insert_key, tile_offset, start_idx,
+    found_vote = insert_into_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+        g, bucket->keys, insert_key, tile_offset, start_idx,
         bucket_max_size);
 
     if (found_vote) {
