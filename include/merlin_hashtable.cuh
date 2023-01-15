@@ -170,6 +170,7 @@ class HashTable {
    */
   ~HashTable() {
     if (initialized_) {
+      initialized_ = false;
       destroy_table<key_type, vector_type, meta_type, DIM>(&table_);
     }
   }
@@ -269,19 +270,11 @@ class HashTable {
       const size_t N = n * TILE_SIZE;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-      if (metas == nullptr) {
-        upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, reinterpret_cast<const vector_type*>(values),
-                table_->buckets, table_->buckets_size, table_->bucket_max_size,
-                table_->buckets_num, N);
-      } else {
-        upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, reinterpret_cast<const vector_type*>(values),
-                metas, table_->buckets, table_->buckets_size,
-                table_->bucket_max_size, table_->buckets_num, N);
-      }
+      upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+          <<<grid_size, block_size, 0, stream>>>(
+              table_, keys, reinterpret_cast<const vector_type*>(values), metas,
+              table_->buckets, table_->buckets_size, table_->bucket_max_size,
+              table_->buckets_num, N);
     } else {
       vector_type** d_dst = nullptr;
       int* d_src_offset = nullptr;
@@ -296,19 +289,11 @@ class HashTable {
         const size_t N = n * TILE_SIZE;
         const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-        if (metas == nullptr) {
-          upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-              <<<grid_size, block_size, 0, stream>>>(
-                  table_, keys, d_dst, table_->buckets, table_->buckets_size,
-                  table_->bucket_max_size, table_->buckets_num, d_src_offset,
-                  N);
-        } else {
-          upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-              <<<grid_size, block_size, 0, stream>>>(
-                  table_, keys, d_dst, metas, table_->buckets,
-                  table_->buckets_size, table_->bucket_max_size,
-                  table_->buckets_num, d_src_offset, N);
-        }
+        upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+            <<<grid_size, block_size, 0, stream>>>(
+                table_, keys, d_dst, metas, table_->buckets,
+                table_->buckets_size, table_->bucket_max_size,
+                table_->buckets_num, d_src_offset, N);
       }
 
       {
@@ -437,19 +422,11 @@ class HashTable {
       const size_t N = n * TILE_SIZE;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-      if (metas == nullptr) {
-        accum_kernel<key_type, vector_type, meta_type, DIM>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, dst, accum_or_assigns, table_->buckets,
-                table_->buckets_size, table_->bucket_max_size,
-                table_->buckets_num, src_offset, founds, N);
-      } else {
-        accum_kernel<key_type, vector_type, meta_type, DIM>
-            <<<grid_size, block_size, 0, stream>>>(
-                table_, keys, dst, metas, accum_or_assigns, table_->buckets,
-                table_->buckets_size, table_->bucket_max_size,
-                table_->buckets_num, src_offset, founds, N);
-      }
+      accum_kernel<key_type, vector_type, meta_type, DIM>
+          <<<grid_size, block_size, 0, stream>>>(
+              table_, keys, dst, metas, accum_or_assigns, table_->buckets,
+              table_->buckets_size, table_->bucket_max_size,
+              table_->buckets_num, src_offset, founds, N);
     }
 
     if (!is_fast_mode()) {
