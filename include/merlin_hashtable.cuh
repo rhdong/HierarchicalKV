@@ -368,7 +368,7 @@ class HashTable {
     //    if (is_fast_mode()) {
     const size_t block_size = 128;  // options_.block_size;
     const size_t N = n * TILE_SIZE;
-    const size_t grid_size = SAFE_GET_GRID_SIZE(((const size_t)(N / 2)), block_size);
+    const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
     scatter_update_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
         <<<grid_size, block_size, 0, stream>>>(
