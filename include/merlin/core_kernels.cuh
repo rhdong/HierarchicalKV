@@ -747,7 +747,7 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__global__ void upsert_kernel_with_io(
+__global__ void upsert_kernel_with_io__(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
     Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict buckets_size,
@@ -791,7 +791,7 @@ __global__ void upsert_kernel_with_io(
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__global__ void upsert_kernel_with_io__(
+__global__ void upsert_kernel_with_io(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
     Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict buckets_size,
