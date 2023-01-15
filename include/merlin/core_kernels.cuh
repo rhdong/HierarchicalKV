@@ -1154,6 +1154,7 @@ __global__ void scatter_update_with_io(
 
     const K insert_key = keys[key_idx];
     const V* insert_value = values + key_idx;
+    const M insert_meta = metas[key_idx];;
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -1181,7 +1182,7 @@ __global__ void scatter_update_with_io(
       //      - 1);
       if (rank == src_lane) {
 //        update_meta(bucket, key_pos, metas, key_idx);
-        bucket->metas[key_pos].val = metas[key_idx];
+        bucket->metas[key_pos].val = insert_meta;
       }
 //      if (local_size >= bucket_max_size) {
 //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
