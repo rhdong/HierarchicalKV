@@ -1154,7 +1154,8 @@ __global__ void scatter_update_with_io(
 
     const K insert_key = keys[key_idx];
     const V* insert_value = values + key_idx;
-    const M insert_meta = metas[key_idx];;
+    const M insert_meta = metas[key_idx];
+    M * dst_meta = reinterpret_cast<M*>(&(bucket->metas[0]));
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -1173,7 +1174,6 @@ __global__ void scatter_update_with_io(
       uint32_t key_pos = g.shfl(key_pos, src_lane);
       key_pos =
           (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-      M * dst_meta = reinterpret_cast<M*>(&(bucket->metas[key_pos]));
       auto dst = bucket->vectors + key_pos;
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
@@ -1183,7 +1183,7 @@ __global__ void scatter_update_with_io(
       //      - 1);
       if (rank == src_lane) {
 //        update_meta(bucket, key_pos, metas, key_idx);
-        //*dst_meta = 0;
+        *dst_meta = 0;
       }
 //      if (local_size >= bucket_max_size) {
 //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
