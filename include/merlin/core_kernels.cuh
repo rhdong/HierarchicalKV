@@ -1179,9 +1179,9 @@ __global__ void scatter_update_with_io(
       //      src_lane = __ffs(found_vote) - 1;
       //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
       //      - 1);
-//      if (rank == src_lane) {
-//        update_meta(bucket, key_pos, metas, key_idx);
-//      }
+      if (rank == src_lane) {
+        update_meta(bucket, key_pos, metas, key_idx);
+      }
 //      if (local_size >= bucket_max_size) {
 //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
 //                                                     bucket_max_size);
