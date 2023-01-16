@@ -203,7 +203,7 @@ class HashTable {
         &table_, options_.init_capacity, options_.max_capacity,
         options_.max_hbm_for_vectors, options_.max_bucket_size);
     options_.block_size = SAFE_GET_BLOCK_SIZE(options_.block_size);
-    cudaMemcpyToSymbol(c_table_, table_, sizeof(TableCore));
+    CUDA_CHECK(cudaMemcpyToSymbol(c_table_, table_, sizeof(TableCore)));
     reach_max_capacity_ = (options_.init_capacity * 2 > options_.max_capacity);
     MERLIN_CHECK((!(options_.io_by_cpu && options_.max_hbm_for_vectors != 0)),
                  "[HierarchicalKV] `io_by_cpu` should not be true when "
