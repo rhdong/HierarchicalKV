@@ -26,7 +26,7 @@
 #include <type_traits>
 #include "merlin/core_kernels.cuh"
 #include "merlin/flexible_buffer.cuh"
-#include "merlin/memory_pool.hpp"
+#include "merlin/memory_pool.cuh"
 #include "merlin/types.cuh"
 #include "merlin/utils.cuh"
 
