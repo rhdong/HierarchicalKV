@@ -841,16 +841,16 @@ class HashTable {
    * @return The table size.
    */
   size_type size(cudaStream_t stream = 0) const {
-    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-    if (!reach_max_capacity_) {
-      lock.lock();
-    }
+//    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+//    if (!reach_max_capacity_) {
+//      lock.lock();
+//    }
+//
+//    size_type h_size = 0;
 
-    size_type h_size = 0;
-
-//    const size_type N = table_->buckets_num;
-    const size_type step = static_cast<size_type>(
-        std::numeric_limits<int>::max() / options_.max_bucket_size);
+    const size_type N = table_->buckets_num;
+//    const size_type step = static_cast<size_type>(
+//        std::numeric_limits<int>::max() / options_.max_bucket_size);
 //
 //    thrust::device_ptr<int> size_ptr(table_->buckets_size);
 //
