@@ -856,8 +856,8 @@ class HashTable {
 
     for (size_type start_i = 0; start_i < N; start_i += step) {
       size_type end_i = std::min(start_i + step, N);
-      h_size += thrust::reduce(thrust_par.on(stream), size_ptr + start_i,
-                               size_ptr + end_i, 0, thrust::plus<int>());
+//      h_size += thrust::reduce(thrust_par.on(stream), size_ptr + start_i,
+//                               size_ptr + end_i, 0, thrust::plus<int>());
     }
 
     CudaCheckError();
