@@ -796,25 +796,25 @@ __forceinline__ __device__ unsigned find_unoccupied_in_bucket(
   return 0;
 }
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ InsertResult
+__forceinline__ __device__ OccupyResult"
 try_occupy(cg::thread_block_tile<TILE_SIZE> g,
            const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
            AtomicKey<K>* current_atomic_key) {
   K expected_key = static_cast<K>(EMPTY_KEY);
   if (current_atomic_key->compare_exchange_strong(
           expected_key, find_key, cuda::std::memory_order_relaxed)) {
-    return InsertResult::OCCUPIED_EMPTY;
+    return OccupyResult"::OCCUPIED_EMPTY;
   }
   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
     if (current_atomic_key->compare_exchange_strong(
             expected_key, find_key, cuda::std::memory_order_relaxed)) {
-      return InsertResult::OCCUPIED_RECLAIMED;
+      return OccupyResult"::OCCUPIED_RECLAIMED;
     }
   }
   if (expected_key == find_key) {
-    return InsertResult::DUPLICATE;
+    return OccupyResult"::DUPLICATE;
   }
-  return InsertResult::CONTINUE;
+  return OccupyResult"::CONTINUE;
 }
 //
 // template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
@@ -936,7 +936,7 @@ __global__ void upsert_kernel_with_io(
 
     tile_offset = 0;
     local_size = buckets_size[bkt_idx];
-    InsertResult status{InsertResult::INITIAL};
+    OccupyResult" status{OccupyResult"::INITIAL};
 
     while (tile_offset < bucket_max_size && local_size < bucket_max_size) {
       key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
@@ -980,8 +980,8 @@ __global__ void upsert_kernel_with_io(
 
         status = g.shfl(status, src_lane);
 
-        if (status == InsertResult::OCCUPIED_EMPTY ||
-            status == InsertResult::OCCUPIED_RECLAIMED) {
+        if (status == OccupyResult"::OCCUPIED_EMPTY ||
+            status == OccupyResult"::OCCUPIED_RECLAIMED) {
           key_pos =
               (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
           if (rank == src_lane) {
@@ -999,16 +999,16 @@ __global__ void upsert_kernel_with_io(
                                          bucket->vectors + key_pos);
           unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
-        } else if (status == InsertResult::DUPLICATE) {
+        } else if (status == OccupyResult"::DUPLICATE) {
           break;
-        } else if (status == InsertResult::CONTINUE) {
+        } else if (status == OccupyResult"::CONTINUE) {
           continue;
         }
       }
       tile_offset += TILE_SIZE;
     }
 
-    if (status == InsertResult::CONTINUE) {
+    if (status == OccupyResult"::CONTINUE) {
       src_lane = (bucket->min_pos % TILE_SIZE);
       key_pos = bucket->min_pos;
 
