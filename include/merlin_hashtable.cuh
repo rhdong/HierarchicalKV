@@ -247,97 +247,100 @@ class HashTable {
                         const meta_type* metas = nullptr,  // (n)
                         cudaStream_t stream = 0,
                         bool ignore_evict_strategy = false) {
-//    if (n == 0) {
-//      return;
-//    }
-//
-//    while (!reach_max_capacity_ &&
-//           fast_load_factor(n) > options_.max_load_factor) {
-//      reserve(capacity() * 2);
-//    }
-//
-//    if (!ignore_evict_strategy) {
-//      check_evict_strategy(metas);
-//    }
-//
-//    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-//    if (!reach_max_capacity_) {
-//      lock.lock();
-//    }
+    //    if (n == 0) {
+    //      return;
+    //    }
+    //
+    //    while (!reach_max_capacity_ &&
+    //           fast_load_factor(n) > options_.max_load_factor) {
+    //      reserve(capacity() * 2);
+    //    }
+    //
+    //    if (!ignore_evict_strategy) {
+    //      check_evict_strategy(metas);
+    //    }
+    //
+    //    std::shared_lock<std::shared_timed_mutex> lock(mutex_,
+    //    std::defer_lock); if (!reach_max_capacity_) {
+    //      lock.lock();
+    //    }
 
-//    if (is_fast_mode()) {
-      const size_t block_size = options_.block_size;
-      const size_t N = n * TILE_SIZE;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+    //    if (is_fast_mode()) {
+    const size_t block_size = options_.block_size;
+    const size_t N = n * TILE_SIZE;
+    const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-      upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-          <<<grid_size, block_size, 0, stream>>>(
-              table_, keys, reinterpret_cast<const vector_type*>(values), metas,
-              table_->buckets, table_->buckets_size, table_->bucket_max_size,
-              table_->buckets_num, N);
-//    } else {
-//      vector_type** d_dst = nullptr;
-//      int* d_src_offset = nullptr;
-//
-//      CUDA_CHECK(cudaMallocAsync(&d_dst, n * sizeof(vector_type*), stream));
-//      CUDA_CHECK(cudaMemsetAsync(d_dst, 0, n * sizeof(vector_type*), stream));
-//      CUDA_CHECK(cudaMallocAsync(&d_src_offset, n * sizeof(int), stream));
-//      CUDA_CHECK(cudaMemsetAsync(d_src_offset, 0, n * sizeof(int), stream));
-//
-//      {
-//        const size_t block_size = options_.block_size;
-//        const size_t N = n * TILE_SIZE;
-//        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-//
-//        upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
-//            <<<grid_size, block_size, 0, stream>>>(
-//                table_, keys, d_dst, metas, table_->buckets,
-//                table_->buckets_size, table_->bucket_max_size,
-//                table_->buckets_num, d_src_offset, N);
-//      }
-//
-//      {
-//        thrust::device_ptr<uintptr_t> d_dst_ptr(
-//            reinterpret_cast<uintptr_t*>(d_dst));
-//        thrust::device_ptr<int> d_src_offset_ptr(d_src_offset);
-//
-//        thrust::sort_by_key(thrust_par.on(stream), d_dst_ptr, d_dst_ptr + n,
-//                            d_src_offset_ptr, thrust::less<uintptr_t>());
-//      }
-//
-//      if (options_.io_by_cpu) {
-//        static thread_local FlexPinnedBuffer<vector_type*> h_dst;
-//        static thread_local FlexPinnedBuffer<vector_type> h_values;
-//        static thread_local FlexPinnedBuffer<int> h_src_offset;
-//
-//        vector_type** l_dst = h_dst.alloc_or_reuse(n);
-//        vector_type* l_values = h_values.alloc_or_reuse(n);
-//        int* l_src_offset = h_src_offset.alloc_or_reuse(n);
-//
-//        CUDA_CHECK(cudaStreamSynchronize(stream));
-//        CUDA_CHECK(cudaMemcpy(l_dst, d_dst, n * sizeof(vector_type*),
-//                              cudaMemcpyDeviceToHost));
-//        CUDA_CHECK(cudaMemcpy(l_values, values, n * sizeof(vector_type),
-//                              cudaMemcpyDeviceToHost));
-//        CUDA_CHECK(cudaMemcpy(l_src_offset, d_src_offset, n * sizeof(int),
-//                              cudaMemcpyDeviceToHost));
-//        write_by_cpu<vector_type>(l_dst, l_values, l_src_offset, n);
-//      } else {
-//        const size_t block_size = options_.block_size;
-//        const size_t N = n * DIM;
-//        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-//
-//        write_kernel<key_type, vector_type, meta_type, DIM>
-//            <<<grid_size, block_size, 0, stream>>>(
-//                reinterpret_cast<const vector_type*>(values), d_dst,
-//                d_src_offset, N);
-//      }
-//
-//      CUDA_CHECK(cudaFreeAsync(d_dst, stream));
-//      CUDA_CHECK(cudaFreeAsync(d_src_offset, stream));
-//    }
+    upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+        <<<grid_size, block_size, 0, stream>>>(
+            table_, keys, reinterpret_cast<const vector_type*>(values), metas,
+            table_->buckets, table_->buckets_size, table_->bucket_max_size,
+            table_->buckets_num, N);
+    //    } else {
+    //      vector_type** d_dst = nullptr;
+    //      int* d_src_offset = nullptr;
+    //
+    //      CUDA_CHECK(cudaMallocAsync(&d_dst, n * sizeof(vector_type*),
+    //      stream)); CUDA_CHECK(cudaMemsetAsync(d_dst, 0, n *
+    //      sizeof(vector_type*), stream));
+    //      CUDA_CHECK(cudaMallocAsync(&d_src_offset, n * sizeof(int), stream));
+    //      CUDA_CHECK(cudaMemsetAsync(d_src_offset, 0, n * sizeof(int),
+    //      stream));
+    //
+    //      {
+    //        const size_t block_size = options_.block_size;
+    //        const size_t N = n * TILE_SIZE;
+    //        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+    //
+    //        upsert_kernel<key_type, vector_type, meta_type, DIM, TILE_SIZE>
+    //            <<<grid_size, block_size, 0, stream>>>(
+    //                table_, keys, d_dst, metas, table_->buckets,
+    //                table_->buckets_size, table_->bucket_max_size,
+    //                table_->buckets_num, d_src_offset, N);
+    //      }
+    //
+    //      {
+    //        thrust::device_ptr<uintptr_t> d_dst_ptr(
+    //            reinterpret_cast<uintptr_t*>(d_dst));
+    //        thrust::device_ptr<int> d_src_offset_ptr(d_src_offset);
+    //
+    //        thrust::sort_by_key(thrust_par.on(stream), d_dst_ptr, d_dst_ptr +
+    //        n,
+    //                            d_src_offset_ptr, thrust::less<uintptr_t>());
+    //      }
+    //
+    //      if (options_.io_by_cpu) {
+    //        static thread_local FlexPinnedBuffer<vector_type*> h_dst;
+    //        static thread_local FlexPinnedBuffer<vector_type> h_values;
+    //        static thread_local FlexPinnedBuffer<int> h_src_offset;
+    //
+    //        vector_type** l_dst = h_dst.alloc_or_reuse(n);
+    //        vector_type* l_values = h_values.alloc_or_reuse(n);
+    //        int* l_src_offset = h_src_offset.alloc_or_reuse(n);
+    //
+    //        CUDA_CHECK(cudaStreamSynchronize(stream));
+    //        CUDA_CHECK(cudaMemcpy(l_dst, d_dst, n * sizeof(vector_type*),
+    //                              cudaMemcpyDeviceToHost));
+    //        CUDA_CHECK(cudaMemcpy(l_values, values, n * sizeof(vector_type),
+    //                              cudaMemcpyDeviceToHost));
+    //        CUDA_CHECK(cudaMemcpy(l_src_offset, d_src_offset, n * sizeof(int),
+    //                              cudaMemcpyDeviceToHost));
+    //        write_by_cpu<vector_type>(l_dst, l_values, l_src_offset, n);
+    //      } else {
+    //        const size_t block_size = options_.block_size;
+    //        const size_t N = n * DIM;
+    //        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+    //
+    //        write_kernel<key_type, vector_type, meta_type, DIM>
+    //            <<<grid_size, block_size, 0, stream>>>(
+    //                reinterpret_cast<const vector_type*>(values), d_dst,
+    //                d_src_offset, N);
+    //      }
+    //
+    //      CUDA_CHECK(cudaFreeAsync(d_dst, stream));
+    //      CUDA_CHECK(cudaFreeAsync(d_src_offset, stream));
+    //    }
 
-//    CudaCheckError();
+    //    CudaCheckError();
   }
 
   /**
