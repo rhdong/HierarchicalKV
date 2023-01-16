@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#include "merlin/memory_pool.hpp"
 #include <cuda_runtime_api.h>
 #include <gtest/gtest.h>
 #include <iostream>
+#include "merlin/memory_pool.cuh"
 
 using namespace nv::merlin;
 
@@ -35,8 +35,7 @@ struct DebugAllocator final
     type* ptr = Allocator::alloc(n, stream);
     std::cout << Allocator::name << "[type_name = " << typeid(type).name()
               << "]: " << static_cast<void*>(ptr) << " allocated = " << n
-              << " x " << sizeof(type) << " bytes, stream = " << stream
-              << std::endl;
+              << " x " << sizeof(type) << " bytes, stream = " << stream << '\n';
     return ptr;
   }
 
@@ -44,33 +43,28 @@ struct DebugAllocator final
     Allocator::free(ptr, stream);
     std::cout << Allocator::name << "[type_name = " << typeid(type).name()
               << "]: " << static_cast<void*>(ptr)
-              << " freed, stream = " << stream << std::endl;
+              << " freed, stream = " << stream << '\n';
   }
 };
 
 void print_divider() {
   for (size_t i = 0; i < 80; ++i) std::cout << '-';
-  std::cout << std::endl;
+  std::cout << '\n';
 }
 
 void print_pool_options(const MemoryPoolOptions& opt) {
   print_divider();
-  std::cout << "Memory Pool Configuration" << std::endl;
+  std::cout << "Memory Pool Configuration\n";
   print_divider();
-  std::cout << "opt.buffer_size : " << opt.buffer_size << " bytes" << std::endl;
-  std::cout << "opt.max_stock : " << opt.max_stock << " buffers" << std::endl;
-  std::cout << "opt.initial_stock : " << opt.initial_stock << " buffers"
-            << std::endl;
-  std::cout << "opt.max_pending : " << opt.max_pending << " buffers "
-            << std::endl;
+  std::cout << "opt.max_stock   : " << opt.max_stock << " buffers\n";
+  std::cout << "opt.max_pending : " << opt.max_pending << " buffers\n";
   print_divider();
+  std::cout.flush();
 }
 
 MemoryPoolOptions opt{
-    4096,  //< buffer_size
-    3,     //< max_stock
-    2,     //< initial_stock
-    5,     //< max_pending
+    3,  //< max_stock
+    5,  //< max_pending
 };
 
 struct SomeType {
@@ -100,7 +94,7 @@ void test_standard_allocator() {
   using Allocator = DebugAllocator<StandardAllocator<SomeType>>;
 
   {
-    auto ptr = Allocator::make_unique(1);
+    auto ptr{Allocator::make_unique(1)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "Sync UPtr after alloc: " << *ptr << std::endl;
@@ -113,7 +107,7 @@ void test_standard_allocator() {
   }
 
   {
-    auto ptr = Allocator::make_unique(1, nullptr);
+    auto ptr{Allocator::make_unique(1, nullptr)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "Async UPtr after alloc: " << *ptr << std::endl;
@@ -126,7 +120,7 @@ void test_standard_allocator() {
   }
 
   {
-    auto ptr = Allocator::make_shared(1);
+    auto ptr{Allocator::make_shared(1)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "SPtr after alloc: " << *ptr << std::endl;
@@ -143,7 +137,7 @@ void test_host_allocator() {
   using Allocator = DebugAllocator<HostAllocator<SomeType>>;
 
   {
-    auto ptr = Allocator::make_unique(1);
+    auto ptr{Allocator::make_unique(1)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "Sync UPtr after alloc: " << *ptr << std::endl;
@@ -156,7 +150,7 @@ void test_host_allocator() {
   }
 
   {
-    auto ptr = Allocator::make_unique(1, nullptr);
+    auto ptr{Allocator::make_unique(1, nullptr)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "Async UPtr after alloc: " << *ptr << std::endl;
@@ -169,7 +163,7 @@ void test_host_allocator() {
   }
 
   {
-    auto ptr = Allocator::make_shared(1);
+    auto ptr{Allocator::make_shared(1)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "SPtr after alloc: " << *ptr << std::endl;
@@ -196,7 +190,7 @@ void test_device_allocator() {
   CUDA_CHECK(cudaStreamCreate(&stream));
 
   {
-    auto ptr = Allocator::make_unique(1);
+    auto ptr{Allocator::make_unique(1)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "Sync UPtr after alloc: " << *ptr << std::endl;
@@ -210,7 +204,7 @@ void test_device_allocator() {
   }
 
   {
-    auto ptr = Allocator::make_unique(1, stream);
+    auto ptr{Allocator::make_unique(1, stream)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "Async UPtr after alloc: " << *ptr << std::endl;
@@ -224,7 +218,7 @@ void test_device_allocator() {
   }
 
   {
-    auto ptr = Allocator::make_shared(1, stream);
+    auto ptr{Allocator::make_shared(1, stream)};
     ASSERT_NE(ptr.get(), nullptr);
 
     std::cout << "SPtr after alloc: " << *ptr << std::endl;
@@ -240,206 +234,207 @@ void test_device_allocator() {
   CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
-void test_deplete_replenish() {
-  using Allocator = DebugAllocator<StandardAllocator<SomeType>>;
-
-  // print_pool_options(opt);
-  MemoryPool<Allocator> pool(opt);
-
-  // Should have initial_stock available after startup.
-  std::cout << ".:: Initial state ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Should have no stock left after deplete.
-  pool.deplete();
-  std::cout << ".:: Deplete ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), 0);
-
-  // After replenish initial state should be restored.
-  std::cout << ".:: Replenish ::." << std::endl << pool << std::endl;
-  pool.replenish();
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-}
-
 void test_borrow_return_no_context() {
-  using Allocator = DebugAllocator<StandardAllocator<SomeType>>;
-
-  // print_pool_options(opt);
-  MemoryPool<Allocator> pool(opt);
-
-  // Initial status.
-  std::cout << ".:: Initial state ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Borrow one buffer.
-  {
-    auto buffer = pool.get_unique();
-    std::cout << ".:: Borrow 1 ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 1);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  // Return one buffer.
-  std::cout << ".:: Return 1 ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Borrow workspace.
-  {
-    auto ws = pool.get_workspace<2>();
-    std::cout << ".:: Borrow 2 (static) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  // Return workspace.
-  std::cout << ".:: Return 2 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Borrow dynamic workspace.
-  {
-    auto ws = pool.get_workspace(opt.initial_stock);
-    std::cout << ".:: Borrow 2 (dynamic) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), 0);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  std::cout << ".:: Return 2 (dynamic) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Borrow workspace that exceeds base pool size.
-  {
-    auto ws = pool.get_workspace<3>();
-    std::cout << ".:: Borrow 3 (static) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), 0);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  // Return workspace.
-  std::cout << ".:: Return 3 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.max_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Borrow workspace that exceeds maximum pool size.
-  {
-    auto ws = pool.get_workspace<4>();
-    std::cout << ".:: Borrow 4 (static) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), 0);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  // Return workspace.
-  std::cout << ".:: Return 4 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.max_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-}
-
-void test_borrow_return_with_context() {
-  using Allocator = DebugAllocator<StandardAllocator<SomeType>>;
-
   int num_devices;
   CUDA_CHECK(cudaGetDeviceCount(&num_devices));
   MERLIN_CHECK(num_devices > 0,
                "Need at least one CUDA capable device for running this test.");
+  CUDA_CHECK(cudaSetDevice(0));
 
-  CUDA_CHECK(cudaSetDevice(num_devices - 1));
-
-  cudaStream_t stream;
-  CUDA_CHECK(cudaStreamCreate(&stream));
-
-  // print_pool_options(opt);
-  MemoryPool<Allocator> pool(opt);
+  MemoryPool<DebugAllocator<DeviceAllocator<SomeType>>> pool{opt};
+  const size_t buffer_size{256L * 1024};
 
   // Initial status.
-  std::cout << ".:: Initial state ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
+  std::cout << ".:: Initial state ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 0);
   ASSERT_EQ(pool.num_pending(), 0);
 
-  // Borrow/return one buffer.
+  // Borrow and return one buffer (unique ptr).
   {
-    auto buffer = pool.get_unique(stream);
-    std::cout << ".:: Borrow 1 ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 1);
+    auto buffer{pool.get_unique(buffer_size)};
+    std::cout << ".:: Borrow 1 (unique) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 1 (unique) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 1);
+  ASSERT_EQ(pool.num_pending(), 0);
+
+  // Borrow and return one buffer (shared ptr).
+  {
+    auto buffer{pool.get_shared(buffer_size)};
+    std::cout << ".:: Borrow 1 (shared) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 1 (shared) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 1);
+  ASSERT_EQ(pool.num_pending(), 0);
+
+  // Borrow static workspace with less than `max_stock` buffers.
+  {
+    auto ws = pool.get_workspace<2>(buffer_size);
+    std::cout << ".:: Borrow 2 (static) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 2 (static) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 2);
+  ASSERT_EQ(pool.num_pending(), 0);
+
+  // Borrow dynamic workspace with less than `max_stock` buffers.
+  {
+    auto ws{pool.get_workspace(2, buffer_size)};
+    std::cout << ".:: Borrow 2 (dynamic) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
     ASSERT_EQ(pool.num_pending(), 0);
   }
 
-  std::cout << ".:: Return 1 ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock - 1);
-  ASSERT_EQ(pool.num_pending(), 1);
-
-  pool.await_pending();
-  std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
+  std::cout << ".:: Return 2 (dynamic) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 2);
   ASSERT_EQ(pool.num_pending(), 0);
 
-  // Borrow/return a workspace.
-  {
-    auto ws = pool.get_workspace<2>(stream);
-    std::cout << ".:: Borrow 2 (static) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  std::cout << ".:: Return 2 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
-  ASSERT_EQ(pool.num_pending(), 2);
-
+  // Await unfinished GPU work (shouldn't change anything).
   pool.await_pending();
-  std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
-  ASSERT_EQ(pool.num_pending(), 0);
-
-  // Borrow dynamic workspace.
-  {
-    auto ws = pool.get_workspace(opt.initial_stock, stream);
-    std::cout << ".:: Borrow 2 (dynamic) ::." << std::endl << pool << std::endl;
-    ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
-    ASSERT_EQ(pool.num_pending(), 0);
-  }
-
-  std::cout << ".:: Return 2 (dynamic) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock - 2);
-  ASSERT_EQ(pool.num_pending(), 2);
-
-  pool.await_pending();
-  std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.initial_stock);
+  std::cout << ".:: Await pending (shouldn't change anything) ::.\n"
+            << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 2);
   ASSERT_EQ(pool.num_pending(), 0);
 
   // Borrow workspace that exceeds base pool size.
   {
-    auto ws = pool.get_workspace<3>(stream);
-    std::cout << ".:: Borrow 3 (static) ::." << std::endl << pool << std::endl;
+    auto ws{pool.get_workspace<6>(buffer_size)};
+    std::cout << ".:: Borrow 6 (static) ::.\n" << pool << std::endl;
     ASSERT_EQ(pool.current_stock(), 0);
     ASSERT_EQ(pool.num_pending(), 0);
   }
-
-  // Return workspace.
-  std::cout << ".:: Return 3 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), 0);
-  ASSERT_EQ(pool.num_pending(), 3);
-
-  pool.await_pending();
-  std::cout << ".:: Await pending ::." << std::endl << pool << std::endl;
+  std::cout << ".:: Return 6 (static) ::.\n" << pool << std::endl;
   ASSERT_EQ(pool.current_stock(), opt.max_stock);
   ASSERT_EQ(pool.num_pending(), 0);
 
-  // Borrow workspace that exceeds maximum pool size.
+  // Borrow a buffer that is smaller than the current buffer size.
   {
-    auto ws = pool.get_workspace<6>(stream);
-    std::cout << ".:: Borrow 6 (static) ::." << std::endl << pool << std::endl;
+    auto ws{pool.get_unique(buffer_size / 2)};
+    std::cout << ".:: Borrow 1 (smaller) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), opt.max_stock - 1);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 1 (smaller) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), opt.max_stock);
+  ASSERT_EQ(pool.num_pending(), 0);
+
+  // Borrow a buffer that is bigger than the current buffer size.
+  {
+    auto ws{pool.get_unique(buffer_size + 37)};
+    std::cout << ".:: Borrow 1 (bigger) ::.\n" << pool << std::endl;
     ASSERT_EQ(pool.current_stock(), 0);
     ASSERT_EQ(pool.num_pending(), 0);
   }
+  std::cout << ".:: Return 1 (smaller) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 1);
+  ASSERT_EQ(pool.num_pending(), 0);
+}
 
-  // Return workspace.
-  std::cout << ".:: Return 6 (static) ::." << std::endl << pool << std::endl;
-  ASSERT_EQ(pool.current_stock(), opt.max_stock);
+void test_borrow_return_with_context() {
+  int num_devices;
+  CUDA_CHECK(cudaGetDeviceCount(&num_devices));
+  MERLIN_CHECK(num_devices > 0,
+               "Need at least one CUDA capable device for running this test.");
+  CUDA_CHECK(cudaSetDevice(0));
+
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+
+  MemoryPool<DebugAllocator<DeviceAllocator<SomeType>>> pool(opt);
+  const size_t buffer_size{256L * 1024};
+
+  // Initial status.
+  std::cout << ".:: Initial state ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 0);
+  ASSERT_EQ(pool.num_pending(), 0);
+
+  // Borrow and return one buffer (unique ptr).
+  {
+    auto buffer = pool.get_unique(buffer_size, stream);
+    std::cout << ".:: Borrow 1 (unique) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 1 (unique) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 0);
   ASSERT_EQ(pool.num_pending(), 1);
+
+  // Borrow and return one buffer (shared ptr).
+  {
+    auto buffer{pool.get_shared(buffer_size, stream)};
+    std::cout << ".:: Borrow 1 (shared) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 1 (shared) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 0);
+  ASSERT_EQ(pool.num_pending(), 1);
+
+  // Borrow static workspace with less than `max_stock` buffers.
+  {
+    auto ws = pool.get_workspace<2>(buffer_size, stream);
+    std::cout << ".:: Borrow 2 (static) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 2 (static) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 0);
+  ASSERT_EQ(pool.num_pending(), 2);
+
+  // Await unfinished GPU work.
+  pool.await_pending(stream);
+  std::cout << ".:: Await pending ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 2);
+  ASSERT_EQ(pool.num_pending(), 0);
+
+  // Borrow workspace that exceeds base pool size. Upon return we will see a
+  // partial deallocation before inserting the last buffer into the pending
+  // queue.
+  {
+    auto ws{pool.get_workspace<6>(buffer_size, stream)};
+    std::cout << ".:: Borrow 6 (static) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 0);
+  }
+  std::cout << ".:: Return 6 (static) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 3);
+  ASSERT_EQ(pool.num_pending(), 1);
+
+  // Borrow a buffer that is smaller than the current buffer size.
+  {
+    auto ws{pool.get_unique(buffer_size / 2, stream)};
+    std::cout << ".:: Borrow 1 (smaller) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 2);
+    ASSERT_EQ(pool.num_pending(), 1);
+  }
+  std::cout << ".:: Return 1 (smaller) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 2);
+  ASSERT_EQ(pool.num_pending(), 2);
+
+  // Borrow a buffer that is bigger than the current buffer size. This will
+  // evict the stock buffers which are smaller, but will not concern the buffers
+  // that are still pending.
+  {
+    auto ws{pool.get_unique(buffer_size + 37, stream)};
+    std::cout << ".:: Borrow 1 (bigger) ::.\n" << pool << std::endl;
+    ASSERT_EQ(pool.current_stock(), 0);
+    ASSERT_EQ(pool.num_pending(), 2);
+  }
+  std::cout << ".:: Return 1 (bigger) ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 0);
+  ASSERT_EQ(pool.num_pending(), 3);
+
+  // Because these buffers are too small, they will be cleared once the
+  // associated work has been completed.
+  pool.await_pending(stream);
+  std::cout << ".:: Await pending ::.\n" << pool << std::endl;
+  ASSERT_EQ(pool.current_stock(), 1);
+  ASSERT_EQ(pool.num_pending(), 0);
 
   CUDA_CHECK(cudaStreamDestroy(stream));
 }
@@ -448,9 +443,7 @@ TEST(MemoryPool, standard_allocator) { test_standard_allocator(); }
 TEST(MemoryPool, host_allocator) { test_host_allocator(); }
 TEST(MemoryPool, device_allocator) { test_device_allocator(); }
 
-TEST(MemoryPool, deplete_replenish) { test_deplete_replenish(); }
 TEST(MemoryPool, borrow_return_no_context) { test_borrow_return_no_context(); }
-
 TEST(MemoryPool, borrow_return_with_context) {
   test_borrow_return_with_context();
 }

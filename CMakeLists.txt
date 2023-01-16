@@ -91,7 +91,7 @@ TARGET_LINK_LIBRARIES(merlin_hashtable_test gtest_main)
 add_executable(merlin_memory_pool_test tests/memory_pool_test.cc.cu)
 target_compile_features(merlin_memory_pool_test PUBLIC cxx_std_14)
 set_target_properties(merlin_memory_pool_test PROPERTIES  CUDA_ARCHITECTURES OFF)
-TARGET_LINK_LIBRARIES(merlin_memory_pool_test gtest_main cudart)
+TARGET_LINK_LIBRARIES(merlin_memory_pool_test gtest_main)
 
 # TODO(Lifann): remove this line after implementing all of the unit testing to gtest.
 set(CMAKE_BUILD_TYPE "Debug")
