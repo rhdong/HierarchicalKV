@@ -32,7 +32,6 @@
 namespace nv {
 namespace merlin {
 
-__constant__ TableCore c_table_;
 /**
  * @brief Enumeration of the eviction strategies.
  *
@@ -164,6 +163,8 @@ class HashTable {
    * @brief Default constructor for the hash table class.
    */
   HashTable(){};
+
+  __constant__ TableCore c_table_;
 
   /**
    * @brief Frees the resources used by the hash table and destroys the hash
