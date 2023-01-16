@@ -186,7 +186,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
     if (start == 0) {
       table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
     }
-    start += key_num_per_op;
+    start += (key_num_per_op * 0.4);
   }
 
   start_erase = std::chrono::steady_clock::now();
