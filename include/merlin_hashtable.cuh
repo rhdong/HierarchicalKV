@@ -498,9 +498,8 @@ class HashTable {
 
       lookup_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
           <<<grid_size, block_size, 0, stream>>>(
-              table_, keys, reinterpret_cast<vector_type*>(values), metas,
-              founds, table_->buckets, table_->buckets_size,
-              table_->bucket_max_size, table_->buckets_num, N);
+              d_table_, keys, reinterpret_cast<vector_type*>(values), metas,
+              founds, N);
     } else {
       vector_type** src;
       int* dst_offset = nullptr;
