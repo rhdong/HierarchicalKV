@@ -449,7 +449,6 @@ class MemoryPool final {
 
  private:
   inline void collect_pending_unsafe(cudaStream_t stream) {
-    // std::tuple<alloc_type const*, const size_t, const cudaEvent_t>&
     auto it = std::remove_if(
         pending_.begin(), pending_.end(), [this, stream](const auto& pending) {
           const cudaError_t state = cudaEventQuery(std::get<2>(pending));
@@ -596,19 +595,6 @@ class MemoryPool final {
   std::vector<alloc_type*> stock_;
   std::vector<cudaEvent_t> ready_events_;
 
-  /*
-  struct Pending {
-    alloc_type* ptr;
-    size_t allocation_size;
-    cudaEvent_t ready_event;
-
-    Pending(alloc_type* ptr, size_t allocation_size, cudaEvent_t ready_event)
-        : ptr{ptr},
-          allocation_size{allocation_size},
-          ready_event{ready_event} {}
-  };
-  */
-  // std::tuple<alloc_type*, size_t, cudaEvent_t>
   std::vector<std::tuple<alloc_type*, size_t, cudaEvent_t>> pending_;
 };
 
