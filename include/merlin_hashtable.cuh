@@ -841,11 +841,11 @@ class HashTable {
    * @return The table size.
    */
   size_type size(cudaStream_t stream = 0) const {
-//    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
-//    if (!reach_max_capacity_) {
-//      lock.lock();
-//    }
-//
+    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+    if (!reach_max_capacity_) {
+      lock.lock();
+    }
+
 //    size_type h_size = 0;
 //
 //    const size_type N = table_->buckets_num;
@@ -860,7 +860,7 @@ class HashTable {
 //                               size_ptr + end_i, 0, thrust::plus<int>());
 //    }
 //
-//    CudaCheckError();
+    CudaCheckError();
     return 0;
   }
 
