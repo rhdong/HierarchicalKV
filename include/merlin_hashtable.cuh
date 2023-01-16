@@ -845,21 +845,21 @@ class HashTable {
 //    if (!reach_max_capacity_) {
 //      lock.lock();
 //    }
-
-    size_type h_size = 0;
-
-    const size_type N = table_->buckets_num;
-    const size_type step = static_cast<size_type>(
-        std::numeric_limits<int>::max() / options_.max_bucket_size);
-
-    thrust::device_ptr<int> size_ptr(table_->buckets_size);
-
-    for (size_type start_i = 0; start_i < N; start_i += step) {
-      size_type end_i = std::min(start_i + step, N);
+//
+//    size_type h_size = 0;
+//
+//    const size_type N = table_->buckets_num;
+//    const size_type step = static_cast<size_type>(
+//        std::numeric_limits<int>::max() / options_.max_bucket_size);
+//
+//    thrust::device_ptr<int> size_ptr(table_->buckets_size);
+//
+//    for (size_type start_i = 0; start_i < N; start_i += step) {
+//      size_type end_i = std::min(start_i + step, N);
 //      h_size += thrust::reduce(thrust_par.on(stream), size_ptr + start_i,
 //                               size_ptr + end_i, 0, thrust::plus<int>());
-    }
-
+//    }
+//
 //    CudaCheckError();
     return h_size;
   }
