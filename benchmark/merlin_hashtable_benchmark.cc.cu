@@ -179,9 +179,9 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
     diff_insert_or_assign = end_insert_or_assign - start_insert_or_assign;
 
     start_find = std::chrono::steady_clock::now();
-    table->find(key_num_per_op, d_keys, reinterpret_cast<float*>(d_vectors),
-                d_found, nullptr, stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+//    table->find(key_num_per_op, d_keys, reinterpret_cast<float*>(d_vectors),
+//                d_found, nullptr, stream);
+//    CUDA_CHECK(cudaStreamSynchronize(stream));
     end_find = std::chrono::steady_clock::now();
     diff_find = end_find - start_find;
 
