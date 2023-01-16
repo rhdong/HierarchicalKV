@@ -861,7 +861,7 @@ class HashTable {
 //    }
 //
 //    CudaCheckError();
-    return h_size;
+    return 0;
   }
 
   /**
