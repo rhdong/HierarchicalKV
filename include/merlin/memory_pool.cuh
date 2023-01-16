@@ -133,9 +133,9 @@ struct DeviceAllocator final : AllocatorBase<T, DeviceAllocator<T>> {
  * Helper structure to configure a memory pool.
  */
 struct MemoryPoolOptions {
-  size_t max_stock = 4;     ///< Amount of buffers to keep in reserve.
-  size_t max_pending = 16;  ///< Maximum amount of awaitable buffers. If this
-                            ///< limit is exceeded threads will start to block.
+  size_t max_stock{4};     ///< Amount of buffers to keep in reserve.
+  size_t max_pending{16};  ///< Maximum amount of awaitable buffers. If this
+                           ///< limit is exceeded threads will start to block.
 };
 
 /**
@@ -292,7 +292,7 @@ class MemoryPool final {
     inline StaticWorkspace(pool_type* pool, size_t requested_buffer_size,
                            cudaStream_t stream)
         : base_type(pool, stream) {
-      auto& buffers = this->buffers_;
+      auto& buffers{this->buffers_};
       this->buffer_size_ = pool->get_raw(buffers.begin(), buffers.end(),
                                          requested_buffer_size, stream);
     }
@@ -319,10 +319,10 @@ class MemoryPool final {
     }
 
    private:
-    inline DynamicWorkspace(pool_type* pool, size_t requested_buffer_size,
-                            size_t n, cudaStream_t stream)
+    inline DynamicWorkspace(pool_type* pool, size_t n,
+                            size_t requested_buffer_size, cudaStream_t stream)
         : base_type(pool, stream) {
-      auto& buffers = this->buffers_;
+      auto& buffers{this->buffers_};
       buffers.resize(n);
       this->buffer_size_ = pool->get_raw(buffers.begin(), buffers.end(),
                                          requested_buffer_size, stream);
@@ -378,31 +378,6 @@ class MemoryPool final {
     return pending_.size();
   }
 
-  void deplete(cudaStream_t stream = 0) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    deplete_unsafe(stream);
-  }
-
-  void replenish(cudaStream_t stream = 0) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (stock_.size() >= options_.max_stock) {
-      return;
-    }
-
-    // Try to collect pending buffers first.
-    collect_pending_unsafe(stream);
-
-    // Fill up until we reach the base stock.
-    while (stock_.size() < options_.max_stock) {
-      stock_.emplace_back(Allocator::alloc(buffer_size_, stream));
-    }
-
-    // To avoid trouble downstream, make sure the buffers have materialized.
-    if (stream) {
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-    }
-  }
-
   void await_pending(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
     while (!pending_.empty()) {
@@ -440,18 +415,18 @@ class MemoryPool final {
     return {this, requested_buffer_size, stream};
   }
 
-  inline DynamicWorkspace get_workspace(size_t requested_buffer_size, size_t n,
+  inline DynamicWorkspace get_workspace(size_t n, size_t requested_buffer_size,
                                         cudaStream_t stream = 0) {
-    return {this, requested_buffer_size, n, stream};
+    return {this, n, requested_buffer_size, stream};
   }
 
   friend std::ostream& operator<<<Allocator>(std::ostream&, const MemoryPool&);
 
  private:
   inline void collect_pending_unsafe(cudaStream_t stream) {
-    auto it = std::remove_if(
+    auto it{std::remove_if(
         pending_.begin(), pending_.end(), [this, stream](const auto& pending) {
-          const cudaError_t state = cudaEventQuery(std::get<2>(pending));
+          const cudaError_t state{cudaEventQuery(std::get<2>(pending))};
           switch (state) {
             case cudaSuccess:
               // Stock buffers and destroy those that are no
@@ -471,15 +446,11 @@ class MemoryPool final {
               CUDA_CHECK(state);
               return false;
           }
-        });
+        })};
     pending_.erase(it, pending_.end());
   }
 
-  inline void deplete_unsafe(cudaStream_t stream) {
-    // Collect any pending buffers first.
-    collect_pending_unsafe(stream);
-
-    // Deplete remaining buffers.
+  inline void clear_stock_unsafe(cudaStream_t stream) {
     for (auto& ptr : stock_) {
       Allocator::free(ptr, stream);
     }
@@ -512,8 +483,9 @@ class MemoryPool final {
           stock_.pop_back();
         }
       } else {
-        // Drop the stock because we need more memory.
-        deplete_unsafe(stream);
+        // Drop the stock because we need more memory and those buffers have
+        // become useless to that end.
+        clear_stock_unsafe(stream);
         buffer_size_ = requested_buffer_size;
       }
 
@@ -563,7 +535,7 @@ class MemoryPool final {
         }
 
         // Queue buffer.
-        cudaEvent_t ready_event = ready_events_.back();
+        cudaEvent_t ready_event{ready_events_.back()};
         ready_events_.pop_back();
         CUDA_CHECK(cudaEventRecord(ready_event, stream));
         pending_.emplace_back(*first, allocation_size, ready_event);
@@ -602,37 +574,38 @@ template <class Allocator>
 std::ostream& operator<<(std::ostream& os, const MemoryPool<Allocator>& pool) {
   std::lock_guard<std::mutex> lock(pool.mutex_);
 
-  for (size_t i = 0; i < 80; ++i) {
+  for (size_t i{0}; i < 80; ++i) {
     os << '-';
   }
 
   // Current stock.
-  os << std::endl << "Stock =" << std::endl;
-  for (size_t i = 0; i < pool.stock_.size(); ++i) {
-    os << "[ " << i << " ] " << static_cast<void*>(pool.stock_[i]) << std::endl;
+  os << "\nStock =\n";
+  for (size_t i{0}; i < pool.stock_.size(); ++i) {
+    os << "[ " << i << " ] buffer " << static_cast<void*>(pool.stock_[i])
+       << ", size = " << pool.buffer_size_ << '\n';
   }
 
   // Pending buffers.
-  os << std::endl << "Pending =" << std::endl;
-  for (size_t i = 0; i < pool.pending_.size(); ++i) {
+  os << "\nPending =\n";
+  for (size_t i{0}; i < pool.pending_.size(); ++i) {
     os << "[ " << i
-       << " ] buffer = " << static_cast<void*>(pool.pending_[i].first)
-       << ", ready_event = " << static_cast<void*>(pool.pending_[i].second)
-       << std::endl;
+       << " ] buffer = " << static_cast<void*>(std::get<0>(pool.pending_[i]))
+       << ", size = " << std::get<1>(pool.pending_[i]) << ", ready_event = "
+       << static_cast<void*>(std::get<2>(pool.pending_[i])) << '\n';
   }
 
   // Available ready events.
-  os << std::endl << "Ready Events =" << std::endl;
-  for (size_t i = 0; i < pool.ready_events_.size(); ++i) {
+  os << "\nReady Events =\n";
+  for (size_t i{0}; i < pool.ready_events_.size(); ++i) {
     os << "[ " << i << " ] " << static_cast<void*>(pool.ready_events_[i])
-       << std::endl;
+       << '\n';
   }
 
-  for (size_t i = 0; i < 80; ++i) {
+  for (size_t i{0}; i < 80; ++i) {
     os << '-';
   }
 
-  os << std::endl;
+  os << '\n';
   return os;
 }
 
