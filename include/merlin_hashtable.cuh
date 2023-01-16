@@ -846,11 +846,11 @@ class HashTable {
       lock.lock();
     }
 
-//    size_type h_size = 0;
-//
-//    const size_type N = table_->buckets_num;
-//    const size_type step = static_cast<size_type>(
-//        std::numeric_limits<int>::max() / options_.max_bucket_size);
+    size_type h_size = 0;
+
+    const size_type N = table_->buckets_num;
+    const size_type step = static_cast<size_type>(
+        std::numeric_limits<int>::max() / options_.max_bucket_size);
 //
 //    thrust::device_ptr<int> size_ptr(table_->buckets_size);
 //
@@ -861,7 +861,7 @@ class HashTable {
 //    }
 //
     CudaCheckError();
-    return 0;
+    return h_size;
   }
 
   /**
