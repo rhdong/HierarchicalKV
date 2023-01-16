@@ -171,36 +171,13 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
                             stream);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-//    size_t size = table->size(stream);
-    ////    std::cout << "start=" << size << std::endl;
-    //    for(int i = 0;i < 1; i++){
-    //      start_insert_or_assign = std::chrono::steady_clock::now();
-    //      table->insert_or_assign(key_num_per_op, d_keys,
-    //                              reinterpret_cast<float*>(d_vectors),
-    //                              d_metas, stream);
-    //      CUDA_CHECK(cudaDeviceSynchronize());
-    //      end_insert_or_assign = std::chrono::steady_clock::now();
-    //      diff_insert_or_assign = (end_insert_or_assign -
-    //      start_insert_or_assign); float insert_tput = key_num_per_op /
-    //      diff_insert_or_assign.count() / (1024 * 1024 * 1024.0); std::cout <<
-    //      i << " " << insert_tput << std::endl;
-    //    }
-    //    CUDA_CHECK(cudaDeviceSynchronize());
-    //    std::cout << "start=" << size << std::endl;
-    for (int i = 0; i < 1; i++) {
-      cudaEvent_t start, stop;
-      cudaEventCreate(&start);
-      cudaEventCreate(&stop);
-      cudaEventRecord(start);
-      table->insert_or_assign(key_num_per_op, d_keys,
-                              reinterpret_cast<float*>(d_vectors), d_metas,
-                              stream);
-      cudaEventRecord(stop);
-      cudaEventSynchronize(stop);
-      float milliseconds = 0;
-      cudaEventElapsedTime(&milliseconds, start, stop);
-      std::cout << i << " " << milliseconds << std::endl;
-    }
+    start_insert_or_assign = std::chrono::steady_clock::now();
+    table->insert_or_assign(key_num_per_op, d_keys,
+                            reinterpret_cast<float*>(d_vectors), d_metas,
+                            stream);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    end_insert_or_assign = std::chrono::steady_clock::now();
+    diff_insert_or_assign = (end_insert_or_assign - start_insert_or_assign);
 
     start_find = std::chrono::steady_clock::now();
     table->find(key_num_per_op, d_keys, reinterpret_cast<float*>(d_vectors),
@@ -212,8 +189,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
     cur_load_factor = table->load_factor(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if (start == 0) {
-      //      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase
-      //      kernel.
+      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
     }
     start += key_num_per_op;
   }
