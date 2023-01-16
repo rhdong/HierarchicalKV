@@ -170,7 +170,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
                             reinterpret_cast<float*>(d_vectors), d_metas,
                             stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    for(int i = 0;i < 10; i++){
+    for(int i = 0;i < 1; i++){
       start_insert_or_assign = std::chrono::steady_clock::now();
       table->insert_or_assign(key_num_per_op, d_keys,
                               reinterpret_cast<float*>(d_vectors), d_metas,
