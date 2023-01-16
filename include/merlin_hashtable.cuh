@@ -59,7 +59,7 @@ struct HashTableOptions {
   size_t max_hbm_for_vectors = 0;  ///< The maximum HBM for vectors, in bytes.
   size_t max_bucket_size = 128;    ///< The length of each bucket.
   float max_load_factor = 0.5f;    ///< The max load factor before rehashing.
-  int block_size = 1024;           ///< The default block size for CUDA kernels.
+  int block_size = 128;            ///< The default block size for CUDA kernels.
   int device_id = 0;               ///< The ID of device.
   bool io_by_cpu = false;  ///< The flag indicating if the CPU handles IO.
   EvictStrategy evict_strategy = EvictStrategy::kLru;  ///< The evict strategy.
