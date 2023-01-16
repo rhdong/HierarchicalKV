@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <cuda_runtime_api.h>
 #include <algorithm>
 #include <array>
 #include <functional>
