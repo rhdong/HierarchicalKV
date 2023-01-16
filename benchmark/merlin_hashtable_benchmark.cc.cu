@@ -170,20 +170,37 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
                             reinterpret_cast<float*>(d_vectors), d_metas,
                             stream);
     CUDA_CHECK(cudaDeviceSynchronize());
-    size_t size = table->size(stream);
+
+//    size_t size = table->size(stream);
+////    CUDA_CHECK(cudaDeviceSynchronize());
+////    std::cout << "start=" << size << std::endl;
+//    for(int i = 0;i < 1; i++){
+//      start_insert_or_assign = std::chrono::steady_clock::now();
+//      table->insert_or_assign(key_num_per_op, d_keys,
+//                              reinterpret_cast<float*>(d_vectors), d_metas,
+//                              stream);
+//      CUDA_CHECK(cudaDeviceSynchronize());
+//      end_insert_or_assign = std::chrono::steady_clock::now();
+//      diff_insert_or_assign = (end_insert_or_assign - start_insert_or_assign);
+//      float insert_tput =
+//      key_num_per_op / diff_insert_or_assign.count() / (1024 * 1024 * 1024.0);
+//      std::cout << i << " " << insert_tput << std::endl;
+//    }
+     cudaEvent_t start, stop;
+cudaEventCreate(&start);
+cudaEventCreate(&stop);
 //    CUDA_CHECK(cudaDeviceSynchronize());
 //    std::cout << "start=" << size << std::endl;
     for(int i = 0;i < 1; i++){
-      start_insert_or_assign = std::chrono::steady_clock::now();
+      cudaEventRecord(start);
       table->insert_or_assign(key_num_per_op, d_keys,
                               reinterpret_cast<float*>(d_vectors), d_metas,
                               stream);
-      CUDA_CHECK(cudaDeviceSynchronize());
-      end_insert_or_assign = std::chrono::steady_clock::now();
-      diff_insert_or_assign = (end_insert_or_assign - start_insert_or_assign);
-      float insert_tput =
-      key_num_per_op / diff_insert_or_assign.count() / (1024 * 1024 * 1024.0);
-      std::cout << i << " " << insert_tput << std::endl;
+      cudaEventRecord(stop);
+      cudaEventSynchronize(stop);
+      float milliseconds = 0;
+      cudaEventElapsedTime(&milliseconds, start, stop);
+      std::cout << i << " " << milliseconds << std::endl;
     }
 
     start_find = std::chrono::steady_clock::now();
