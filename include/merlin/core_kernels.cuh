@@ -1146,7 +1146,7 @@ __global__ void scatter_update_with_io(
     const size_t bucket_max_size, const size_t buckets_num, size_t N) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
-    int rank = g.thread_rank();
+  int rank = g.thread_rank();
   Bucket<K, V, M, DIM>* bucket;
   unsigned found_vote;
 
@@ -1157,7 +1157,6 @@ __global__ void scatter_update_with_io(
 
     const K insert_key = keys[key_idx];
     const V* insert_value = values + key_idx;
-    const M insert_meta = metas[key_idx];
 
     size_t bkt_idx = 0;
     size_t start_idx = 0;
@@ -1166,34 +1165,122 @@ __global__ void scatter_update_with_io(
 
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
-    M * dst_meta = reinterpret_cast<M*>(&(bucket->metas[0]));
 
-    auto const found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
+    found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
         g, bucket->keys, bucket->vectors, insert_value,
         &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx,
         bucket_max_size);
 
     if (found_vote) {
-      auto const src_lane = __ffs(found_vote) - 1;
-      uint32_t key_pos =
-          (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      auto dst = bucket->vectors + key_pos;
+//      auto const src_lane = __ffs(found_vote) - 1;
+//      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+//      auto dst = bucket->vectors + key_pos;
 //      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
 //      copy_vector<V, DIM, TILE_SIZE>(g, insert_value, dst);
 //      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       //      src_lane = __ffs(found_vote) - 1;
       //      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size
-      //      - 1);
-      if (rank == src_lane) {
-//        update_meta(bucket, key_pos, metas, key_idx);
-//        *dst_meta = 0;
-      }
-//      if (local_size >= bucket_max_size) {
-//        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-//                                                     bucket_max_size);
-//      }
-      //
+      //      - 1); if (rank == src_lane) {
+      //        update_meta(bucket, key_pos, metas, key_idx);
+      //      }
+      //      if (local_size >= bucket_max_size) {
+      //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+      //                                                     bucket_max_size);
+      //      }
+      //      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      //      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+      //                                     bucket->vectors + key_pos);
+      //      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       continue;
+    }
+
+    tile_offset = 0;
+    local_size = buckets_size[bkt_idx];
+    OccupyResult occupy_result{OccupyResult::INITIAL};
+
+    while (tile_offset < bucket_max_size && local_size < bucket_max_size) {
+      key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+
+      const K current_key =
+          bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
+
+      found_vote = g.ballot(insert_key == current_key);
+
+      if (found_vote) {
+        src_lane = __ffs(found_vote) - 1;
+        key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+        if (rank == src_lane) {
+          update_meta(bucket, key_pos, metas, key_idx);
+        }
+        if (local_size >= bucket_max_size) {
+          refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+                                                       bucket_max_size);
+        }
+        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                       bucket->vectors + key_pos);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+
+        break;
+      }
+      const unsigned empty_vote =
+          g.ballot(current_key == static_cast<K>(EMPTY_KEY) ||
+                   current_key == static_cast<K>(RECLAIM_KEY));
+      if (empty_vote) {
+        src_lane = __ffs(empty_vote) - 1;
+
+        key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+        AtomicKey<K>* current_atomic_key = &(bucket->keys[key_pos]);
+
+        if (rank == src_lane) {
+          occupy_result = try_occupy<K, V, M, DIM, TILE_SIZE>(
+              g, bucket, insert_key, current_atomic_key);
+        }
+
+        occupy_result = g.shfl(occupy_result, src_lane);
+
+        if (occupy_result == OccupyResult::OCCUPIED_EMPTY ||
+            occupy_result == OccupyResult::OCCUPIED_RECLAIMED) {
+          key_pos =
+              (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+          if (rank == src_lane) {
+            update_meta(bucket, key_pos, metas, key_idx);
+            atomicAdd(&(buckets_size[bkt_idx]), 1);
+          }
+          local_size++;
+
+          if (local_size >= bucket_max_size) {
+            refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
+                                                         bucket_max_size);
+          }
+          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                         bucket->vectors + key_pos);
+          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          break;
+        } else if (occupy_result == OccupyResult::DUPLICATE) {
+          break;
+        } else if (occupy_result == OccupyResult::CONTINUE) {
+          continue;
+        }
+      }
+      tile_offset += TILE_SIZE;
+    }
+
+    if (occupy_result == OccupyResult::CONTINUE) {
+      src_lane = (bucket->min_pos % TILE_SIZE);
+      key_pos = bucket->min_pos;
+
+      if (rank == src_lane) {
+        bucket->keys[key_pos].store(insert_key,
+                                    cuda::std::memory_order_relaxed);
+        update_meta(bucket, key_pos, metas, key_idx);
+      }
+      refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
+                                     bucket->vectors + key_pos);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     }
   }
 }
