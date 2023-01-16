@@ -186,12 +186,12 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
 //      key_num_per_op / diff_insert_or_assign.count() / (1024 * 1024 * 1024.0);
 //      std::cout << i << " " << insert_tput << std::endl;
 //    }
-     cudaEvent_t start, stop;
-cudaEventCreate(&start);
-cudaEventCreate(&stop);
 //    CUDA_CHECK(cudaDeviceSynchronize());
 //    std::cout << "start=" << size << std::endl;
     for(int i = 0;i < 1; i++){
+      cudaEvent_t start, stop;
+      cudaEventCreate(&start);
+      cudaEventCreate(&stop);
       cudaEventRecord(start);
       table->insert_or_assign(key_num_per_op, d_keys,
                               reinterpret_cast<float*>(d_vectors), d_metas,
