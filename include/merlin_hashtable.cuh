@@ -848,7 +848,7 @@ class HashTable {
 
     size_type h_size = 0;
 
-    const size_type N = table_->buckets_num;
+//    const size_type N = table_->buckets_num;
     const size_type step = static_cast<size_type>(
         std::numeric_limits<int>::max() / options_.max_bucket_size);
 //
