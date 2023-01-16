@@ -712,12 +712,10 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
   return 0;
 }
 
-
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __global__ void upsert_kernel_with_io(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
-    const V* __restrict values, const M* __restrict metas,
-    size_t N) {
+    const V* __restrict values, const M* __restrict metas, size_t N) {
   Bucket<K, V, M, DIM>* buckets = table->buckets;
   int* buckets_size = table->buckets_size;
   const size_t bucket_max_size = table->bucket_max_size;
