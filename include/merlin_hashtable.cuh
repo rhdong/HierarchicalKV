@@ -164,7 +164,6 @@ class HashTable {
    */
   HashTable(){};
 
-  __constant__ TableCore c_table_[0];
 
   /**
    * @brief Frees the resources used by the hash table and destroys the hash
@@ -174,6 +173,7 @@ class HashTable {
     if (initialized_) {
       initialized_ = false;
       destroy_table<key_type, vector_type, meta_type, DIM>(&table_);
+      CUDA_CHECK(cudaFree(d_table_));
     }
   }
 
@@ -183,7 +183,6 @@ class HashTable {
   HashTable(HashTable&&) = delete;
   HashTable& operator=(HashTable&&) = delete;
 
- public:
   /**
    * @brief Initialize a merlin::HashTable.
    *
@@ -203,11 +202,13 @@ class HashTable {
         &table_, options_.init_capacity, options_.max_capacity,
         options_.max_hbm_for_vectors, options_.max_bucket_size);
     options_.block_size = SAFE_GET_BLOCK_SIZE(options_.block_size);
-    CUDA_CHECK(cudaMemcpyToSymbol(c_table_, table_, sizeof(TableCore)));
+    CUDA_CHECK(cudaMemcpyToSymbol(d_table_, table_, sizeof(TableCore)));
     reach_max_capacity_ = (options_.init_capacity * 2 > options_.max_capacity);
     MERLIN_CHECK((!(options_.io_by_cpu && options_.max_hbm_for_vectors != 0)),
                  "[HierarchicalKV] `io_by_cpu` should not be true when "
                  "`max_hbm_for_vectors` is not 0!");
+    CUDA_CHECK(cudaMalloc((void**)&(d_table_), sizeof(TableCore)));
+    CUDA_CHECK(cudaMemcpy(d_table_, table_, sizeof(TableCore), cudaMemcpyDefault));
     initialized_ = true;
     CudaCheckError();
   }
@@ -275,7 +276,7 @@ class HashTable {
 
     upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
         <<<grid_size, block_size, 0, stream>>>(
-            c_table_, keys, reinterpret_cast<const vector_type*>(values), metas,N);
+            d_table_, keys, reinterpret_cast<const vector_type*>(values), metas,N);
     //    } else {
     //      vector_type** d_dst = nullptr;
     //      int* d_src_offset = nullptr;
@@ -1135,6 +1136,7 @@ class HashTable {
  private:
   HashTableOptions options_;
   TableCore* table_ = nullptr;
+  TableCore* d_table_ = nullptr;
   size_t shared_mem_size_ = 0;
   bool reach_max_capacity_ = false;
   bool initialized_ = false;
