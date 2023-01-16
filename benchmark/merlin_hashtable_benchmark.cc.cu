@@ -182,9 +182,9 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
       float insert_tput =
       key_num_per_op / diff_insert_or_assign.count() / (1024 * 1024 * 1024.0);
       std::cout << i << " " << insert_tput << std::endl;
-//      size_t size = table->size(stream);
-//      CUDA_CHECK(cudaDeviceSynchronize());
-//      std::cout << "end=" << size << std::endl;
+      size_t size = table->size(stream);
+      CUDA_CHECK(cudaDeviceSynchronize());
+      std::cout << "end=" << size << std::endl;
     }
 
     start_find = std::chrono::steady_clock::now();
