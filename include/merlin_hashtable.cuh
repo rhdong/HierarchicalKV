@@ -164,7 +164,7 @@ class HashTable {
    */
   HashTable(){};
 
-  __constant__ TableCore c_table_;
+  __constant__ TableCore c_table_[0];
 
   /**
    * @brief Frees the resources used by the hash table and destroys the hash
@@ -203,7 +203,7 @@ class HashTable {
         &table_, options_.init_capacity, options_.max_capacity,
         options_.max_hbm_for_vectors, options_.max_bucket_size);
     options_.block_size = SAFE_GET_BLOCK_SIZE(options_.block_size);
-    cudaMemcpyToSymbol(&c_table_, table_, sizeof(TableCore));
+    cudaMemcpyToSymbol(c_table_, table_, sizeof(TableCore));
     reach_max_capacity_ = (options_.init_capacity * 2 > options_.max_capacity);
     MERLIN_CHECK((!(options_.io_by_cpu && options_.max_hbm_for_vectors != 0)),
                  "[HierarchicalKV] `io_by_cpu` should not be true when "
@@ -275,7 +275,7 @@ class HashTable {
 
     upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
         <<<grid_size, block_size, 0, stream>>>(
-            &c_table_, keys, reinterpret_cast<const vector_type*>(values), metas,N);
+            c_table_, keys, reinterpret_cast<const vector_type*>(values), metas,N);
     //    } else {
     //      vector_type** d_dst = nullptr;
     //      int* d_src_offset = nullptr;
