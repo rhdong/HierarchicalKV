@@ -107,6 +107,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
   options.max_capacity = init_capacity;
   options.max_hbm_for_vectors = nv::merlin::GB(hbm4values);
   options.io_by_cpu = io_by_cpu;
+  options.block_size = 128;
   options.evict_strategy = EvictStrategy::kCustomized;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
