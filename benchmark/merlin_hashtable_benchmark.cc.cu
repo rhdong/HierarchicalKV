@@ -188,7 +188,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
     cur_load_factor = table->load_factor(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if (start == 0) {
-      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
+//      table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
     }
     start += key_num_per_op;
   }
