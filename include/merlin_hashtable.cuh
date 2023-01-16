@@ -273,9 +273,7 @@ class HashTable {
 
     upsert_kernel_with_io<key_type, vector_type, meta_type, DIM, TILE_SIZE>
         <<<grid_size, block_size, 0, stream>>>(
-            table_, keys, reinterpret_cast<const vector_type*>(values), metas,
-            table_->buckets, table_->buckets_size, table_->bucket_max_size,
-            table_->buckets_num, N);
+            c_table_, keys, reinterpret_cast<const vector_type*>(values), metas,N);
     //    } else {
     //      vector_type** d_dst = nullptr;
     //      int* d_src_offset = nullptr;
@@ -1135,7 +1133,7 @@ class HashTable {
  private:
   HashTableOptions options_;
   TableCore* table_ = nullptr;
-  __constant__ TableCore c_table_;
+  __constant__ TableCore c_table_[1];
   size_t shared_mem_size_ = 0;
   bool reach_max_capacity_ = false;
   bool initialized_ = false;
