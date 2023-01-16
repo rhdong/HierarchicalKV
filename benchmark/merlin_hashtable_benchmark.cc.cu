@@ -176,7 +176,7 @@ void test_main(const size_t init_capacity = 64 * 1024 * 1024UL,
       table->insert_or_assign(key_num_per_op, d_keys,
                               reinterpret_cast<float*>(d_vectors), d_metas,
                               stream);
-      CUDA_CHECK(cudaDeviceSynchronize(stream));
+      CUDA_CHECK(cudaDeviceSynchronize());
       end_insert_or_assign = std::chrono::steady_clock::now();
       diff_insert_or_assign = (end_insert_or_assign - start_insert_or_assign);
       float insert_tput =
