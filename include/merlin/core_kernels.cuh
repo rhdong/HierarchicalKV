@@ -688,9 +688,9 @@ __forceinline__ __device__ void update_meta(
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ unsigned find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
-    const AtomicKey<K>* __restrict bucket_keys, V* __restrict bucket_vectors,
-    const V* value, Mutex* klock, const K& find_key, uint32_t& tile_offset,
-    const uint32_t& start_idx, const size_t& bucket_max_size) {
+    const AtomicKey<K>* __restrict bucket_keys, const K& find_key,
+    uint32_t& tile_offset, const uint32_t& start_idx,
+    const size_t& bucket_max_size) {
   uint32_t key_pos = 0;
 
 #pragma unroll
@@ -744,9 +744,7 @@ __global__ void upsert_kernel_with_io(
                                  buckets_num, bucket_max_size);
 
     found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, bucket->vectors, insert_value,
-        &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx,
-        bucket_max_size);
+        g, bucket->keys, insert_key, tile_offset, start_idx, bucket_max_size);
 
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
