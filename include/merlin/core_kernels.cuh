@@ -690,14 +690,14 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
     cg::thread_block_tile<TILE_SIZE> g,
     const AtomicKey<K>* __restrict bucket_keys, const K& find_key,
     uint32_t& tile_offset, const uint32_t& start_idx,
-    const size_t& bucket_max_size) {
+    const size_t& bucket_max_size, uint32_t& step) {
   uint32_t key_pos = 0;
 
 #pragma unroll
   for (tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
-    key_pos =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
+    key_pos = (start_idx + tile_offset + step + g.thread_rank()) &
+              (bucket_max_size - 1);
     auto const current_key =
         bucket_keys[key_pos].load(cuda::std::memory_order_relaxed);
     auto const found_vote = g.ballot(find_key == current_key);
@@ -708,6 +708,7 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
     if (g.any(current_key == EMPTY_KEY)) {
       return 0;
     }
+    step += TILE_SIZE;
   }
   return 0;
 }
@@ -739,16 +740,19 @@ __global__ void upsert_kernel_with_io(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
     int src_lane = -1;
+    uint32_t step = 0;
 
     bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
                                  buckets_num, bucket_max_size);
 
     found_vote = find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-        g, bucket->keys, insert_key, tile_offset, start_idx, bucket_max_size);
+        g, bucket->keys, insert_key, tile_offset, start_idx, bucket_max_size,
+        step);
 
     if (found_vote) {
       src_lane = __ffs(found_vote) - 1;
-      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+      key_pos =
+          (start_idx + tile_offset + step + src_lane) & (bucket_max_size - 1);
       auto dst = bucket->vectors + key_pos;
 
       if (rank == src_lane) {
@@ -767,9 +771,10 @@ __global__ void upsert_kernel_with_io(
     tile_offset = 0;
     local_size = buckets_size[bkt_idx];
     OccupyResult occupy_result{OccupyResult::INITIAL};
+    step = 0;
 
     while (tile_offset < bucket_max_size && local_size < bucket_max_size) {
-      key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+      key_pos = (start_idx + tile_offset + step + rank) & (bucket_max_size - 1);
 
       const K current_key =
           bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
@@ -778,7 +783,8 @@ __global__ void upsert_kernel_with_io(
 
       if (found_vote) {
         src_lane = __ffs(found_vote) - 1;
-        key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+        key_pos =
+            (start_idx + tile_offset + step + src_lane) & (bucket_max_size - 1);
         if (rank == src_lane) {
           update_meta(bucket, key_pos, metas, key_idx);
         }
@@ -799,7 +805,8 @@ __global__ void upsert_kernel_with_io(
       if (empty_vote) {
         src_lane = __ffs(empty_vote) - 1;
 
-        key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
+        key_pos =
+            (start_idx + tile_offset + step + rank) & (bucket_max_size - 1);
         AtomicKey<K>* current_atomic_key = &(bucket->keys[key_pos]);
 
         if (rank == src_lane) {
@@ -811,8 +818,8 @@ __global__ void upsert_kernel_with_io(
 
         if (occupy_result == OccupyResult::OCCUPIED_EMPTY ||
             occupy_result == OccupyResult::OCCUPIED_RECLAIMED) {
-          key_pos =
-              (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+          key_pos = (start_idx + tile_offset + step + src_lane) &
+                    (bucket_max_size - 1);
           if (rank == src_lane) {
             update_meta(bucket, key_pos, metas, key_idx);
             atomicAdd(&(buckets_size[bkt_idx]), 1);
@@ -835,6 +842,7 @@ __global__ void upsert_kernel_with_io(
         }
       }
       tile_offset += TILE_SIZE;
+      step += TILE_SIZE;
     }
 
     if (occupy_result == OccupyResult::CONTINUE) {
