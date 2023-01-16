@@ -638,34 +638,6 @@ __device__ __forceinline__ unsigned find_in_bucket(
 }
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ unsigned find_unoccupied_in_bucket(
-    cg::thread_block_tile<TILE_SIZE> g,
-    const Bucket<K, V, M, DIM>* __restrict bucket, const K find_key,
-    uint32_t& tile_offset, const uint32_t start_idx, const size_t bucket_size,
-    const size_t bucket_max_size) {
-  uint32_t key_offset = 0;
-  K current_key = 0;
-  unsigned unoccupied_vote = 0;
-
-  if (bucket_size == bucket_max_size) return 0;
-
-#pragma unroll
-  for (tile_offset = 0; tile_offset < bucket_max_size;
-       tile_offset += TILE_SIZE) {
-    key_offset =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    current_key =
-        bucket->keys[key_offset].load(cuda::std::memory_order_relaxed);
-    unoccupied_vote =
-        g.ballot(current_key == EMPTY_KEY || current_key == RECLAIM_KEY);
-    if (unoccupied_vote) {
-      return unoccupied_vote;
-    }
-  }
-  return 0;
-}
-
-template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ OccupyResult
 try_occupy(cg::thread_block_tile<TILE_SIZE> g,
            const Bucket<K, V, M, DIM>* __restrict bucket, K find_key,
@@ -739,68 +711,12 @@ __device__ __forceinline__ unsigned find_in_bucket_with_io(
   }
   return 0;
 }
-//
-// template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
-//__global__ void upsert_kernel_with_io__(
-//    const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
-//    const V* __restrict values, const M* __restrict metas,
-//    Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict buckets_size,
-//    const size_t bucket_max_size, const size_t buckets_num, size_t N) {
-//  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
-//  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
-//  //  int rank = g.thread_rank();
-//  //  Bucket<K, V, M, DIM>* bucket;
-//
-//  for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
-//    size_t key_idx = t / TILE_SIZE;
-//
-//    const K insert_key = keys[key_idx];
-//    const V* insert_value = values + key_idx;
-//
-//    size_t bkt_idx = 0;
-//    size_t start_idx = 0;
-//    uint32_t tile_offset = 0;
-//    uint32_t key_pos = -1;
-//
-//    Bucket<K, V, M, DIM>* bucket = get_key_position<K>(
-//        buckets, insert_key, bkt_idx, start_idx, buckets_num,
-//        bucket_max_size);
-//
-//    find_in_bucket_with_io<K, V, M, DIM, TILE_SIZE>(
-//        g, bucket->keys, bucket->vectors, insert_value,
-//        &(table->locks[bkt_idx]), insert_key, tile_offset, start_idx,
-//        bucket_max_size);
-//
-//    if (found_vote) {
-//      auto const src_lane = __ffs(found_vote) - 1;
-//      key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-//      key_pos = g.shfl(key_pos, src_lane);
-//      auto dst = bucket_vectors + key_pos;
-//      lock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-//      copy_vector<V, DIM, TILE_SIZE>(g, value, dst);
-//      unlock<Mutex, TILE_SIZE, true>(g, *klock, src_lane);
-//      //      src_lane = __ffs(found_vote) - 1;
-//      //      key_pos = (start_idx + tile_offset + src_lane) &
-//      (bucket_max_size
-//      //      - 1); if (rank == src_lane) {
-//      //        update_meta(bucket, key_pos, metas, key_idx);
-//      //      }
-//      //      if (local_size >= bucket_max_size) {
-//      //        refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket,
-//      //                                                     bucket_max_size);
-//      //      }
-//      //
-//      //      continue;
-//    }
-//  }
-//}
+
 
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __global__ void upsert_kernel_with_io(
     const Table<K, V, M, DIM>* __restrict table, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
-    //    Bucket<K, V, M, DIM>* __restrict buckets, int* __restrict
-    //    buckets_size, const size_t bucket_max_size, const size_t buckets_num,
     size_t N) {
   Bucket<K, V, M, DIM>* buckets = table->buckets;
   int* buckets_size = table->buckets_size;
@@ -945,7 +861,6 @@ __global__ void upsert_kernel_with_io(
 
 /* Upsert with the end-user specified meta.
  */
-
 template <class K, class V, class M, size_t DIM, uint32_t TILE_SIZE = 4>
 __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
                               const K* __restrict keys, V** __restrict vectors,
