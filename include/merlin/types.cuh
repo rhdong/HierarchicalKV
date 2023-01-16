@@ -279,7 +279,7 @@ class BaseKVFile {
                        const M* metas) = 0;
 };
 
-enum class InsertResult {
+enum class OccupyResult {
   INITIAL,         ///< Initial status
   CONTINUE,        ///< Insert did not succeed, continue trying to insert
   OCCUPIED_EMPTY,  ///< New pair inserted successfully
