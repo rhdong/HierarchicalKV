@@ -274,14 +274,13 @@ class HashTable {
       using Selector =
           SelectUpsertKernelWithIO<key_type, vector_type, meta_type, DIM>;
       static thread_local int step_counter = 0;
-      static thread_local float load_factor = 0.0;
 
       if (((step_counter++) % 7) == 0) {
-        load_factor = fast_load_factor();
+        load_factor_ = fast_load_factor();
       }
 
       Selector::execute_kernel(
-          load_factor, options_.block_size, stream, n, d_table_, keys,
+          load_factor_, options_.block_size, stream, n, d_table_, keys,
           reinterpret_cast<const vector_type*>(values), metas);
     } else {
       vector_type** d_dst = nullptr;
@@ -1140,6 +1139,7 @@ class HashTable {
   std::atomic_bool reach_max_capacity_{false};
   bool initialized_ = false;
   mutable std::shared_timed_mutex mutex_;
+  float load_factor_ = 0.0;
 };
 
 }  // namespace merlin
