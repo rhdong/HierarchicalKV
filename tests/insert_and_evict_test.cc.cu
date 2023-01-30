@@ -68,9 +68,12 @@ void test_insert_and_evict() {
     h_metas[i] = 100;
   }
 
-  CUDA_CHECK(cudaMemcpyAsync(d_keys, h_keys, keynum * sizeof(K), cudaMemcpyHostToDevice, stream));
-  CUDA_CHECK(cudaMemcpyAsync(d_vectors, h_vectors, keynum * DIM * sizeof(V), cudaMemcpyHostToDevice, stream));
-  CUDA_CHECK(cudaMemcpyAsync(d_metas, h_metas, keynum * sizeof(M), cudaMemcpyHostToDevice, stream));
+  CUDA_CHECK(cudaMemcpyAsync(d_keys, h_keys, keynum * sizeof(K),
+                             cudaMemcpyHostToDevice, stream));
+  CUDA_CHECK(cudaMemcpyAsync(d_vectors, h_vectors, keynum * DIM * sizeof(V),
+                             cudaMemcpyHostToDevice, stream));
+  CUDA_CHECK(cudaMemcpyAsync(d_metas, h_metas, keynum * sizeof(M),
+                             cudaMemcpyHostToDevice, stream));
 
   table->insert_or_assign(keynum, d_keys, d_vectors, d_metas, stream);
   size_t s0 = table->size(stream);
@@ -85,9 +88,12 @@ void test_insert_and_evict() {
     h_metas[i] = 10000;
   }
 
-  CUDA_CHECK(cudaMemcpyAsync(d_keys, h_keys, keynum * sizeof(K), cudaMemcpyHostToDevice, stream));
-  CUDA_CHECK(cudaMemcpyAsync(d_vectors, h_vectors, keynum * DIM * sizeof(V), cudaMemcpyHostToDevice, stream));
-  CUDA_CHECK(cudaMemcpyAsync(d_metas, h_metas, keynum * sizeof(M), cudaMemcpyHostToDevice, stream));
+  CUDA_CHECK(cudaMemcpyAsync(d_keys, h_keys, keynum * sizeof(K),
+                             cudaMemcpyHostToDevice, stream));
+  CUDA_CHECK(cudaMemcpyAsync(d_vectors, h_vectors, keynum * DIM * sizeof(V),
+                             cudaMemcpyHostToDevice, stream));
+  CUDA_CHECK(cudaMemcpyAsync(d_metas, h_metas, keynum * sizeof(M),
+                             cudaMemcpyHostToDevice, stream));
 
   K* d_ev_keys = nullptr;
   V* d_ev_vectors = nullptr;
@@ -96,7 +102,8 @@ void test_insert_and_evict() {
   test_util::getBufferOnDevice(&d_ev_vectors, keynum * sizeof(V) * DIM, stream);
   test_util::getBufferOnDevice(&d_ev_metas, keynum * sizeof(M), stream);
 
-  //size_t n_evicted = table->insert_and_evict(keynum, d_keys, d_vectors, d_metas, d_ev_keys, d_ev_vectors, d_ev_metas, stream);
+  // size_t n_evicted = table->insert_and_evict(keynum, d_keys, d_vectors,
+  // d_metas, d_ev_keys, d_ev_vectors, d_ev_metas, stream);
   size_t n_evicted = 0;
   table->insert_or_assign(keynum, d_keys, d_vectors, d_metas, stream);
   size_t s1 = table->size(stream);
@@ -105,11 +112,15 @@ void test_insert_and_evict() {
   printf("----> check n_evicted = %llu\n", n_evicted);
   printf("----> check s1 = %llu\n", s1);
 
-  size_t h_counter = table->export_batch(table->capacity(), 0, d_keys, d_vectors, d_metas, stream);
+  size_t h_counter = table->export_batch(table->capacity(), 0, d_keys,
+                                         d_vectors, d_metas, stream);
   printf("----> check dump size: %llu\n", h_counter);
-  CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, h_counter * sizeof(K), cudaMemcpyDeviceToHost, stream));
-  CUDA_CHECK(cudaMemcpyAsync(h_metas, d_metas, h_counter * sizeof(M), cudaMemcpyDeviceToHost, stream));
-  CUDA_CHECK(cudaMemcpyAsync(h_vectors, d_vectors, h_counter * DIM * sizeof(V), cudaMemcpyDeviceToHost, stream));
+  CUDA_CHECK(cudaMemcpyAsync(h_keys, d_keys, h_counter * sizeof(K),
+                             cudaMemcpyDeviceToHost, stream));
+  CUDA_CHECK(cudaMemcpyAsync(h_metas, d_metas, h_counter * sizeof(M),
+                             cudaMemcpyDeviceToHost, stream));
+  CUDA_CHECK(cudaMemcpyAsync(h_vectors, d_vectors, h_counter * DIM * sizeof(V),
+                             cudaMemcpyDeviceToHost, stream));
   CUDA_CHECK(cudaStreamSynchronize(stream));
 
   for (size_t i = 0; i < h_counter; i++) {

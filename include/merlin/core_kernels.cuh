@@ -811,7 +811,8 @@ __global__ void upsert_kernel_with_io(
       tile_offset += TILE_SIZE;
     }
 
-    if (occupy_result == OccupyResult::CONTINUE || occupy_result == OccupyResult::INITIAL) {
+    if (occupy_result == OccupyResult::CONTINUE ||
+        occupy_result == OccupyResult::INITIAL) {
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       src_lane = (bucket->min_pos % TILE_SIZE);
       key_pos = bucket->min_pos;
@@ -983,7 +984,9 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
       tile_offset += TILE_SIZE;
     }
 
-    if (occupy_result == OccupyResult::CONTINUE) {
+    if (occupy_result == OccupyResult::CONTINUE ||
+        occupy_result == OccupyResult::INITIAL) {
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       src_lane = (bucket->min_pos % TILE_SIZE);
       key_pos = bucket->min_pos;
 
@@ -994,6 +997,8 @@ __global__ void upsert_kernel(const Table<K, V, M, DIM>* __restrict table,
         update_meta(bucket, key_pos, metas, key_idx);
       }
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
+
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     }
   }
 }
