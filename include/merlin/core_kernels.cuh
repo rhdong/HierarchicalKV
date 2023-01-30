@@ -812,6 +812,7 @@ __global__ void upsert_kernel_with_io(
     }
 
     if (occupy_result == OccupyResult::CONTINUE || occupy_result == OccupyResult::INITIAL) {
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       src_lane = (bucket->min_pos % TILE_SIZE);
       key_pos = bucket->min_pos;
 
@@ -821,7 +822,6 @@ __global__ void upsert_kernel_with_io(
         update_meta(bucket, key_pos, metas, key_idx);
       }
       refresh_bucket_meta<K, V, M, DIM, TILE_SIZE>(g, bucket, bucket_max_size);
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, DIM, TILE_SIZE>(g, values + key_idx,
                                      bucket->vectors + key_pos);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
