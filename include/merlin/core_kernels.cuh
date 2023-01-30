@@ -811,7 +811,7 @@ __global__ void upsert_kernel_with_io(
       tile_offset += TILE_SIZE;
     }
 
-    if (occupy_result == OccupyResult::CONTINUE) {
+    if (occupy_result == OccupyResult::CONTINUE || occupy_result == OccupyResult::INITIAL) {
       src_lane = (bucket->min_pos % TILE_SIZE);
       key_pos = bucket->min_pos;
 
