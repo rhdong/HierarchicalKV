@@ -25,7 +25,7 @@ constexpr uint64_t DIM = 4;
 using K = int64_t;
 using M = uint64_t;
 using V = float;
-using Table = nv::merlin::HashTable<K, V, M, DIM>;
+using Table = nv::merlin::HashTable<K, V, M>;
 using TableOptions = nv::merlin::HashTableOptions;
 
 void test_insert_and_evict() {
@@ -35,6 +35,7 @@ void test_insert_and_evict() {
   size_t keynum = bucket_num * bucket_len;
   opt.max_capacity = keynum;
   opt.init_capacity = keynum;
+  opt.dim = DIM;
   opt.max_hbm_for_vectors = keynum * (sizeof(K) + DIM * sizeof(V) + sizeof(M));
   opt.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
 
