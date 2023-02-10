@@ -41,7 +41,6 @@ template <class K, class V, class M>
 struct Bucket {
   AtomicKey<K>* keys;    // HBM
   AtomicMeta<M>* metas;  // HBM
-  V* cache;              // HBM(optional)
   V* vectors;            // Pinned memory or HBM
 
   /* For upsert_kernel without user specified metas
