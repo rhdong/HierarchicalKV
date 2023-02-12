@@ -801,7 +801,9 @@ __forceinline__ __device__ OverrideResult try_swap_min_meta(
     const M cur_meta = bucket->cur_meta.load(cuda::std::memory_order_relaxed);
     if (bucket->metas[key_pos].compare_exchange_strong(
             min_meta, cur_meta + 1, cuda::std::memory_order_relaxed)) {
-      evicted_metas[key_idx] = min_meta;
+      if (evicted_metas != nullptr) {
+        evicted_metas[key_idx] = min_meta;
+      }
       return OverrideResult::SUCCESS;
     } else {
       return OverrideResult::CONTINUE;
@@ -812,7 +814,9 @@ __forceinline__ __device__ OverrideResult try_swap_min_meta(
     }
     if (bucket->metas[key_pos].compare_exchange_strong(
             min_meta, metas[key_idx], cuda::std::memory_order_relaxed)) {
-      evicted_metas[key_idx] = min_meta;
+      if (evicted_metas != nullptr) {
+        evicted_metas[key_idx] = min_meta;
+      }
       return OverrideResult::SUCCESS;
     } else {
       return OverrideResult::CONTINUE;
