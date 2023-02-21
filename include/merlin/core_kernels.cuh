@@ -1655,6 +1655,7 @@ __global__ void dump_kernel(const Table<K, V, M>* __restrict table,
     M meta = bucket->metas[key_idx].load(cuda::std::memory_order_relaxed);
 
     if (key != static_cast<K>(EMPTY_KEY) &&
+        key != static_cast<K>(RECLAIM_KEY) &&
         pred(key, meta, pattern, threshold)) {
       size_t local_index = atomicAdd(&block_acc, 1);
       block_result_key[local_index] = key;
