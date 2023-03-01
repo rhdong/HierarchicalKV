@@ -151,15 +151,28 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
     if ((*table)->remaining_hbm_for_vectors >= slice_real_size) {
       CUDA_CHECK(cudaMalloc(&((*table)->slices[i]), slice_real_size));
       (*table)->remaining_hbm_for_vectors -= slice_real_size;
+
+//      cudaPointerAttributes attr;
+//      memset(&attr, 0, sizeof(cudaPointerAttributes));
+//      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
+//      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
     } else {
       (*table)->is_pure_hbm = false;
       CUDA_CHECK(
           cudaMallocHost(&((*table)->slices[i]), slice_real_size,
                          cudaHostAllocMapped | cudaHostAllocWriteCombined));
+//      cudaPointerAttributes attr;
+//      memset(&attr, 0, sizeof(cudaPointerAttributes));
+//      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
+//      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
     }
     for (int j = 0; j < num_of_buckets_in_one_slice; j++) {
       (*table)->buckets[start + num_of_allocated_buckets + j].vectors =
           (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
+      size_t x = start + num_of_allocated_buckets + j;
+      if(x == 786454 || x == 262167){
+        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
+      }
     }
     num_of_allocated_buckets += num_of_buckets_in_one_slice;
   }
@@ -562,6 +575,43 @@ __global__ void write_kernel(const V* __restrict src, V** __restrict dst,
   }
 }
 
+template <class V, uint32_t TILE_SIZE = 4>
+__device__ __forceinline__ void copy_vector_new(
+    cg::thread_block_tile<TILE_SIZE> const& g, const V* src, V* dst,
+    const size_t dim) {
+  //  for (auto i = g.thread_rank(); i < dim; i += g.size()) {
+  //    dst[i] = src[i];
+  //  }
+
+  cuda::barrier<cuda::thread_scope_device> bar;
+  init(&bar, 1);
+  cuda::memcpy_async(g, dst, src, dim * sizeof(V), bar);
+
+  bar.arrive_and_wait();
+}
+template <class K, class V, class M, uint32_t TILE_SIZE = 4>
+__global__ void write_kernel_new(const V* __restrict src, V** __restrict dst,
+                                 const int* __restrict src_offset,
+                                 const size_t dim, const size_t N) {
+  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+  for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
+    int vec_index = int(t / TILE_SIZE);
+    //    int dim_index = t % dim;
+
+    if (dst[vec_index] != nullptr) {
+      if (src_offset != nullptr) {
+        copy_vector_new<V, TILE_SIZE>(g, (src + src_offset[vec_index] * dim),
+                                      dst[vec_index], dim);
+      } else {
+        copy_vector_new<V, TILE_SIZE>(g, (src + vec_index * dim),
+                                      dst[vec_index], dim);
+      }
+    }
+  }
+}
+
 /* Write the values of delta_or_val into the table. If the key[i] is already in
    the table indicted be @exists[i], a @delta_or_val[i] will be added to the the
    existing value. if the key not exists, the value @val_or_delta[i] will be
@@ -748,6 +798,12 @@ __forceinline__ __device__ Bucket<K, V, M>* get_key_position(
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
   bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
+  if(key == 195000 || key == 945731) {
+//    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\t, buckets_num=%lld\tbucket_max_size=%lld\tglobal_idx=%lld\n",
+    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\n",
+           key, hashed_key, bkt_idx, start_idx //buckets_num, bucket_max_size, global_idx
+           );
+  }
   return buckets + bkt_idx;
 }
 
@@ -773,7 +829,7 @@ __forceinline__ __device__ OverrideResult try_override_min_meta(
   if (metas == nullptr) {
     const M cur_meta = bucket->cur_meta.load(cuda::std::memory_order_relaxed);
     if (bucket->metas[key_pos].compare_exchange_strong(
-            min_meta, cur_meta + 1, cuda::std::memory_order_relaxed)) {
+            min_meta, cur_meta + 1, cuda::std::memory_order_seq_cst)) {
       bucket->cur_meta.fetch_add(1, cuda::std::memory_order_relaxed);
       return OverrideResult::SUCCESS;
     } else {
@@ -784,7 +840,7 @@ __forceinline__ __device__ OverrideResult try_override_min_meta(
       return OverrideResult::REFUSED;
     }
     if (bucket->metas[key_pos].compare_exchange_strong(
-            min_meta, metas[key_idx], cuda::std::memory_order_relaxed)) {
+            min_meta, metas[key_idx], cuda::std::memory_order_seq_cst)) {
       return OverrideResult::SUCCESS;
     } else {
       return OverrideResult::CONTINUE;
@@ -901,6 +957,12 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
 
           if (local_size >= bucket_max_size) {
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
+          }
+
+          if(insert_key == 945731) {
+//            break;
+//            printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
+//                   insert_key, insert_value[0], static_cast<V*>(bucket->vectors + key_pos * dim));
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,
@@ -1131,7 +1193,6 @@ __global__ void upsert_kernel(const Table<K, V, M>* __restrict table,
             *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
           }
           local_size = g.shfl(local_size, src_lane);
-          ;
 
           if (local_size >= bucket_max_size) {
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
@@ -1166,7 +1227,6 @@ __global__ void upsert_kernel(const Table<K, V, M>* __restrict table,
         continue;
       }
       // override_result == OverrideResult::SUCCESS
-
       if (rank == src_lane) {
         bucket->keys[key_pos].store(insert_key,
                                     cuda::std::memory_order_relaxed);
@@ -1655,6 +1715,7 @@ __global__ void dump_kernel(const Table<K, V, M>* __restrict table,
     M meta = bucket->metas[key_idx].load(cuda::std::memory_order_relaxed);
 
     if (key != static_cast<K>(EMPTY_KEY) &&
+        key != static_cast<K>(RECLAIM_KEY) &&
         pred(key, meta, pattern, threshold)) {
       size_t local_index = atomicAdd(&block_acc, 1);
       block_result_key[local_index] = key;
