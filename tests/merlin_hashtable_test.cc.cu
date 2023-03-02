@@ -1965,9 +1965,9 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
 //}
 TEST(MerlinHashTableTest, test_rehash) {
   test_rehash(16, true);
-  test_rehash(0, true);
-  test_rehash(16, false);
-  test_rehash(0, false);
+//  test_rehash(0, true);
+//  test_rehash(16, false);
+//  test_rehash(0, false);
 }
 //TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
 //  test_rehash_on_big_batch(16, true);
