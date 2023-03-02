@@ -130,13 +130,12 @@ __global__ void get_bucket_keys_metas(Bucket<K, V, M>* __restrict buckets,
 }
 
 template <class K, class V, class M>
-__global__ void initial_slice(V** slices, const size_t slice_index, V* slice) {
+__global__ void set_mem_slice(V** slices, const size_t slice_index, V* slice) {
   slices[slice_index] = slice;
 }
 
 template <class K, class V, class M>
-__global__ void deinitial_slice(V** slices, const size_t slice_index,
-                                V** slice) {
+__global__ void get_mem_slice(V** slices, const size_t slice_index, V** slice) {
   *slice = slices[slice_index];
 }
 
@@ -206,7 +205,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
                          cudaHostAllocMapped | cudaHostAllocWriteCombined));
     }
 
-    initial_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, slice);
+    set_mem_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, slice);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     {
@@ -369,17 +368,21 @@ void destroy_table(Table<K, V, M>** table) {
   CUDA_CHECK(cudaFreeHost(keys));
   CUDA_CHECK(cudaFreeHost(metas));
 
+  V** slice;
+  CUDA_CHECK(cudaMallocHost(&slice, sizeof(V**)));
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
-    V* slice;
-    deinitial_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, &slice);
+    CUDA_CHECK(cudaMemset(slice, 0, sizeof(V**)));
+    get_mem_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, slice);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
-    if (is_on_device(slice)) {
-      CUDA_CHECK(cudaFree(slice));
+    if (is_on_device(*slice)) {
+      CUDA_CHECK(cudaFree(*slice));
     } else {
-      CUDA_CHECK(cudaFreeHost(slice));
+      CUDA_CHECK(cudaFreeHost(*slice));
     }
   }
+  CUDA_CHECK(cudaFreeHost(slice));
+
   {
     const size_t block_size = 512;
     const size_t N = (*table)->buckets_num;
