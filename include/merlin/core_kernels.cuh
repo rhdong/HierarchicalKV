@@ -266,6 +266,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
   }
   CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
+  CUDA_CHECK(cudaDeviceSynchronize());
   CudaCheckError();
 }
 
