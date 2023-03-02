@@ -349,7 +349,7 @@ template <class K, class V, class M>
 void destroy_table(Table<K, V, M>** table) {
   AtomicKey<K>** keys;
   AtomicMeta<M>** metas;
-  cudaStream_t& stream;
+  cudaStream_t stream;
 
   CUDA_CHECK(cudaStreamCreate(&stream));
 
