@@ -366,8 +366,8 @@ void destroy_table(Table<K, V, M>** table) {
     CUDA_CHECK(cudaFree(*keys));
     CUDA_CHECK(cudaFree(*metas));
   }
-  CUDA_CHECK(cudaFree(keys));
-  CUDA_CHECK(cudaFree(metas));
+  CUDA_CHECK(cudaFreeHost(keys));
+  CUDA_CHECK(cudaFreeHost(metas));
 
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
     V* slice;
