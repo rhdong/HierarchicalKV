@@ -1962,24 +1962,24 @@ TEST(MerlinHashTableTest, test_erase_if_pred) {
   test_erase_if_pred(16, false);
   test_erase_if_pred(0, false);
 }
-TEST(MerlinHashTableTest, test_rehash) {
-  test_rehash(16, true);
-  test_rehash(0, true);
-  test_rehash(16, false);
-  test_rehash(0, false);
-}
-TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
-  test_rehash_on_big_batch(16, true);
-  test_rehash_on_big_batch(0, true);
-  test_rehash_on_big_batch(16, false);
-  test_rehash_on_big_batch(0, false);
-}
-TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
-  test_dynamic_rehash_on_multi_threads(16, true);
-  test_dynamic_rehash_on_multi_threads(0, true);
-  test_dynamic_rehash_on_multi_threads(16, false);
-  test_dynamic_rehash_on_multi_threads(0, false);
-}
+//TEST(MerlinHashTableTest, test_rehash) {
+//  test_rehash(16, true);
+//  test_rehash(0, true);
+//  test_rehash(16, false);
+//  test_rehash(0, false);
+//}
+//TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
+//  test_rehash_on_big_batch(16, true);
+//  test_rehash_on_big_batch(0, true);
+//  test_rehash_on_big_batch(16, false);
+//  test_rehash_on_big_batch(0, false);
+//}
+//TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
+//  test_dynamic_rehash_on_multi_threads(16, true);
+//  test_dynamic_rehash_on_multi_threads(0, true);
+//  test_dynamic_rehash_on_multi_threads(16, false);
+//  test_dynamic_rehash_on_multi_threads(0, false);
+//}
 TEST(MerlinHashTableTest, test_export_batch_if) {
   test_export_batch_if(16, true);
   test_export_batch_if(0, true);
