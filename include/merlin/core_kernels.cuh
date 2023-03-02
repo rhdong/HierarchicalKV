@@ -180,7 +180,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
   size_t num_of_allocated_buckets = 0;
   cudaStream_t stream;
 
-  CUDA_CHECK(cudaStreamCreate(stream));
+  CUDA_CHECK(cudaStreamCreate(&stream));
 
   realloc<V**>(
       &((*table)->slices), (*table)->num_of_memory_slices * sizeof(V*),
