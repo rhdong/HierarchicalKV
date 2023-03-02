@@ -389,7 +389,7 @@ void destroy_table(Table<K, V, M>** table) {
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
     release_locks<Mutex><<<grid_size, block_size, 0, stream>>>(
         (*table)->locks, 0, (*table)->buckets_num);
-    CUDA_CHECK(cudaStreamDestroy(stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
   }
   CUDA_CHECK(cudaFree((*table)->slices));
   CUDA_CHECK(cudaFree((*table)->buckets_size));
@@ -397,7 +397,9 @@ void destroy_table(Table<K, V, M>** table) {
   CUDA_CHECK(cudaFree((*table)->locks));
   CUDA_CHECK(cudaFree(*table));
 
+  CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
+
   CUDA_CHECK(cudaDeviceSynchronize());
   CudaCheckError();
 }
