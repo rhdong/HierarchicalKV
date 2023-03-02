@@ -94,8 +94,6 @@ struct Table {
   Mutex* locks;                 // mutex for write buckets
   int* buckets_size;            // size of each buckets.
   V** slices;                   // Handles of the HBM/ HMEM slices.
-  AtomicKey<K>* keys;           // Handles of the keys on HBM pool.
-  AtomicMeta<M>* metas;         // Handles of the metas on HBM pool.
   size_t dim;                   // Dimension of the `vectors`.
   size_t bytes_per_slice;       // Size by byte of one slice.
   size_t num_of_memory_slices;  // Number of vectors memory slices.
