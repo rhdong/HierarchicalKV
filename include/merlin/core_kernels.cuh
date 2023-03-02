@@ -111,6 +111,50 @@ __global__ void create_atomic_metas(Bucket<K, V, M>* __restrict buckets,
   }
 }
 
+template <class K, class V, class M>
+__global__ void initial_bucket_key_meta(Bucket<K, V, M>* __restrict buckets,
+                                        const size_t index, AtomicKey<K>* keys,
+                                        AtomicMeta<M>* metas) {
+  Bucket<K, V, M>* __restrict bucket = buckets + index;
+  bucket->keys = keys;
+  bucket->metas = metas;
+}
+
+template <class K, class V, class M>
+__global__ void deinitial_bucket_key_meta(Bucket<K, V, M>* __restrict buckets,
+                                          const size_t index,
+                                          AtomicKey<K>** keys,
+                                          AtomicMeta<M>** metas) {
+  Bucket<K, V, M>* __restrict bucket = buckets + index;
+  *keys = bucket->keys;
+  *metas = bucket->metas;
+}
+
+template <class K, class V, class M>
+__global__ void initial_slice(V** slices, const size_t slice_index, V* slice) {
+  slices[slice_index] = slice;
+}
+
+template <class K, class V, class M>
+__global__ void deinitial_slice(V** slices, const size_t slice_index,
+                                V** slice) {
+  *slice = slices[slice_index];
+}
+
+template <class K, class V, class M>
+__global__ void initial_bucket_vectors(Bucket<K, V, M>* __restrict buckets,
+                                       const size_t start, const size_t end,
+                                       V** slices, const size_t slice_index,
+                                       const size_t bucket_max_size,
+                                       const size_t dim) {
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+  size_t bucket_index = start + tid;
+  if (bucket_index < end) {
+    buckets[bucket_index].vectors =
+        slices[slice_index] + bucket_index * bucket_max_size * dim;
+  }
+}
+
 /* 2GB per slice by default.*/
 constexpr size_t kDefaultBytesPerSlice = (8ul << 30);
 
@@ -136,7 +180,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
       ((*table)->bucket_max_size * sizeof(V) * (*table)->dim);
   size_t num_of_allocated_buckets = 0;
 
-  realloc_managed<V**>(
+  realloc<V**>(
       &((*table)->slices), (*table)->num_of_memory_slices * sizeof(V*),
       ((*table)->num_of_memory_slices + num_of_memory_slices) * sizeof(V*));
 
@@ -148,41 +192,51 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
     size_t slice_real_size = num_of_buckets_in_one_slice *
                              (*table)->bucket_max_size * sizeof(V) *
                              (*table)->dim;
-    if ((*table)->remaining_hbm_for_vectors >= slice_real_size) {
-      CUDA_CHECK(cudaMalloc(&((*table)->slices[i]), slice_real_size));
-      (*table)->remaining_hbm_for_vectors -= slice_real_size;
 
-//      cudaPointerAttributes attr;
-//      memset(&attr, 0, sizeof(cudaPointerAttributes));
-//      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
-//      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
+    V* slice;
+    if ((*table)->remaining_hbm_for_vectors >= slice_real_size) {
+      CUDA_CHECK(cudaMalloc(&(slice), slice_real_size));
+      (*table)->remaining_hbm_for_vectors -= slice_real_size;
     } else {
       (*table)->is_pure_hbm = false;
       CUDA_CHECK(
-          cudaMallocHost(&((*table)->slices[i]), slice_real_size,
+          cudaMallocHost(&(slice), slice_real_size,
                          cudaHostAllocMapped | cudaHostAllocWriteCombined));
-//      cudaPointerAttributes attr;
-//      memset(&attr, 0, sizeof(cudaPointerAttributes));
-//      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
-//      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
     }
-    for (int j = 0; j < num_of_buckets_in_one_slice; j++) {
-      (*table)->buckets[start + num_of_allocated_buckets + j].vectors =
-          (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
-      size_t x = start + num_of_allocated_buckets + j;
-      if(x == 786454 || x == 262167){
-        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
-      }
+
+    initial_slice<K, V, M><<<1, 1>>>((*table)->slices, i, slice);
+
+    {
+      const size_t block_size = 512;
+      const size_t N = end - start + 1;
+      const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+      initial_bucket_vectors<K, V, M><<<grid_size, block_size>>>(
+          (*table)->buckets,
+          static_cast<size_t>(start + num_of_allocated_buckets),
+          static_cast<size_t>(start + num_of_allocated_buckets +
+                              num_of_buckets_in_one_slice),
+          (*table)->slices, i, (*table)->bucket_max_size, (*table)->dim);
+      CUDA_CHECK(cudaDeviceSynchronize());
     }
+
     num_of_allocated_buckets += num_of_buckets_in_one_slice;
   }
 
   (*table)->num_of_memory_slices += num_of_memory_slices;
-  for (int i = start; i < end; i++) {
-    CUDA_CHECK(cudaMalloc(&((*table)->buckets[i].keys),
-                          (*table)->bucket_max_size * sizeof(AtomicKey<K>)));
-    CUDA_CHECK(cudaMalloc(&((*table)->buckets[i].metas),
-                          (*table)->bucket_max_size * sizeof(AtomicMeta<M>)));
+
+  {
+    for (int i = start; i < end; i++) {
+      AtomicKey<K>* keys;
+      AtomicMeta<M>* metas;
+      CUDA_CHECK(cudaMalloc(&(keys),
+                            (*table)->bucket_max_size * sizeof(AtomicKey<K>)));
+      CUDA_CHECK(cudaMalloc(&(metas),
+                            (*table)->bucket_max_size * sizeof(AtomicMeta<M>)));
+      initial_bucket_key_meta<K, V, M>
+          <<<1, 1>>>((*table)->buckets, i, keys, metas);
+    }
+    CUDA_CHECK(cudaDeviceSynchronize());
   }
 
   {
@@ -255,8 +309,7 @@ void create_table(Table<K, V, M>** table, const size_t dim,
   CUDA_CHECK(cudaMemset((*table)->buckets_size, 0,
                         (*table)->buckets_num * sizeof(int)));
 
-  CUDA_CHECK(
-      cudaMallocManaged((void**)&((*table)->buckets),
+  CUDA_CHECK(cudaMalloc((void**)&((*table)->buckets),
                         (*table)->buckets_num * sizeof(Bucket<K, V, M>)));
   CUDA_CHECK(cudaMemset((*table)->buckets, 0,
                         (*table)->buckets_num * sizeof(Bucket<K, V, M>)));
@@ -274,7 +327,7 @@ void double_capacity(Table<K, V, M>** table) {
   realloc<int*>(&((*table)->buckets_size), (*table)->buckets_num * sizeof(int),
                 (*table)->buckets_num * sizeof(int) * 2);
 
-  realloc_managed<Bucket<K, V, M>*>(
+  realloc<Bucket<K, V, M>*>(
       &((*table)->buckets), (*table)->buckets_num * sizeof(Bucket<K, V, M>),
       (*table)->buckets_num * sizeof(Bucket<K, V, M>) * 2);
 
@@ -288,16 +341,29 @@ void double_capacity(Table<K, V, M>** table) {
 /* free all of the resource of a Table. */
 template <class K, class V, class M>
 void destroy_table(Table<K, V, M>** table) {
+  AtomicKey<K>** keys;
+  AtomicMeta<M>** metas;
+  CUDA_CHECK(cudaMallocHost(&keys, sizeof(AtomicKey<K>**)));
+  CUDA_CHECK(cudaMallocHost(&metas, sizeof(AtomicMeta<M>**)));
   for (int i = 0; i < (*table)->buckets_num; i++) {
-    CUDA_CHECK(cudaFree((*table)->buckets[i].keys));
-    CUDA_CHECK(cudaFree((*table)->buckets[i].metas));
+    CUDA_CHECK(cudaMemset(keys, 0, sizeof(AtomicKey<K>**)));
+    CUDA_CHECK(cudaMemset(metas, 0, sizeof(AtomicMeta<M>**)));
+    deinitial_bucket_key_meta<K, V, M>
+        <<<1, 1>>>((*table)->buckets, i, keys, metas);
+    CUDA_CHECK(cudaFree(*keys));
+    CUDA_CHECK(cudaFree(*metas));
   }
+  CUDA_CHECK(cudaFree(keys));
+  CUDA_CHECK(cudaFree(metas));
 
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
-    if (is_on_device((*table)->slices[i])) {
-      CUDA_CHECK(cudaFree((*table)->slices[i]));
+    V* slice;
+    deinitial_slice<K, V, M><<<1, 1>>>((*table)->slices, i, &slice);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    if (is_on_device(slice)) {
+      CUDA_CHECK(cudaFree(slice));
     } else {
-      CUDA_CHECK(cudaFreeHost((*table)->slices[i]));
+      CUDA_CHECK(cudaFreeHost(slice));
     }
   }
   {
@@ -798,11 +864,13 @@ __forceinline__ __device__ Bucket<K, V, M>* get_key_position(
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
   bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
-  if(key == 195000 || key == 945731) {
-//    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\t, buckets_num=%lld\tbucket_max_size=%lld\tglobal_idx=%lld\n",
-    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\n",
-           key, hashed_key, bkt_idx, start_idx //buckets_num, bucket_max_size, global_idx
-           );
+  if (key == 195000 || key == 945731) {
+    //    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\t,
+    //    buckets_num=%lld\tbucket_max_size=%lld\tglobal_idx=%lld\n",
+    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\n", key,
+           hashed_key, bkt_idx,
+           start_idx  // buckets_num, bucket_max_size, global_idx
+    );
   }
   return buckets + bkt_idx;
 }
@@ -959,10 +1027,13 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
           }
 
-          if(insert_key == 945731) {
-//            break;
-//            printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
-//                   insert_key, insert_value[0], static_cast<V*>(bucket->vectors + key_pos * dim));
+          if (insert_key == 945731) {
+            //            break;
+            //            printf("key=%lld\t hashed_key=%f\t
+            //            bucket->vectors=%p\n",
+            //                   insert_key, insert_value[0],
+            //                   static_cast<V*>(bucket->vectors + key_pos *
+            //                   dim));
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,
