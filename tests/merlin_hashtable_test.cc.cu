@@ -54,7 +54,7 @@ void create_random_keys(K* h_keys, M* h_metas, V* h_vectors, int KEY_NUM) {
     }
     if (h_vectors != nullptr) {
       for (size_t j = 0; j < DIM; j++) {
-        h_vectors[i * DIM + j] = static_cast<float>(num * 0.00001);
+        h_vectors[i * DIM + j] = static_cast<V>(num * 0.00001);
       }
     }
     i++;
@@ -69,7 +69,7 @@ void create_continuous_keys(K* h_keys, M* h_metas, V* h_vectors, int KEY_NUM,
     h_metas[i] = h_keys[i];
     if (h_vectors != nullptr) {
       for (size_t j = 0; j < DIM; j++) {
-        h_vectors[i * DIM + j] = static_cast<float>(h_keys[i] * 0.00001);
+        h_vectors[i * DIM + j] = static_cast<V>(h_keys[i] * 0.00001);
       }
     }
   }
@@ -116,7 +116,7 @@ void create_keys_in_one_buckets(K* h_keys, M* h_metas, V* h_vectors,
       h_metas[i] = num;
     }
     for (size_t j = 0; j < DIM; j++) {
-      *(h_vectors + i * DIM + j) = static_cast<float>(num * 0.00001);
+      *(h_vectors + i * DIM + j) = static_cast<V>(num * 0.00001);
     }
     i++;
   }
@@ -234,7 +234,7 @@ void test_basic(size_t max_hbm_for_vectors, bool use_constant_memory) {
       ASSERT_EQ(h_metas[i], h_keys[i]);
       for (int j = 0; j < options.dim; j++) {
         ASSERT_EQ(h_vectors[i * options.dim + j],
-                  static_cast<float>(h_keys[i] * 0.00001));
+                  static_cast<V>(h_keys[i] * 0.00001));
       }
     }
     CUDA_CHECK(cudaMemset(d_new_vectors, 2, KEY_NUM * sizeof(V) * options.dim));
@@ -308,7 +308,7 @@ void test_basic(size_t max_hbm_for_vectors, bool use_constant_memory) {
       ASSERT_EQ(h_metas[i], h_keys[i]);
       for (int j = 0; j < options.dim; j++) {
         ASSERT_EQ(h_vectors[i * options.dim + j],
-                  static_cast<float>(h_keys[i] * 0.00001));
+                  static_cast<V>(h_keys[i] * 0.00001));
       }
     }
     ASSERT_EQ(found_num, KEY_NUM);
@@ -332,7 +332,7 @@ void test_basic(size_t max_hbm_for_vectors, bool use_constant_memory) {
       ASSERT_EQ(h_metas[i], h_keys[i]);
       for (int j = 0; j < options.dim; j++) {
         ASSERT_EQ(h_vectors[i * options.dim + j],
-                  static_cast<float>(h_keys[i] * 0.00001));
+                  static_cast<V>(h_keys[i] * 0.00001));
       }
     }
   }
@@ -550,7 +550,7 @@ void test_erase_if_pred(size_t max_hbm_for_vectors, bool use_constant_memory) {
         ASSERT_EQ(h_metas[i], h_keys[i]);
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors[i * options.dim + j],
-                    static_cast<float>(h_keys[i] * 0.00001));
+                    static_cast<V>(h_keys[i] * 0.00001));
         }
       }
     }
@@ -681,7 +681,7 @@ void test_rehash(size_t max_hbm_for_vectors, bool use_constant_memory) {
         ASSERT_EQ(h_metas[i], h_keys[i]);
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors[i * options.dim + j],
-                    static_cast<float>(h_keys[i] * 0.00001));
+                    static_cast<V>(h_keys[i] * 0.00001));
         }
       }
     }
@@ -815,7 +815,7 @@ void test_rehash_on_big_batch(size_t max_hbm_for_vectors,
       ASSERT_EQ(h_metas[i], h_keys[i]);
       for (int j = 0; j < options.dim; j++) {
         ASSERT_EQ(h_vectors[i * options.dim + j],
-                  static_cast<float>(h_keys[i] * 0.00001));
+                  static_cast<V>(h_keys[i] * 0.00001));
       }
     }
   }
@@ -922,7 +922,7 @@ void test_dynamic_rehash_on_multi_threads(size_t max_hbm_for_vectors,
           found_num++;
           for (int j = 0; j < options.dim; j++) {
             ASSERT_EQ(h_vectors[i * options.dim + j],
-                      static_cast<float>(h_keys[i] * 0.00001));
+                      static_cast<V>(h_keys[i] * 0.00001));
           }
         }
       }
@@ -1055,7 +1055,7 @@ void test_export_batch_if(size_t max_hbm_for_vectors,
         found_num++;
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors[i * options.dim + j],
-                    static_cast<float>(h_keys[i] * 0.00001));
+                    static_cast<V>(h_keys[i] * 0.00001));
         }
       }
     }
@@ -1094,7 +1094,7 @@ void test_export_batch_if(size_t max_hbm_for_vectors,
       ASSERT_GT(h_metas[i], threshold);
       for (int j = 0; j < options.dim; j++) {
         ASSERT_EQ(h_vectors[i * options.dim + j],
-                  static_cast<float>(h_keys[i] * 0.00001));
+                  static_cast<V>(h_keys[i] * 0.00001));
       }
     }
 
@@ -1366,7 +1366,7 @@ void test_evict_strategy_lru_basic(size_t max_hbm_for_vectors,
       for (int i = 0; i < dump_counter; i++) {
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors_temp[i * options.dim + j],
-                    static_cast<float>(h_keys_temp[i] * 0.00001));
+                    static_cast<V>(h_keys_temp[i] * 0.00001));
         }
       }
     }
@@ -1417,7 +1417,7 @@ void test_evict_strategy_lru_basic(size_t max_hbm_for_vectors,
       for (int i = 0; i < dump_counter; i++) {
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors_temp[i * options.dim + j],
-                    static_cast<float>(h_keys_temp[i] * 0.00001));
+                    static_cast<V>(h_keys_temp[i] * 0.00001));
         }
       }
     }
@@ -1547,7 +1547,7 @@ void test_evict_strategy_customized_basic(size_t max_hbm_for_vectors,
       for (int i = 0; i < dump_counter; i++) {
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors_temp[i * options.dim + j],
-                    static_cast<float>(h_keys_temp[i] * 0.00001));
+                    static_cast<V>(h_keys_temp[i] * 0.00001));
         }
       }
     }
@@ -1588,7 +1588,7 @@ void test_evict_strategy_customized_basic(size_t max_hbm_for_vectors,
       for (int i = 0; i < dump_counter; i++) {
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors_temp[i * options.dim + j],
-                    static_cast<float>(h_keys_temp[i] * 0.00001));
+                    static_cast<V>(h_keys_temp[i] * 0.00001));
         }
       }
     }
@@ -1732,7 +1732,7 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors,
       for (int i = 0; i < dump_counter; i++) {
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors_temp[i * options.dim + j],
-                    static_cast<float>(h_keys_temp[i] * 0.00001));
+                    static_cast<V>(h_keys_temp[i] * 0.00001));
         }
       }
     }
@@ -1788,7 +1788,7 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors,
 
         for (int j = 0; j < options.dim; j++) {
           ASSERT_EQ(h_vectors_temp[i * options.dim + j],
-                    static_cast<float>(h_keys_temp[i] * 0.00001));
+                    static_cast<V>(h_keys_temp[i] * 0.00001));
         }
       }
     }
@@ -2014,7 +2014,7 @@ TEST(MerlinHashTableTest, test_evict_strategy_customized_advanced) {
 
 TEST(MerlinHashTableTest, test_evict_strategy_customized_correct_rate) {
   test_evict_strategy_customized_correct_rate(16, true);
-  test_evict_strategy_customized_advanced(0, true);
-  test_evict_strategy_customized_advanced(16, false);
-  test_evict_strategy_customized_advanced(0, false);
+  test_evict_strategy_customized_correct_rate(0, true);
+  test_evict_strategy_customized_correct_rate(16, false);
+  test_evict_strategy_customized_correct_rate(0, false);
 }
