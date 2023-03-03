@@ -1970,6 +1970,9 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
           for (int k = 0; k < DIM; k++) {
             std::cout << "\t" << h_vectors_temp[i * options.dim + 0 + k];
           }
+          for (int k = 0; k < DIM; k++) {
+            std::cout << "\t" << (reinterpret_cast<uint32_t *>(h_vectors_temp))[i * options.dim + 0 + k];
+          }
           std::cout << std::endl;
         }
         //        }

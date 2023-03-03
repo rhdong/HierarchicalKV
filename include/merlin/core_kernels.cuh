@@ -1028,12 +1028,32 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
           }
 
           if (insert_key == 945731) {
-            //            break;
-            //            printf("key=%lld\t hashed_key=%f\t
-            //            bucket->vectors=%p\n",
-            //                   insert_key, insert_value[0],
-            //                   static_cast<V*>(bucket->vectors + key_pos *
-            //                   dim));
+//              printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
+//                     insert_key, insert_value[0],
+//                     static_cast<V*>(bucket->vectors + key_pos *
+//                     dim));
+//             if (rank == src_lane) {
+//                *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim)) = (bucket->vectors + key_pos * dim);
+//             }
+//             lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//             copy_vector<V, TILE_SIZE>(g, insert_value,
+//                                      bucket->vectors + key_pos * dim + 8 , 8);
+//             unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//             break;
+          }
+          if (insert_key == 195000) {
+//              printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
+//                     insert_key, insert_value[0],
+//                     static_cast<V*>(bucket->vectors + key_pos *
+//                     dim));
+//             if (rank == src_lane) {
+//                *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim + 2)) = (bucket->vectors + key_pos * dim);
+//             }
+//             lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//             copy_vector<V, TILE_SIZE>(g, insert_value,
+//                                      bucket->vectors + key_pos * dim + 8 , 8);
+//             unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+//             break;
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,
