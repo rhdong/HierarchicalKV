@@ -1961,13 +1961,15 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
 //              << ", j + 1 = " << h_vectors_temp[i * options.dim + j + 1];
         if((h_vectors_temp[i * options.dim + 0] != static_cast<V>(h_keys_temp[i] * 0.00001)) || 195000 == h_keys_temp[i]|| 945731 == h_keys_temp[i]) {
           std::cout << "i = " << i << ", dim = " << 0 << ", key = " << h_keys_temp[i] << ", j + 1 = " << std::endl;
-//          for(int k = 0; k < DIM ; k++){
-//             std::cout << "\t" << h_vectors_temp[i * options.dim + 0 + k];
-//          }
+          for(int k = 0; k < DIM ; k++){
+             std::cout << "\t" << h_vectors_temp[i * options.dim + 0 + k];
+          }
+          std::cout << std::endl;
           for (int k = 0; k < DIM; k++) {
             std::cout << "\t" << (reinterpret_cast<uint32_t *>(h_vectors_temp))[i * options.dim + 0 + k];
           }
-          void** ptr = reinterpret_cast<void **>(h_vectors_temp);
+          std::cout << std::endl;
+          void** ptr = reinterpret_cast<void **>(h_vectors_temp + i * options.dim);
           for (int k = 0; k < 2; k++) {
             cudaPointerAttributes attr;
             CUDA_CHECK(cudaPointerGetAttributes(&attr, ptr[k]));
