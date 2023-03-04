@@ -171,7 +171,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
           (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
       size_t x = start + num_of_allocated_buckets + j;
       if(x == 786454 || x == 262167){
-        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
+//        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
       }
     }
     num_of_allocated_buckets += num_of_buckets_in_one_slice;
