@@ -969,7 +969,7 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
              }
              lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
              copy_vector<V, TILE_SIZE>(g, insert_value,
-                                      bucket->vectors + key_pos * dim + 8 , 8);
+                                      bucket->vectors + key_pos * dim + 8 , 4);
              unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
              break;
           }
@@ -983,7 +983,7 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
              }
              lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
              copy_vector<V, TILE_SIZE>(g, insert_value,
-                                      bucket->vectors + key_pos * dim + 8 , 8);
+                                      bucket->vectors + key_pos * dim + 12 , 4);
              unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
              break;
           }
