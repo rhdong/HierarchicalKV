@@ -1806,9 +1806,17 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors,
 
 template <class V=int>
 __global__ void write_read(V* ptr, int offset, const V val) {
-  printf("enter: ptr=%p\told-magic-number=%d\n", ptr, *(ptr+offset));
+  printf("enter: ptr=%p, old-val=\t", ptr);
+  for (int k = 0; k < DIM; k++) {
+    printf("%d\t", *(ptr+k));
+  }
+  printf("\n");
   *(ptr+offset) = val;
-  printf("exit : ptr=%p\tnew-magic-number=%d\n", ptr, *(ptr+offset));
+  printf("exit : ptr=%p, new-val=\t", ptr);
+  for (int k = 0; k < DIM; k++) {
+    printf("%d\t", *(ptr+k));
+  }
+  printf("\n");
 }
 
 void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
@@ -1992,7 +2000,9 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
               CUDA_CHECK(cudaDeviceSynchronize());
 
               std::cout << std::endl;
-              std::cout << "as int32_t from host:" << std::endl;
+              std::cout << "as int32_t from host";
+              printf(" ptr=%p ", attr.hostPointer);
+              std::cout << ":" << std::endl;
               int* host_ptr = static_cast<int*>(attr.hostPointer);
               for (int k = 0; k < DIM; k++) {
                 std::cout << "\t" << host_ptr[k];
