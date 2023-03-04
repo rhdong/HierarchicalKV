@@ -1806,9 +1806,9 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors,
 
 template <class V=int>
 __global__ void write_read(V* ptr, int offset, const V val) {
-  printf("enter: ptr=%p\told-val=%d\n", ptr, *(ptr+offset));
+  printf("enter: ptr=%p\told-magic-number=%d\n", ptr, *(ptr+offset));
   *(ptr+offset) = val;
-  printf("exit : ptr=%p\tnew-val=%d\n", ptr, *(ptr+offset));
+  printf("exit : ptr=%p\tnew-magic-number=%d\n", ptr, *(ptr+offset));
 }
 
 void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
@@ -1957,6 +1957,7 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
       size_t bigger_meta_counter = 0;
       K max_key = 0;
 
+      int magic_number = 88;
       for (int i = 0; i < dump_counter; i++) {
         ASSERT_EQ(h_keys_temp[i], h_metas_temp[i]);
         max_key = std::max(max_key, h_keys_temp[i]);
@@ -1987,7 +1988,7 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
                    k, ptr[k], attr.type, attr.device, attr.devicePointer, attr.hostPointer);
 
             if(ptr[k] != nullptr) {
-              write_read<int><<<1, 1>>>(static_cast<int*>(ptr[k]), 4, 88+k);
+              write_read<int><<<1, 1>>>(static_cast<int*>(ptr[k]), 4, magic_number++);
               CUDA_CHECK(cudaDeviceSynchronize());
 
               std::cout << std::endl;
