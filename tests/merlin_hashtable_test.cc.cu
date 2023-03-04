@@ -1986,7 +1986,8 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
             printf("k=%d\tptr=%p\tmemoryType=%d\tdevice=%d\tdevicePointer=%p\thostPointer=%p\n",
                    k, ptr[k], attr.type, attr.device, attr.devicePointer, attr.hostPointer);
 
-            write_read<uint32_t>(ptr[k], 4, 88+k);
+            write_read<uint32_t><<<1, 1>>>(ptr[k], 4, 88+k);
+            CUDA_CHECK(cudaDeviceSynchronize());
           }
           std::cout << std::endl;
         }
