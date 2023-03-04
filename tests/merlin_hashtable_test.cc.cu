@@ -1993,7 +1993,7 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
 
             std::cout << std::endl;
             std::cout << "as int32_t from host:" << std::endl;
-            int* host_ptr = attr.hostPointer;
+            int* host_ptr = static_cast<int*>(attr.hostPointer);
             for (int k = 0; k < DIM; k++) {
               std::cout << "\t" << host_ptr[k];
             }
