@@ -1971,8 +1971,8 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
           for (int k = 0; k < 2; k++) {
             cudaPointerAttributes attr;
             CUDA_CHECK(cudaPointerGetAttributes(&attr, ptr[k]));
-            printf("k=%d\tptr=%p\tmemoryType=%d\tdevice=%d\tdevicePointer=%p\thostPointer=%p\tisManaged=%d\n",
-                   k, ptr, attr.memoryType, attr.device, attr.devicePointer, attr.hostPointer, attr.isManaged);
+            printf("k=%d\tptr=%p\tmemoryType=%d\tdevice=%d\tdevicePointer=%p\thostPointer=%p\n",
+                   k, ptr, attr.type, attr.device, attr.devicePointer, attr.hostPointer);
           }
           std::cout << std::endl;
         }
