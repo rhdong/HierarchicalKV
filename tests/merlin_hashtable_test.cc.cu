@@ -1804,6 +1804,13 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors,
   CudaCheckError();
 }
 
+template <class V=uint32_t>
+__global__ void write_read(V* ptr, int offset, const V val) {
+  printf("enter: ptr=%p\told-val=%d\n", ptr, *(ptr+offset));
+  *(ptr+offset) = val;
+  printf("exit : ptr=%p\tnew-val=%d\n", ptr, *(ptr+offset));
+}
+
 void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
                                                  bool use_constant_memory) {
   constexpr uint64_t BATCH_SIZE = 1024 * 1024ul;
@@ -1978,6 +1985,8 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
             CUDA_CHECK(cudaPointerGetAttributes(&attr, ptr[k]));
             printf("k=%d\tptr=%p\tmemoryType=%d\tdevice=%d\tdevicePointer=%p\thostPointer=%p\n",
                    k, ptr[k], attr.type, attr.device, attr.devicePointer, attr.hostPointer);
+
+            write_read<uint32_t>(ptr[k], 4, 88);
           }
           std::cout << std::endl;
         }
