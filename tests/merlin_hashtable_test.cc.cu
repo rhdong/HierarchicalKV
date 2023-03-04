@@ -1990,6 +1990,13 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
               write_read<int><<<1, 1>>>(static_cast<int*>(ptr[k]), 4, 88+k);
               CUDA_CHECK(cudaDeviceSynchronize());
             }
+
+            std::cout << std::endl;
+            std::cout << "as int32_t from host:" << std::endl;
+            int* host_ptr = attr.hostPointer;
+            for (int k = 0; k < DIM; k++) {
+              std::cout << "\t" << host_ptr[k];
+            }
           }
           std::cout << std::endl;
         }
