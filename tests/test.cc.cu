@@ -6,6 +6,7 @@
 #include <thrust/shuffle.h>
 #include <thrust/random.h>
 #include <thrust/execution_policy.h>
+#include <cuda/std/semaphore>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,7 +81,6 @@ inline void cuda_check_(cudaError_t val, const char* file, int line) {
   } while (0)
 
 
-using Mutex = Lock<cuda::thread_scope_device>;
 template <class K>
 using AtomicKey = cuda::atomic<K, cuda::thread_scope_device>;
 
