@@ -11,6 +11,16 @@ using namespace std;
 using ValueType = int;
 constexpr int DIM = 16;
 
+
+constexpr size_t num_vector_per_bucket = 128;
+constexpr size_t num_buckets = 1024 * 1024;
+constexpr size_t num_vector = num_buckets * num_vector_per_bucket;
+
+constexpr size_t memory_pool_size =
+    num_vector * sizeof(ValueType) * DIM;  // = 128 * 1024 * 1024 * 4 * 16 = 8GB
+constexpr size_t bucket_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
+
+
 class CudaException : public std::runtime_error {
  public:
   CudaException(const std::string& what) : runtime_error(what) {}
@@ -54,13 +64,6 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
   printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
 }
 
-constexpr size_t num_vector_per_bucket = 128;
-constexpr size_t num_buckets = 1024 * 1024;
-constexpr size_t num_vector = num_buckets * num_vector_per_bucket;
-
-constexpr size_t memory_pool_size =
-    num_vector * sizeof(ValueType) * DIM;  // = 128 * 1024 * 1024 * 4 * 16 = 8GB
-constexpr size_t bucket_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
 
 int main() {
   Bucket* buckets;
