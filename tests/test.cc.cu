@@ -49,26 +49,15 @@ inline void cuda_check_(cudaError_t val, const char* file, int line) {
     cuda_check_((val), __FILE__, __LINE__); \
   } while (0)
 
-
-template <class K>
-using AtomicKey = cuda::atomic<K, cuda::thread_scope_device>;
-
-template <class M>
-using AtomicMeta = cuda::atomic<M, cuda::thread_scope_device>;
-
-template <class T>
-using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
-
-
 template <class K, class V, class M>
 struct __align__(16) Bucket {
-  AtomicKey<K>* keys;    // ignore it!
-  AtomicMeta<M>* metas;  // ignore it!
-  V* cache;              // ignore it!
-  V* vectors;            // <<<----important
-  AtomicMeta<M> cur_meta; // ignore it!
-  AtomicMeta<M> min_meta; // ignore it!
-  AtomicPos<int> min_pos; // ignore it!
+  uint64_t* keys;    // ignore it!
+  uint64_t* metas;   // ignore it!
+  V* cache;          // ignore it!
+  V* vectors;        // <<<----important member
+  uint64_t cur_meta; // ignore it!
+  uint64_t min_meta; // ignore it!
+  int min_pos;       // ignore it!
 };
 
 template <class K, class V, class M>
