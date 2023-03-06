@@ -21,11 +21,12 @@ using namespace std;
 
 using K = uint64_t;
 using M = uint64_t;
-using V = float;
+using V = int;
 
 
 constexpr size_t DIM = 16;
 constexpr size_t num_vectors_per_slice = 8 * 16777216;
+constexpr size_t num_vector_per_bucket = 128;
 constexpr size_t TILE_SIZE = 4;
 
 template <class V, uint32_t TILE_SIZE = 4>
@@ -78,51 +79,114 @@ inline void cuda_check_(cudaError_t val, const char* file, int line) {
     cuda_check_((val), __FILE__, __LINE__); \
   } while (0)
 
+
+using Mutex = Lock<cuda::thread_scope_device>;
+template <class K>
+using AtomicKey = cuda::atomic<K, cuda::thread_scope_device>;
+
+template <class M>
+using AtomicMeta = cuda::atomic<M, cuda::thread_scope_device>;
+
+template <class T>
+using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
+
+
+template <class K, class V, class M>
+struct Bucket {
+  AtomicKey<K>* keys;    // HBM
+  AtomicMeta<M>* metas;  // HBM
+  V* cache;              // HBM(optional)
+  V* vectors;            // Pinned memory or HBM
+
+  /* For upsert_kernel without user specified metas
+     recording the current meta, the cur_meta will
+     increment by 1 when a new inserting happens. */
+  AtomicMeta<M> cur_meta;
+
+  /* min_meta and min_pos is for or upsert_kernel
+     with user specified meta. They record the minimum
+     meta and its pos in the bucket. */
+  AtomicMeta<M> min_meta;
+  AtomicPos<int> min_pos;
+};
+
+template <class K, class V, class M>
+__global__ void write_read(Bucket<K, V, M>* buckets, int bucket_idx, int vector_idx, const V val) {
+  V* vectors = buckets[bucket_idx].vectors;
+  *(vectors + vector_idx * DIM) = val;
+}
+
 int main() {
   int num_slices = 1;
   V** slices;
   size_t slice_size = num_vectors_per_slice * sizeof(V) * DIM;
   cudaMallocManaged(&slices, sizeof(V*) * num_slices);
 
-  int* d_index;
-  int* h_index;
-  cudaMalloc(&d_index, num_vectors_per_slice * num_slices * sizeof(int));
-  cudaMallocHost(&h_index, num_vectors_per_slice * num_slices * sizeof(int), cudaHostAllocMapped | cudaHostAllocWriteCombined);
+  int num_buckets = num_vectors_per_slice / num_vector_per_bucket;
+  Bucket<K, V, M>* buckets;
+  size_t bucket_size = num_vector_per_bucket * sizeof(V) * DIM;
+  cudaMallocManaged(&buckets, sizeof(Bucket<K, V, M>*) * num_buckets);
 
+  assert(num_buckets == (1024 * 1024));
+  assert(slice_size == (8ul << 30));
+  assert(bucket_size == (128 * 4 * 16));
 
-  for(int i = 0; i <  num_vectors_per_slice * num_slices; i++){
-    h_index[i] = i;
+//  int* d_index;
+  V* slice;
+//  cudaMalloc(&d_index, num_vectors_per_slice * num_slices * sizeof(int));
+  cudaMallocHost(&slice, slice_size, cudaHostAllocMapped | cudaHostAllocWriteCombined);
+  slices[0] = slice;
+
+  for(int i = 0; i < num_buckets; i++){
+    buckets[i].vectors = slices[0] + (num_buckets * num_vector_per_bucket * DIM * i);
   }
-  cudaMemcpy(d_index, h_index, num_vectors_per_slice * num_slices * sizeof(int), cudaMemcpyHostToDevice);
-
-  thrust::default_random_engine g;
-  thrust::shuffle(thrust::device, d_index, d_index + num_vectors_per_slice * num_slices, g);
-
-  for(int i = 0; i < num_slices; i++){
-    cudaMallocHost(&(slices[i]), slice_size, cudaHostAllocMapped | cudaHostAllocWriteCombined);
-  }
-
-  const size_t block_size = 128;
-  const size_t N = num_slices * num_vectors_per_slice * TILE_SIZE;
-  const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-
-  upsert_kernel_with_io_core<K, V, M, 4><<<grid_size, block_size, 0, 0>>>(slices, d_index, N);
-  CUDA_CHECK(cudaDeviceSynchronize());
-
-  for(int i = 0; i < num_slices; i++){
-    V* slice = slices[i];
-    for(int j = 0; j < num_vectors_per_slice; j++){
-      float expected = static_cast<V>((i * num_vectors_per_slice + j) * 0.00001);
-      if(expected != slice[j * DIM]){
-        std::cout << expected << " " << slice[j * DIM] << std::endl;
-      }
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+  for(int i = 0; i < num_buckets; i++){
+    for(int j = 0; j < num_vector_per_bucket; j++){
+      write_read<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, 1);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
     }
   }
+
+  for(int i = 0; i < num_buckets; i++){
+    for(int j = 0; j < num_vector_per_bucket; j++){
+      assert(buckets[i].vectors[j * DIM] == 1);
+    }
+  }
+  CUDA_CHECK(cudaStreamDestroy(stream));
+
+//  for(int i = 0; i <  num_vectors_per_slice * num_slices; i++){
+//    h_index[i] = i;
+//  }
+//  cudaMemcpy(d_index, h_index, num_vectors_per_slice * num_slices * sizeof(int), cudaMemcpyHostToDevice);
+
+//  thrust::default_random_engine g;
+//  thrust::shuffle(thrust::device, d_index, d_index + num_vectors_per_slice * num_slices, g);
+
+
+//  const size_t block_size = 128;
+//  const size_t N = num_slices * num_vectors_per_slice * TILE_SIZE;
+//  const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+//
+//  upsert_kernel_with_io_core<K, V, M, 4><<<grid_size, block_size, 0, 0>>>(slices, d_index, N);
+//  CUDA_CHECK(cudaDeviceSynchronize());
+//
+//  for(int i = 0; i < num_slices; i++){
+//    V* slice = slices[i];
+//    for(int j = 0; j < num_vectors_per_slice; j++){
+//      float expected = static_cast<V>((i * num_vectors_per_slice + j) * 0.00001);
+//      if(expected != slice[j * DIM]){
+//        std::cout << expected << " " << slice[j * DIM] << std::endl;
+//      }
+//    }
+//  }
 
   for(int i = 0; i < num_slices; i++){
     cudaFree(slices[i]);
   }
   cudaFree(slices);
-  cudaFree(d_index);
+  cudaFree(buckets);
+//  cudaFree(d_index);
   cudaFreeHost(h_index);
 }
