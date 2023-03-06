@@ -96,6 +96,8 @@ int main() {
   size_t bucket_size = num_vector_per_bucket * sizeof(V) * DIM;
   cudaMallocManaged(&buckets, sizeof(Bucket<K, V, M>) * num_buckets);
 
+  std::cout << "size of Bucket<K, V, M>=" << sizeof(Bucket<K, V, M>) << std::endl;
+
   assert(num_buckets == (1024 * 1024));
   assert(slice_size == (8ul << 30));
   assert(bucket_size == (128 * 4 * 16));
