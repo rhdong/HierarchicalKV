@@ -152,28 +152,33 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
       CUDA_CHECK(cudaMalloc(&((*table)->slices[i]), slice_real_size));
       (*table)->remaining_hbm_for_vectors -= slice_real_size;
 
-//      cudaPointerAttributes attr;
-//      memset(&attr, 0, sizeof(cudaPointerAttributes));
-//      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
-//      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
+      //      cudaPointerAttributes attr;
+      //      memset(&attr, 0, sizeof(cudaPointerAttributes));
+      //      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
+      //      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p,
+      //      hostPointer: %p\n", i, attr.device, attr.devicePointer,
+      //      attr.hostPointer);
     } else {
       V* h_slice;
       (*table)->is_pure_hbm = false;
       CUDA_CHECK(
           cudaHostAlloc(&h_slice, slice_real_size,
-                         cudaHostAllocMapped | cudaHostAllocWriteCombined));
-      CUDA_CHECK(cudaHostGetDevicePointer( &((*table)->slices[i]), h_slice, 0 ));
-//      cudaPointerAttributes attr;
-//      memset(&attr, 0, sizeof(cudaPointerAttributes));
-//      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
-//      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
+                        cudaHostAllocMapped | cudaHostAllocWriteCombined));
+      CUDA_CHECK(cudaHostGetDevicePointer(&((*table)->slices[i]), h_slice, 0));
+      //      cudaPointerAttributes attr;
+      //      memset(&attr, 0, sizeof(cudaPointerAttributes));
+      //      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
+      //      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p,
+      //      hostPointer: %p\n", i, attr.device, attr.devicePointer,
+      //      attr.hostPointer);
     }
     for (int j = 0; j < num_of_buckets_in_one_slice; j++) {
       (*table)->buckets[start + num_of_allocated_buckets + j].vectors =
           (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
       size_t x = start + num_of_allocated_buckets + j;
-      if(x == 786454 || x == 262167){
-//        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
+      if (x == 786454 || x == 262167) {
+        //        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start +
+        //        num_of_allocated_buckets + j].vectors);
       }
     }
     num_of_allocated_buckets += num_of_buckets_in_one_slice;
@@ -800,11 +805,13 @@ __forceinline__ __device__ Bucket<K, V, M>* get_key_position(
   size_t global_idx = hashed_key & (buckets_num * bucket_max_size - 1);
   bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
-  if(key == 195000 || key == 945731) {
-//    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\t, buckets_num=%lld\tbucket_max_size=%lld\tglobal_idx=%lld\n",
-    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\n",
-           key, hashed_key, bkt_idx, start_idx //buckets_num, bucket_max_size, global_idx
-           );
+  if (key == 195000 || key == 945731) {
+    //    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\t,
+    //    buckets_num=%lld\tbucket_max_size=%lld\tglobal_idx=%lld\n",
+    printf("key=%lld\t hashed_key=%d\tbkt_idx=%lld\t start_idx=%lld\n", key,
+           hashed_key, bkt_idx,
+           start_idx  // buckets_num, bucket_max_size, global_idx
+    );
   }
   return buckets + bkt_idx;
 }
@@ -962,32 +969,36 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
           }
 
           if (insert_key == 945731) {
-//              printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
-//                     insert_key, insert_value[0],
-//                     static_cast<V*>(bucket->vectors + key_pos *
-//                     dim));
-             if (rank == src_lane) {
-                *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim)) = (bucket->vectors + key_pos * dim);
-             }
-             lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-             copy_vector<V, TILE_SIZE>(g, insert_value,
-                                      bucket->vectors + key_pos * dim + 8 , 4);
-             unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-             break;
+            //              printf("key=%lld\t hashed_key=%f\t
+            //              bucket->vectors=%p\n",
+            //                     insert_key, insert_value[0],
+            //                     static_cast<V*>(bucket->vectors + key_pos *
+            //                     dim));
+            if (rank == src_lane) {
+              *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim)) =
+                  (bucket->vectors + key_pos * dim);
+            }
+            lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+            copy_vector<V, TILE_SIZE>(g, insert_value,
+                                      bucket->vectors + key_pos * dim + 8, 4);
+            unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+            break;
           }
           if (insert_key == 195000) {
-//              printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
-//                     insert_key, insert_value[0],
-//                     static_cast<V*>(bucket->vectors + key_pos *
-//                     dim));
-             if (rank == src_lane) {
-                *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim + 2)) = (bucket->vectors + key_pos * dim);
-             }
-             lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-             copy_vector<V, TILE_SIZE>(g, insert_value,
-                                      bucket->vectors + key_pos * dim + 12 , 4);
-             unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-             break;
+            //              printf("key=%lld\t hashed_key=%f\t
+            //              bucket->vectors=%p\n",
+            //                     insert_key, insert_value[0],
+            //                     static_cast<V*>(bucket->vectors + key_pos *
+            //                     dim));
+            if (rank == src_lane) {
+              *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim + 2)) =
+                  (bucket->vectors + key_pos * dim);
+            }
+            lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+            copy_vector<V, TILE_SIZE>(g, insert_value,
+                                      bucket->vectors + key_pos * dim + 12, 4);
+            unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+            break;
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,
