@@ -112,8 +112,9 @@ struct Bucket {
 
 template <class K, class V, class M>
 __global__ void write_read(Bucket<K, V, M>* buckets, int bucket_idx, int vector_idx, const V val) {
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   V* vectors = buckets[bucket_idx].vectors;
-  *(vectors + vector_idx * DIM) = val;
+  *(vectors + tid * DIM) = val;
 }
 
 int main() {
@@ -151,11 +152,9 @@ int main() {
   CUDA_CHECK(cudaStreamCreate(&stream));
   int magic_numbers = 88;
   for(int i = 0; i < num_buckets; i++){
-    for(int j = 0; j < num_vector_per_bucket; j++){
-      write_read<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, magic_numbers);
+      write_read<K, V, M><<<1, 128, 0, stream>>>(buckets, i, j, magic_numbers);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
-    }
   }
   CUDA_CHECK(cudaDeviceSynchronize());
   std::cout << "finish writing" << std::endl;
