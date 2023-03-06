@@ -129,7 +129,7 @@ int main() {
     for(int j = 0; j < num_vector_per_bucket; j++){
       V val = slice[i * num_vector_per_bucket * DIM + j * DIM];
       if(val != magic_numbers) {
-        read_when_error<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, magic_numbers);
+        read_when_error<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j);
         CUDA_CHECK(cudaStreamSynchronize(stream));
         printf("host view: ptr=%p\tval=%d\n", (slice + i * num_vector_per_bucket * DIM + j * DIM), val);
         error_num++;
