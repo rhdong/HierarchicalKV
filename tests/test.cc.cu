@@ -1,27 +1,12 @@
 
-#include <cooperative_groups.h>
-#include <cooperative_groups/reduce.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <thrust/execution_policy.h>
-#include <thrust/random.h>
-#include <thrust/shuffle.h>
-#include <cuda/std/semaphore>
 #include <iostream>
-#include <limits>
 #include <sstream>
 #include <stdexcept>
 
-using namespace cooperative_groups;
-namespace cg = cooperative_groups;
 using namespace std;
-
-using ValueType = int;
-
-constexpr size_t DIM = 16;
-constexpr size_t num_vectors_per_slice = 8 * 16777216;
-constexpr size_t num_vector_per_bucket = 128;
 
 class CudaException : public std::runtime_error {
  public:
@@ -66,35 +51,38 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
   printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
 }
 
-int main() {
-  int num_slices = 1;
-//  ValueType** slices;
-  size_t slice_size = num_vectors_per_slice * sizeof(ValueType) * DIM;
-//  cudaMallocManaged(&slices, sizeof(ValueType*) * num_slices);
+using ValueType = int;
 
-  int num_buckets = num_vectors_per_slice / num_vector_per_bucket;
+constexpr size_t DIM = 16;
+constexpr size_t num_vector = 8 * 16777216;
+constexpr size_t num_vector_per_bucket = 128;
+constexpr size_t num_buckets = num_vector / num_vector_per_bucket;
+
+constexpr size_t memory_pool_size = num_vector * sizeof(ValueType) * DIM;
+constexpr size_t bucket_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
+
+
+int main() {
   Bucket* buckets;
-  size_t bucket_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
   cudaMallocManaged(&buckets, sizeof(Bucket) * num_buckets);
 
   std::cout << "size of Bucket=" << sizeof(Bucket) << std::endl;
 
   assert(num_buckets == (1024 * 1024));
-  assert(slice_size == (8ul << 30));
+  assert(memory_pool_size == (8ul << 30));
   assert(bucket_size == (128 * 4 * 16));
-  assert(slice_size == (bucket_size * num_buckets));
+  assert(memory_pool_size == (bucket_size * num_buckets));
 
   ValueType* host_memory_pool;
-  CUDA_CHECK(cudaHostAlloc(&host_memory_pool, slice_size,
+  CUDA_CHECK(cudaHostAlloc(&host_memory_pool, memory_pool_size,
                            cudaHostAllocMapped | cudaHostAllocWriteCombined));
-//  slices[0] = host_memory_pool;
 
   for (int i = 0; i < num_buckets; i++) {
-    ValueType* h_slice = host_memory_pool + (num_vector_per_bucket * DIM * i);
-    CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_slice, 0));
+    ValueType* h_memory_pool = host_memory_pool + (num_vector_per_bucket * DIM * i);
+    CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_memory_pool, 0));
   }
   std::cout << "finish allocating"
-            << ", num_buckets=" << num_buckets << ", slice_size=" << (8ul << 30)
+            << ", num_buckets=" << num_buckets << ", memory_pool_size=" << (8ul << 30)
             << ", bucket_size=" << (128 * 4 * 16) << std::endl;
 
   cudaStream_t stream;
@@ -132,6 +120,5 @@ int main() {
   std::cout << "finish checking" << std::endl;
 
   CUDA_CHECK(cudaFreeHost(host_memory_pool));
-//  CUDA_CHECK(cudaFree(slices));
   CUDA_CHECK(cudaFree(buckets));
 }
