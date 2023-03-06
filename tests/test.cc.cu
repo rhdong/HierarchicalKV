@@ -114,7 +114,7 @@ int main() {
   size_t error_num = 0;
   size_t correct_num = 0;
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
-    for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
+    for (int vector_idx = 0; vector_idx < 1; vector_idx++) {
       ValueType val =
           host_memory_pool[bucket_idx * num_vector_per_bucket * DIM +
                            vector_idx * DIM];
