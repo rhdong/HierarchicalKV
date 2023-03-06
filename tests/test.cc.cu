@@ -81,8 +81,8 @@ __global__ void write_read(Bucket<K, V, M>* buckets, int bucket_idx, const V val
 template <class K, class V, class M>
 __global__ void read_when_error(Bucket<K, V, M>* buckets, int bucket_idx, int vector_idx) {
   V* vectors = buckets[bucket_idx].vectors;
-  val = *(vectors + vector_idx * DIM);
-  printf("device view: ptr=%p\tval=%d\n", (vectors + tid * DIM), val);
+  V val = *(vectors + vector_idx * DIM);
+  printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
 }
 
 int main() {
