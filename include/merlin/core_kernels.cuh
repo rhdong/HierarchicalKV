@@ -203,7 +203,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
       V* h_slice;
       CUDA_CHECK(
           cudaMallocHost(&(h_slice), slice_real_size,
-                         cudaHostAllocMapped | cudaHostAllocWriteCombined));
+                         cudaHostAllocMapped));
       CUDA_CHECK(cudaHostGetDevicePointer(&slice, h_slice, 0));
     }
 
