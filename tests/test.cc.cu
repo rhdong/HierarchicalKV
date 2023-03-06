@@ -135,7 +135,7 @@ int main() {
 //  int* d_index;
   V* slice;
 //  cudaMalloc(&d_index, num_vectors_per_slice * num_slices * sizeof(int));
-  cudaMallocHost(&slice, slice_size, cudaHostAllocMapped | cudaHostAllocWriteCombined);
+  CUDA_CHECK(cudaMallocHost(&slice, slice_size, cudaHostAllocMapped | cudaHostAllocWriteCombined));
   slices[0] = slice;
 
   for(int i = 0; i < num_buckets; i++){
