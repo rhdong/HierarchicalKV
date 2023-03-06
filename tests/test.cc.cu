@@ -163,7 +163,8 @@ int main() {
   size_t correct_num = 0;
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
-      if(buckets[i].vectors[j * DIM] != magic_numbers) {
+      int val = slice[i * num_vector_per_bucket * DIM + j * DIM];
+      if(val != magic_numbers) {
 //        std::cout << "i=" << i << "\tj=" << j << "\tval="
 //                  << buckets[i].vectors[j * DIM] << std::endl;
         error_num++;
