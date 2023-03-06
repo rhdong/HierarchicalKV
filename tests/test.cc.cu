@@ -140,7 +140,7 @@ int main() {
 
   for(int i = 0; i < num_buckets; i++){
     V* h_slice = slices[0] + (num_vector_per_bucket * DIM * i);
-    CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_slice, 0);
+    CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_slice, 0));
 //    buckets[i].vectors = ;
   }
   std::cout << "finish allocating" << ", num_buckets=" << num_buckets
