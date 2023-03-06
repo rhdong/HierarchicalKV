@@ -9,6 +9,7 @@
 using namespace std;
 
 using ValueType = int;
+constexpr size_t DIM = 16;
 
 class CudaException : public std::runtime_error {
  public:
@@ -54,7 +55,6 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
 }
 
 
-constexpr size_t DIM = 16;
 constexpr size_t num_vector = 8 * 16777216;
 constexpr size_t num_vector_per_bucket = 128;
 constexpr size_t num_buckets = num_vector / num_vector_per_bucket;
