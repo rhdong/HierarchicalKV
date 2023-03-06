@@ -157,10 +157,12 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
 //      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
 //      printf("(*table)->slices[i], i; %d, device: %d, devicePointer: %p, hostPointer: %p\n", i, attr.device, attr.devicePointer, attr.hostPointer);
     } else {
+      V* h_slice;
       (*table)->is_pure_hbm = false;
       CUDA_CHECK(
-          cudaHostAlloc(&((*table)->slices[i]), slice_real_size,
+          cudaHostAlloc(&h_slice, slice_real_size,
                          cudaHostAllocMapped | cudaHostAllocWriteCombined));
+      CUDA_CHECK(cudaHostGetDevicePointer( &((*table)->slices[i]), h_slice, 0 ));
 //      cudaPointerAttributes attr;
 //      memset(&attr, 0, sizeof(cudaPointerAttributes));
 //      CUDA_CHECK(cudaPointerGetAttributes(&attr, (*table)->slices[i]));
