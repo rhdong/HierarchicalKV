@@ -8,6 +8,8 @@
 
 using namespace std;
 
+using ValueType = int;
+
 class CudaException : public std::runtime_error {
  public:
   CudaException(const std::string& what) : runtime_error(what) {}
@@ -51,7 +53,6 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
   printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
 }
 
-using ValueType = int;
 
 constexpr size_t DIM = 16;
 constexpr size_t num_vector = 8 * 16777216;
