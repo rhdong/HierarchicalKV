@@ -200,8 +200,11 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
       (*table)->remaining_hbm_for_vectors -= slice_real_size;
     } else {
       (*table)->is_pure_hbm = false;
+      V* h_slice;
       CUDA_CHECK(
-          cudaMallocHost(&(slice), slice_real_size, cudaHostAllocMapped));
+          cudaMallocHost(&(h_slice), slice_real_size,
+                         cudaHostAllocMapped | cudaHostAllocWriteCombined));
+      CUDA_CHECK(cudaHostGetDevicePointer(&slice, h_slice, 0));
     }
 
     set_mem_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, slice);
