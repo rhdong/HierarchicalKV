@@ -42,9 +42,9 @@ struct __align__(16) Bucket {
 
 __global__ void write_read(Bucket* buckets, int bucket_idx,
                            const ValueType val) {
-  int tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+  int vector_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
   ValueType* vectors = buckets[bucket_idx].vectors;
-  *(vectors + tid * DIM) = tid * DIM;
+  *(vectors + tid * DIM) = bucket_idx * num_vector_per_bucket + vector_idx;
 }
 
 __global__ void read_when_error(Bucket* buckets, int bucket_idx,
@@ -107,14 +107,14 @@ int main() {
   // Checking if the value is expected from both of device and host sides.
   size_t error_num = 0;
   size_t correct_num = 0;
-  for (int i = 0; i < num_buckets; i++) {
-    for (int j = 0; j < num_vector_per_bucket; j++) {
-      ValueType val = host_memory_pool[i * num_vector_per_bucket * DIM + j * DIM];
-      if (val != (i * num_vector_per_bucket + j)) {
-        read_when_error<<<1, 1, 0, stream>>>(buckets, i, j);
+  for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
+    for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
+      ValueType val = host_memory_pool[bucket_idx * num_vector_per_bucket * DIM + vector_idx * DIM];
+      if (val != (bucket_idx * num_vector_per_bucket + vector_idx)) {
+        read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
         printf("host   view: ptr=%p\tval=%d\n\n",
-               (host_memory_pool + i * num_vector_per_bucket * DIM + j * DIM), val);
+               (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM + vector_idx * DIM), val);
         error_num++;
       } else {
         correct_num++;
