@@ -153,9 +153,10 @@ int main() {
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
       write_read<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, magic_numbers);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      break;
     }
   }
-  CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaDeviceSynchronize());
   std::cout << "finish writing" << std::endl;
 
