@@ -154,6 +154,7 @@ int main() {
     }
   }
   CUDA_CHECK(cudaStreamSynchronize(stream));
+  CUDA_CHECK(cudaDeviceSynchronize());
   std::cout << "finish writing" << std::endl;
 
   size_t error_num = 0;
