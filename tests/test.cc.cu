@@ -131,7 +131,7 @@ int main() {
       if(val != magic_numbers) {
         read_when_error<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        printf("host view: ptr=%p\tval=%d\n", (slice + i * num_vector_per_bucket * DIM + j * DIM), val);
+        printf("host   view: ptr=%p\tval=%d\n\n", (slice + i * num_vector_per_bucket * DIM + j * DIM), val);
         error_num++;
       } else {
         correct_num++;
