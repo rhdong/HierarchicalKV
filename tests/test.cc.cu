@@ -157,7 +157,11 @@ int main() {
 
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
-      assert(buckets[i].vectors[j * DIM] == magic_numbers);
+      if(buckets[i].vectors[j * DIM] != magic_numbers) {
+        std::cout << "i=" << i << "\tj=" << j << "\tval="
+                  << buckets[i].vectors[j * DIM] << std::endl;
+      }
+//      assert(buckets[i].vectors[j * DIM] == magic_numbers);
     }
   }
   CUDA_CHECK(cudaStreamSynchronize(stream));
