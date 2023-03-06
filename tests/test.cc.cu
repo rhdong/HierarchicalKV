@@ -130,6 +130,7 @@ int main() {
   assert(num_buckets == (1024 * 1024));
   assert(slice_size == (8ul << 30));
   assert(bucket_size == (128 * 4 * 16));
+  assert(slice_size == (bucket_size * num_buckets));
 
 //  int* d_index;
   V* slice;
@@ -155,15 +156,22 @@ int main() {
   CUDA_CHECK(cudaStreamSynchronize(stream));
   std::cout << "finish writing" << std::endl;
 
+  size_t error_num = 0;
+  size_t correct_num = 0;
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
       if(buckets[i].vectors[j * DIM] != magic_numbers) {
-        std::cout << "i=" << i << "\tj=" << j << "\tval="
-                  << buckets[i].vectors[j * DIM] << std::endl;
+//        std::cout << "i=" << i << "\tj=" << j << "\tval="
+//                  << buckets[i].vectors[j * DIM] << std::endl;
+        error_num++;
+      } else {
+        correct_num++;
       }
 //      assert(buckets[i].vectors[j * DIM] == magic_numbers);
     }
   }
+  std::cout << "error_num=" << error_num << "\tcorrect_num=" << correct_num << std::endl;
+
   CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
   std::cout << "finish checking" << std::endl;
