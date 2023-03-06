@@ -171,7 +171,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
           (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
       size_t x = start + num_of_allocated_buckets + j;
       if(x == 786454 || x == 262167){
-        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
+//        printf("x=%lld, ptr=%p\n", x, (*table)->buckets[start + num_of_allocated_buckets + j].vectors);
       }
     }
     num_of_allocated_buckets += num_of_buckets_in_one_slice;
@@ -959,10 +959,33 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
           }
 
-          if(insert_key == 945731) {
-//            break;
-//            printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
-//                   insert_key, insert_value[0], static_cast<V*>(bucket->vectors + key_pos * dim));
+          if (insert_key == 945731) {
+//              printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
+//                     insert_key, insert_value[0],
+//                     static_cast<V*>(bucket->vectors + key_pos *
+//                     dim));
+             if (rank == src_lane) {
+                *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim)) = (bucket->vectors + key_pos * dim);
+             }
+             lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+             copy_vector<V, TILE_SIZE>(g, insert_value,
+                                      bucket->vectors + key_pos * dim + 8 , 4);
+             unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+             break;
+          }
+          if (insert_key == 195000) {
+//              printf("key=%lld\t hashed_key=%f\t bucket->vectors=%p\n",
+//                     insert_key, insert_value[0],
+//                     static_cast<V*>(bucket->vectors + key_pos *
+//                     dim));
+             if (rank == src_lane) {
+                *(reinterpret_cast<V**>(bucket->vectors + key_pos * dim + 2)) = (bucket->vectors + key_pos * dim);
+             }
+             lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+             copy_vector<V, TILE_SIZE>(g, insert_value,
+                                      bucket->vectors + key_pos * dim + 12 , 4);
+             unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+             break;
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,

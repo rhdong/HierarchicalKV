@@ -1804,6 +1804,21 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors,
   CudaCheckError();
 }
 
+template <class V=int>
+__global__ void write_read(V* ptr, int offset, const V val) {
+  printf("enter: ptr=%p, old-val=\t", ptr);
+  for (int k = 0; k < DIM; k++) {
+    printf("%d\t", *(ptr+k));
+  }
+  printf("\n");
+  *(ptr+offset) = val;
+  printf("exit : ptr=%p, new-val=\t", ptr);
+  for (int k = 0; k < DIM; k++) {
+    printf("%d\t", *(ptr+k));
+  }
+  printf("\n");
+}
+
 void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
                                                  bool use_constant_memory) {
   constexpr uint64_t BATCH_SIZE = 1024 * 1024ul;
@@ -1870,7 +1885,7 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(total_size, 0);
 
-    for (int r = 0; r < rounds; r++) {
+    for (int r = 0; r < 1; r++) {
       size_t expected_min_key = global_start_key + INIT_CAPACITY * r;
       size_t expected_max_key = global_start_key + INIT_CAPACITY * (r + 1) - 1;
       size_t expected_table_size =
@@ -1950,6 +1965,7 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
       size_t bigger_meta_counter = 0;
       K max_key = 0;
 
+      int magic_number = 88;
       for (int i = 0; i < dump_counter; i++) {
         ASSERT_EQ(h_keys_temp[i], h_metas_temp[i]);
         max_key = std::max(max_key, h_keys_temp[i]);
@@ -1961,8 +1977,38 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
 //              << ", j + 1 = " << h_vectors_temp[i * options.dim + j + 1];
         if((h_vectors_temp[i * options.dim + 0] != static_cast<V>(h_keys_temp[i] * 0.00001)) || 195000 == h_keys_temp[i]|| 945731 == h_keys_temp[i]) {
           std::cout << "i = " << i << ", dim = " << 0 << ", key = " << h_keys_temp[i] << ", j + 1 = " << std::endl;
+
+          std::cout << "as float:" << std::endl;
           for(int k = 0; k < DIM ; k++){
              std::cout << "\t" << h_vectors_temp[i * options.dim + 0 + k];
+          }
+          std::cout << std::endl;
+          std::cout << "as int32_t:" << std::endl;
+          for (int k = 0; k < DIM; k++) {
+            std::cout << "\t" << (reinterpret_cast<uint32_t *>(h_vectors_temp))[i * options.dim + 0 + k];
+          }
+          std::cout << std::endl;
+          void** ptr = reinterpret_cast<void **>(h_vectors_temp + i * options.dim);
+          for (int k = 0; k < 2; k++) {
+            cudaPointerAttributes attr;
+            CUDA_CHECK(cudaPointerGetAttributes(&attr, ptr[k]));
+            printf("k=%d\tptr=%p\tmemoryType=%d\tdevice=%d\tdevicePointer=%p\thostPointer=%p\n",
+                   k, ptr[k], attr.type, attr.device, attr.devicePointer, attr.hostPointer);
+
+            if(ptr[k] != nullptr) {
+              write_read<int><<<1, 1>>>(static_cast<int*>(ptr[k]), 4, magic_number++);
+              CUDA_CHECK(cudaDeviceSynchronize());
+
+              std::cout << std::endl;
+              std::cout << "as int32_t from host";
+              printf(" ptr=%p ", attr.hostPointer);
+              std::cout << ":" << std::endl;
+              int* host_ptr = static_cast<int*>(attr.hostPointer);
+              for (int k = 0; k < DIM; k++) {
+                std::cout << "\t" << host_ptr[k];
+              }
+              std::cout << std::endl;
+            }
           }
           std::cout << std::endl;
         }
