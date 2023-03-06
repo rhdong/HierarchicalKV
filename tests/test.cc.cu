@@ -140,15 +140,20 @@ int main() {
   for(int i = 0; i < num_buckets; i++){
     buckets[i].vectors = slices[0] + (num_vector_per_bucket * DIM * i);
   }
+  std::cout << "finish allocating" << ", num_buckets=" << num_buckets
+            << ", slice_size=" << (8ul << 30)
+            << ", bucket_size=" << (128 * 4 * 16) << std::endl;
+
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
   int magic_numbers = 88;
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
       write_read<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, magic_numbers);
-      CUDA_CHECK(cudaStreamSynchronize(stream));
     }
   }
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  std::cout << "finish writing" << std::endl;
 
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
@@ -157,6 +162,7 @@ int main() {
   }
   CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
+  std::cout << "finish checking" << std::endl;
 
 //  for(int i = 0; i <  num_vectors_per_slice * num_slices; i++){
 //    h_index[i] = i;
