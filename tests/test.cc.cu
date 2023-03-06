@@ -31,13 +31,13 @@ inline void cuda_check_(cudaError_t val, const char* file, int line) {
   } while (0)
 
 struct __align__(16) Bucket {
-  uint64_t* a;      // ignore it!
-  uint64_t* b;     // ignore it!
-  ValueType* c;    // ignore it!
+  uint64_t* a;         // ignore it!
+  uint64_t* b;         // ignore it!
+  ValueType* c;        // ignore it!
   ValueType* vectors;  // <<<----important member
-  uint64_t d;   // ignore it!
-  uint64_t e;   // ignore it!
-  int f;         // ignore it!
+  uint64_t d;          // ignore it!
+  uint64_t e;          // ignore it!
+  int f;               // ignore it!
 };
 
 __global__ void write_read(Bucket* buckets, int bucket_idx,
@@ -54,14 +54,13 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
   printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
 }
 
-
 constexpr size_t num_vector_per_bucket = 128;
 constexpr size_t num_buckets = 1024 * 1024;
 constexpr size_t num_vector = num_buckets * num_vector_per_bucket;
 
-constexpr size_t memory_pool_size = num_vector * sizeof(ValueType) * DIM; // = 128 * 1024 * 1024 * 4 * 16 = 8GB
+constexpr size_t memory_pool_size =
+    num_vector * sizeof(ValueType) * DIM;  // = 128 * 1024 * 1024 * 4 * 16 = 8GB
 constexpr size_t bucket_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
-
 
 int main() {
   Bucket* buckets;
@@ -81,13 +80,17 @@ int main() {
   CUDA_CHECK(cudaHostAlloc(&host_memory_pool, memory_pool_size,
                            cudaHostAllocMapped | cudaHostAllocWriteCombined));
 
-  // Make the `vectors` pointer of each bucket point to different section of the memory pool.
+  // Make the `vectors` pointer of each bucket point to different section of the
+  // memory pool.
   for (int i = 0; i < num_buckets; i++) {
-    ValueType* h_memory_pool = host_memory_pool + (num_vector_per_bucket * DIM * i);
-    CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_memory_pool, 0));
+    ValueType* h_memory_pool =
+        host_memory_pool + (num_vector_per_bucket * DIM * i);
+    CUDA_CHECK(
+        cudaHostGetDevicePointer(&(buckets[i].vectors), h_memory_pool, 0));
   }
   std::cout << "finish allocating"
-            << ", num_buckets=" << num_buckets << ", memory_pool_size=" << (8ul << 30)
+            << ", num_buckets=" << num_buckets
+            << ", memory_pool_size=" << (8ul << 30)
             << ", bucket_size=" << (128 * 4 * 16) << std::endl;
 
   // Write magic_numbers to first element of each `vectors`.
@@ -109,12 +112,16 @@ int main() {
   size_t correct_num = 0;
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
     for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
-      ValueType val = host_memory_pool[bucket_idx * num_vector_per_bucket * DIM + vector_idx * DIM];
+      ValueType val =
+          host_memory_pool[bucket_idx * num_vector_per_bucket * DIM +
+                           vector_idx * DIM];
       if (val != (bucket_idx * num_vector_per_bucket + vector_idx)) {
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
         printf("host   view: ptr=%p\tval=%d\n\n",
-               (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM + vector_idx * DIM), val);
+               (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
+                vector_idx * DIM),
+               val);
         error_num++;
       } else {
         correct_num++;
