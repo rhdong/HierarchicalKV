@@ -68,9 +68,9 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
 
 int main() {
   int num_slices = 1;
-  ValueType** slices;
+//  ValueType** slices;
   size_t slice_size = num_vectors_per_slice * sizeof(ValueType) * DIM;
-  cudaMallocManaged(&slices, sizeof(ValueType*) * num_slices);
+//  cudaMallocManaged(&slices, sizeof(ValueType*) * num_slices);
 
   int num_buckets = num_vectors_per_slice / num_vector_per_bucket;
   Bucket* buckets;
@@ -87,10 +87,10 @@ int main() {
   ValueType* slice;
   CUDA_CHECK(cudaHostAlloc(&slice, slice_size,
                            cudaHostAllocMapped | cudaHostAllocWriteCombined));
-  slices[0] = slice;
+//  slices[0] = slice;
 
   for (int i = 0; i < num_buckets; i++) {
-    ValueType* h_slice = slices[0] + (num_vector_per_bucket * DIM * i);
+    ValueType* h_slice = slice + (num_vector_per_bucket * DIM * i);
     CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_slice, 0));
   }
   std::cout << "finish allocating"
@@ -132,6 +132,6 @@ int main() {
   std::cout << "finish checking" << std::endl;
 
   CUDA_CHECK(cudaFreeHost(slice));
-  CUDA_CHECK(cudaFree(slices));
+//  CUDA_CHECK(cudaFree(slices));
   CUDA_CHECK(cudaFree(buckets));
 }
