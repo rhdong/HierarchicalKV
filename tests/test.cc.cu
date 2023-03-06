@@ -61,14 +61,14 @@ using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 
 
 template <class K, class V, class M>
-struct Bucket {
-//  AtomicKey<K>* keys;    // ignore it!
-//  AtomicMeta<M>* metas;  // ignore it!
-//  V* cache;              // ignore it!
+struct __align__(16) Bucket {
+  AtomicKey<K>* keys;    // ignore it!
+  AtomicMeta<M>* metas;  // ignore it!
+  V* cache;              // ignore it!
   V* vectors;            // <<<----important
-//  AtomicMeta<M> cur_meta; // ignore it!
-//  AtomicMeta<M> min_meta; // ignore it!
-//  AtomicPos<int> min_pos; // ignore it!
+  AtomicMeta<M> cur_meta; // ignore it!
+  AtomicMeta<M> min_meta; // ignore it!
+  AtomicPos<int> min_pos; // ignore it!
 };
 
 template <class K, class V, class M>
