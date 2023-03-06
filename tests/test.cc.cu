@@ -138,22 +138,24 @@ int main() {
   slices[0] = slice;
 
   for(int i = 0; i < num_buckets; i++){
-    buckets[i].vectors = slices[0] + (num_buckets * num_vector_per_bucket * DIM * i);
+    buckets[i].vectors = slices[0] + (num_vector_per_bucket * DIM * i);
   }
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
+  int magic_numbers = 88;
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
-      write_read<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, 1);
+      write_read<K, V, M><<<1, 1, 0, stream>>>(buckets, i, j, magic_numbers);
       CUDA_CHECK(cudaStreamSynchronize(stream));
     }
   }
 
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
-      assert(buckets[i].vectors[j * DIM] == 1);
+      assert(buckets[i].vectors[j * DIM] == magic_numbers);
     }
   }
+  CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
 
 //  for(int i = 0; i <  num_vectors_per_slice * num_slices; i++){
@@ -183,10 +185,10 @@ int main() {
 //  }
 
   for(int i = 0; i < num_slices; i++){
-    cudaFree(slices[i]);
+    cudaFreeHost(slices[i]);
   }
   cudaFree(slices);
   cudaFree(buckets);
 //  cudaFree(d_index);
-  cudaFreeHost(h_index);
+//  cudaFreeHost(h_index);
 }
