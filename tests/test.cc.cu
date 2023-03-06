@@ -44,7 +44,7 @@ __global__ void write_read(Bucket* buckets, int bucket_idx,
                            const ValueType val) {
   int vector_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
   ValueType* vectors = buckets[bucket_idx].vectors;
-  *(vectors + tid * DIM) = bucket_idx * num_vector_per_bucket + vector_idx;
+  *(vectors + vector_idx * DIM) = bucket_idx * num_vector_per_bucket + vector_idx;
 }
 
 __global__ void read_when_error(Bucket* buckets, int bucket_idx,
