@@ -28,38 +28,7 @@ using V = int;
 constexpr size_t DIM = 16;
 constexpr size_t num_vectors_per_slice = 8 * 16777216;
 constexpr size_t num_vector_per_bucket = 128;
-constexpr size_t TILE_SIZE = 4;
 
-template <class V, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ void copy_vector(
-    cg::thread_block_tile<TILE_SIZE> const& g, const V val, V* dst,
-    const size_t dim) {
-  for (auto i = g.thread_rank(); i < dim; i += g.size()) {
-    dst[i] = val;
-  }
-}
-
-template <class K, class V, class M, uint32_t TILE_SIZE = 4>
-__global__ void upsert_kernel_with_io_core(V** slices, int* index, size_t N) {
-
-  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
-  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
-  int rank = g.thread_rank();
-
-
-  for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
-    size_t vector_idx = index[t / TILE_SIZE];
-    const V val= static_cast<V>(vector_idx * 0.00001);
-    size_t target_slice = vector_idx / num_vectors_per_slice;
-    size_t target_offset = (vector_idx % num_vectors_per_slice) * DIM;
-    copy_vector<V, TILE_SIZE>(g, val, slices[target_slice] + target_offset, DIM);
-  }
-
-};
-
-static inline size_t SAFE_GET_GRID_SIZE(size_t N, int block_size) {
-  return  (((N)-1) / block_size + 1);
-};
 
 class CudaException : public std::runtime_error {
  public:
@@ -93,21 +62,13 @@ using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 
 template <class K, class V, class M>
 struct Bucket {
-  AtomicKey<K>* keys;    // HBM
-  AtomicMeta<M>* metas;  // HBM
-  V* cache;              // HBM(optional)
-  V* vectors;            // Pinned memory or HBM
-
-  /* For upsert_kernel without user specified metas
-     recording the current meta, the cur_meta will
-     increment by 1 when a new inserting happens. */
-  AtomicMeta<M> cur_meta;
-
-  /* min_meta and min_pos is for or upsert_kernel
-     with user specified meta. They record the minimum
-     meta and its pos in the bucket. */
-  AtomicMeta<M> min_meta;
-  AtomicPos<int> min_pos;
+  AtomicKey<K>* keys;    // ignore it!
+  AtomicMeta<M>* metas;  // ignore it!
+  V* cache;              // ignore it!
+  V* vectors;            // <<<----important
+  AtomicMeta<M> cur_meta; // ignore it!
+  AtomicMeta<M> min_meta; // ignore it!
+  AtomicPos<int> min_pos; // ignore it!
 };
 
 template <class K, class V, class M>
@@ -115,6 +76,14 @@ __global__ void write_read(Bucket<K, V, M>* buckets, int bucket_idx, const V val
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   V* vectors = buckets[bucket_idx].vectors;
   *(vectors + tid * DIM) = val;
+}
+
+template <class K, class V, class M>
+__global__ void read_when_error(Bucket<K, V, M>* buckets, int bucket_idx, V* val) {
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+  V* vectors = buckets[bucket_idx].vectors;
+  val = *(vectors + tid * DIM);
+  printf("device view: ptr=%p\tval=%d\n", (vectors + tid * DIM), val);
 }
 
 int main() {
@@ -133,16 +102,13 @@ int main() {
   assert(bucket_size == (128 * 4 * 16));
   assert(slice_size == (bucket_size * num_buckets));
 
-//  int* d_index;
   V* slice;
-//  cudaMalloc(&d_index, num_vectors_per_slice * num_slices * sizeof(int));
   CUDA_CHECK(cudaHostAlloc(&slice, slice_size, cudaHostAllocMapped | cudaHostAllocWriteCombined));
   slices[0] = slice;
 
   for(int i = 0; i < num_buckets; i++){
     V* h_slice = slices[0] + (num_vector_per_bucket * DIM * i);
     CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_slice, 0));
-//    buckets[i].vectors = ;
   }
   std::cout << "finish allocating" << ", num_buckets=" << num_buckets
             << ", slice_size=" << (8ul << 30)
@@ -150,9 +116,9 @@ int main() {
 
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
-  int magic_numbers = 88;
+  V magic_numbers = 88;
   for(int i = 0; i < num_buckets; i++){
-    write_read<K, V, M><<<1, 128, 0, stream>>>(buckets, i, magic_numbers);
+    write_read<K, V, M><<<1, num_vector_per_bucket, 0, stream>>>(buckets, i, magic_numbers);
     CUDA_CHECK(cudaStreamSynchronize(stream));
   }
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -162,15 +128,13 @@ int main() {
   size_t correct_num = 0;
   for(int i = 0; i < num_buckets; i++){
     for(int j = 0; j < num_vector_per_bucket; j++){
-      int val = slice[i * num_vector_per_bucket * DIM + j * DIM];
+      V val = slice[i * num_vector_per_bucket * DIM + j * DIM];
       if(val != magic_numbers) {
-//        std::cout << "i=" << i << "\tj=" << j << "\tval="
-//                  << buckets[i].vectors[j * DIM] << std::endl;
+        printf("device view: ptr=%p\tval=%d\n", (slice + i * num_vector_per_bucket * DIM + j * DIM), val);
         error_num++;
       } else {
         correct_num++;
       }
-//      assert(buckets[i].vectors[j * DIM] == magic_numbers);
     }
   }
   std::cout << "error_num=" << error_num << "\tcorrect_num=" << correct_num << std::endl;
@@ -179,35 +143,8 @@ int main() {
   CUDA_CHECK(cudaStreamDestroy(stream));
   std::cout << "finish checking" << std::endl;
 
-//  for(int i = 0; i <  num_vectors_per_slice * num_slices; i++){
-//    h_index[i] = i;
-//  }
-//  cudaMemcpy(d_index, h_index, num_vectors_per_slice * num_slices * sizeof(int), cudaMemcpyHostToDevice);
-
-//  thrust::default_random_engine g;
-//  thrust::shuffle(thrust::device, d_index, d_index + num_vectors_per_slice * num_slices, g);
-
-
-//  const size_t block_size = 128;
-//  const size_t N = num_slices * num_vectors_per_slice * TILE_SIZE;
-//  const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-//
-//  upsert_kernel_with_io_core<K, V, M, 4><<<grid_size, block_size, 0, 0>>>(slices, d_index, N);
-//  CUDA_CHECK(cudaDeviceSynchronize());
-//
-//  for(int i = 0; i < num_slices; i++){
-//    V* slice = slices[i];
-//    for(int j = 0; j < num_vectors_per_slice; j++){
-//      float expected = static_cast<V>((i * num_vectors_per_slice + j) * 0.00001);
-//      if(expected != slice[j * DIM]){
-//        std::cout << expected << " " << slice[j * DIM] << std::endl;
-//      }
-//    }
-//  }
 
   CUDA_CHECK(cudaFreeHost(slice));
   CUDA_CHECK(cudaFree(slices));
   CUDA_CHECK(cudaFree(buckets));
-//  cudaFree(d_index);
-//  cudaFreeHost(h_index);
 }
