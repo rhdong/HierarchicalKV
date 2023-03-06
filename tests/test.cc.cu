@@ -125,7 +125,7 @@ int main() {
   int num_buckets = num_vectors_per_slice / num_vector_per_bucket;
   Bucket<K, V, M>* buckets;
   size_t bucket_size = num_vector_per_bucket * sizeof(V) * DIM;
-  cudaMallocManaged(&buckets, sizeof(Bucket<K, V, M>*) * num_buckets);
+  cudaMallocManaged(&buckets, sizeof(Bucket<K, V, M>) * num_buckets);
 
   assert(num_buckets == (1024 * 1024));
   assert(slice_size == (8ul << 30));
@@ -190,11 +190,9 @@ int main() {
 //    }
 //  }
 
-  for(int i = 0; i < num_slices; i++){
-    cudaFreeHost(slices[i]);
-  }
-  cudaFree(slices);
-  cudaFree(buckets);
+  CUDA_CHECK(cudaFreeHost(slice));
+  CUDA_CHECK(cudaFree(slices));
+  CUDA_CHECK(cudaFree(buckets));
 //  cudaFree(d_index);
 //  cudaFreeHost(h_index);
 }
