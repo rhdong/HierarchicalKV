@@ -84,13 +84,13 @@ int main() {
   assert(bucket_size == (128 * 4 * 16));
   assert(slice_size == (bucket_size * num_buckets));
 
-  ValueType* slice;
-  CUDA_CHECK(cudaHostAlloc(&slice, slice_size,
+  ValueType* host_memory_pool;
+  CUDA_CHECK(cudaHostAlloc(&host_memory_pool, slice_size,
                            cudaHostAllocMapped | cudaHostAllocWriteCombined));
-//  slices[0] = slice;
+//  slices[0] = host_memory_pool;
 
   for (int i = 0; i < num_buckets; i++) {
-    ValueType* h_slice = slice + (num_vector_per_bucket * DIM * i);
+    ValueType* h_slice = host_memory_pool + (num_vector_per_bucket * DIM * i);
     CUDA_CHECK(cudaHostGetDevicePointer(&(buckets[i].vectors), h_slice, 0));
   }
   std::cout << "finish allocating"
@@ -112,12 +112,12 @@ int main() {
   size_t correct_num = 0;
   for (int i = 0; i < num_buckets; i++) {
     for (int j = 0; j < num_vector_per_bucket; j++) {
-      ValueType val = slice[i * num_vector_per_bucket * DIM + j * DIM];
+      ValueType val = host_memory_pool[i * num_vector_per_bucket * DIM + j * DIM];
       if (val != magic_numbers) {
         read_when_error<<<1, 1, 0, stream>>>(buckets, i, j);
         CUDA_CHECK(cudaStreamSynchronize(stream));
         printf("host   view: ptr=%p\tval=%d\n\n",
-               (slice + i * num_vector_per_bucket * DIM + j * DIM), val);
+               (host_memory_pool + i * num_vector_per_bucket * DIM + j * DIM), val);
         error_num++;
       } else {
         correct_num++;
@@ -131,7 +131,7 @@ int main() {
   CUDA_CHECK(cudaStreamDestroy(stream));
   std::cout << "finish checking" << std::endl;
 
-  CUDA_CHECK(cudaFreeHost(slice));
+  CUDA_CHECK(cudaFreeHost(host_memory_pool));
 //  CUDA_CHECK(cudaFree(slices));
   CUDA_CHECK(cudaFree(buckets));
 }
