@@ -144,10 +144,10 @@ int test() {
       ValueType expected = (bucket_idx * num_vector_per_bucket + vector_idx);
       h_correct = (host_val == expected);
       if (!h_correct) {
-        printf("\nhost   side: ptr=%p\texpected=%d\t", ptr, expected);
+        printf("host   side: ptr=%p\texpected=%d\t", ptr, expected);
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        printf("host_val=%d\n", host_val);
+        printf("host_val=%d\n\n", host_val);
         error_num++;
       } else {
         correct_num++;
