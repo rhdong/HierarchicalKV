@@ -61,17 +61,18 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
                                 int vector_idx) {
   ValueType* vectors = buckets[bucket_idx].vectors;
   ValueType val = *(vectors + vector_idx * DIM);
-  printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
+  printf("device_val=%d\t", val);
 }
 
 __global__ void check_from_device(Bucket* buckets, int bucket_idx,
-                                  int vector_idx) {
+                                  int vector_idx, bool *correct) {
   ValueType* vectors = buckets[bucket_idx].vectors;
   ValueType val = *(vectors + vector_idx * DIM);
   ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
-  if (expected != val) {
-    printf("device view: ptr=%p\tval=%d\texpected=%d\n",
-           (vectors + vector_idx * DIM), val, expected);
+  *correct = (expected == val);
+  if (!(*correct)) {
+    printf("device side: ptr=%p\texpected=%d\tdevice_val=%d\t",
+           (vectors + vector_idx * DIM), expected, val);
   }
 }
 
@@ -123,24 +124,39 @@ int test() {
   // Checking if the value is expected from both of device and host sides.
   size_t error_num = 0;
   size_t correct_num = 0;
+  bool *d_correct = false;
+  bool h_correct = false;
+  CUDA_CHECK(cudaMalloc(&d_correct, sizeof(bool)));
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
     for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
       ValueType* ptr =
           (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
            vector_idx * DIM);
-      ValueType val = *ptr;
+      ValueType host_val = *ptr;
 
+      // Check from device
+      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx, d_correct);
       CUDA_CHECK(cudaStreamSynchronize(stream));
-      if (val != (bucket_idx * num_vector_per_bucket + vector_idx)) {
+      if(!d_correct) {
+        error_num++;
+        printf("host_val=%d\n", host_val);
+      }
+
+      // Check from host
+      ValueType expected = (bucket_idx * num_vector_per_bucket + vector_idx);
+      h_correct = (host_val == expected);
+      if (!h_correct) {
+        printf("host   side: ptr=%p\texpected=%d", ptr, expected);
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        printf("host   view: ptr=%p\tval=%d\n\n", ptr, val);
+        printf("host_val=%d\n", host_val);
         error_num++;
       } else {
         correct_num++;
       }
     }
   }
+  CUDA_CHECK(cudaFree(d_correct));
   std::cout << "error_num=" << error_num << "\tcorrect_num=" << correct_num
             << std::endl;
 
