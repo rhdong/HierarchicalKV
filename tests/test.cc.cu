@@ -18,7 +18,7 @@ constexpr size_t num_vector = num_buckets * num_vector_per_bucket;
 
 constexpr size_t memory_pool_size =
     num_vector * sizeof(ValueType) * DIM;  // = 128 * 1024 * 1024 * 4 * 16 = 8GB
-constexpr size_t bucket_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
+constexpr size_t bucket_vectors_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
 
 
 class CudaException : public std::runtime_error {
@@ -74,8 +74,8 @@ int test() {
 
   assert(num_buckets == (1024 * 1024));
   assert(memory_pool_size == (8ul << 30));
-  assert(bucket_size == (128 * 4 * 16));
-  assert(memory_pool_size == (bucket_size * num_buckets));
+  assert(bucket_vectors_size == (128 * 4 * 16));
+  assert(memory_pool_size == (bucket_vectors_size * num_buckets));
 
   // Allocating a memory pool on host memory for all of the vectors.
   ValueType* host_memory_pool;
@@ -92,8 +92,8 @@ int test() {
   }
   std::cout << "finish allocating"
             << ", num_buckets=" << num_buckets
-            << ", memory_pool_size=" << (8ul << 30)
-            << ", bucket_size=" << (128 * 4 * 16) << std::endl;
+            << ", bucket_vectors_size=" << (128 * 4 * 16)
+            << ", memory_pool_size=" << (8ul << 30)<< std::endl;
 
   // Write magic_numbers to first element of each `vectors`.
   // BTW, each `vectors` points to a section of memory pool with 8192 bytes, and
