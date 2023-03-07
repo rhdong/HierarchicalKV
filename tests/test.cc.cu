@@ -65,7 +65,7 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
 }
 
 __global__ void check_from_device(Bucket* buckets, int bucket_idx,
-                                  int vector_idx, bool *correct) {
+                                  int vector_idx, bool* correct) {
   ValueType* vectors = buckets[bucket_idx].vectors;
   ValueType device_val = *(vectors + vector_idx * DIM);
   ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
@@ -121,20 +121,21 @@ int test() {
   // Checking if the value is expected from both of device and host sides.
   size_t error_num = 0;
   size_t correct_num = 0;
-  bool *d_correct;
+  bool* d_correct;
   bool h_correct = false;
   CUDA_CHECK(cudaHostAlloc(&d_correct, sizeof(bool), cudaHostAllocMapped));
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
     for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
       ValueType* ptr =
           (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
-           vector_idx * DIM + 0); // write to first position of the `vector`.
+           vector_idx * DIM + 0);  // write to first position of the `vector`.
       ValueType host_val = *ptr;
 
       // Check from device
-      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx, d_correct);
+      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
+                                             d_correct);
       CUDA_CHECK(cudaStreamSynchronize(stream));
-      if(!d_correct) {
+      if (!d_correct) {
         error_num++;
         printf("host_val=%d\n", host_val);
       }
