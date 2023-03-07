@@ -124,7 +124,7 @@ int test() {
   // Checking if the value is expected from both of device and host sides.
   size_t error_num = 0;
   size_t correct_num = 0;
-  bool *d_correct = false;
+  bool *d_correct;
   bool h_correct = false;
   CUDA_CHECK(cudaMalloc(&d_correct, sizeof(bool)));
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
