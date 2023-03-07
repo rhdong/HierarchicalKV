@@ -135,7 +135,7 @@ int test() {
       check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
                                              d_correct);
       CUDA_CHECK(cudaStreamSynchronize(stream));
-      if (!d_correct) {
+      if (!(*d_correct)) {
         error_num++;
         printf("host_val=%d\n", host_val);
       }
@@ -154,7 +154,7 @@ int test() {
       }
     }
   }
-  CUDA_CHECK(cudaFree(d_correct));
+  CUDA_CHECK(cudaFreeHost(d_correct));
   std::cout << "error_num=" << error_num << "\tcorrect_num=" << correct_num
             << std::endl;
 
