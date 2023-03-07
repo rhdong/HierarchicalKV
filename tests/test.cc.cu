@@ -11,15 +11,14 @@ using namespace std;
 using ValueType = int;
 constexpr int DIM = 16;
 
-
 constexpr size_t num_vector_per_bucket = 128;
 constexpr size_t num_buckets = 1024 * 1024;
 constexpr size_t num_vector = num_buckets * num_vector_per_bucket;
 
 constexpr size_t memory_pool_size =
     num_vector * sizeof(ValueType) * DIM;  // = 128 * 1024 * 1024 * 4 * 16 = 8GB
-constexpr size_t bucket_vectors_size = num_vector_per_bucket * sizeof(ValueType) * DIM;
-
+constexpr size_t bucket_vectors_size =
+    num_vector_per_bucket * sizeof(ValueType) * DIM;
 
 class CudaException : public std::runtime_error {
  public:
@@ -54,7 +53,8 @@ __global__ void write_read(Bucket* buckets, int bucket_idx,
                            const ValueType val) {
   int vector_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
   ValueType* vectors = buckets[bucket_idx].vectors;
-  *(vectors + vector_idx * DIM) = bucket_idx * num_vector_per_bucket + vector_idx;
+  *(vectors + vector_idx * DIM) =
+      bucket_idx * num_vector_per_bucket + vector_idx;
 }
 
 __global__ void read_when_error(Bucket* buckets, int bucket_idx,
@@ -69,8 +69,9 @@ __global__ void check_from_device(Bucket* buckets, int bucket_idx,
   ValueType* vectors = buckets[bucket_idx].vectors;
   ValueType val = *(vectors + vector_idx * DIM);
   ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
-  if(expected != val) {
-    printf("device view: ptr=%p\tval=%d\texpected=%d\n", (vectors + vector_idx * DIM), val, expected);
+  if (expected != val) {
+    printf("device view: ptr=%p\tval=%d\texpected=%d\n",
+           (vectors + vector_idx * DIM), val, expected);
   }
 }
 
@@ -103,7 +104,7 @@ int test() {
   std::cout << "finish allocating"
             << ", num_buckets=" << num_buckets
             << ", bucket_vectors_size=" << (128 * 4 * 16)
-            << ", memory_pool_size=" << (8ul << 30)<< std::endl;
+            << ", memory_pool_size=" << (8ul << 30) << std::endl;
 
   // Write magic_numbers to first element of each `vectors`.
   // BTW, each `vectors` points to a section of memory pool with 8192 bytes, and
@@ -124,18 +125,16 @@ int test() {
   size_t correct_num = 0;
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
     for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
-      ValueType val =
-          host_memory_pool[bucket_idx * num_vector_per_bucket * DIM +
-                           vector_idx * DIM];
+      ValueType* ptr =
+          (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
+           vector_idx * DIM);
+      ValueType val = *ptr;
       check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       if (val != (bucket_idx * num_vector_per_bucket + vector_idx)) {
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        printf("host   view: ptr=%p\tval=%d\n\n",
-               (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
-                vector_idx * DIM),
-               val);
+        //        printf("host   view: ptr=%p\tval=%d\n\n", ptr, val);
         error_num++;
       } else {
         correct_num++;
@@ -157,10 +156,10 @@ int test() {
 int main() {
   int TEST_TIMES = 10;
   int fail_times = 0;
-  for(int i = 0; i < TEST_TIMES; i++){
+  for (int i = 0; i < TEST_TIMES; i++) {
     int error_num = test();
     std::cout << "test round=" << i << "\terror_num=" << error_num << std::endl;
-    if(error_num) fail_times++;
+    if (error_num) fail_times++;
   }
   std::cout << "fail ratio=" << fail_times * 1.0 / TEST_TIMES << std::endl;
 }
