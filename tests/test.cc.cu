@@ -63,7 +63,7 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
          val);
 }
 
-int main() {
+int test() {
   Bucket* buckets;
 
   // Allocating the buckets structs.
@@ -137,4 +137,16 @@ int main() {
 
   CUDA_CHECK(cudaFreeHost(host_memory_pool));
   CUDA_CHECK(cudaFree(buckets));
+  return error_num;
+}
+
+int main() {
+  int TEST_TIMES = 10;
+  int fail_times = 0;
+  for(int i = 0; i < TEST_TIMES; i++){
+    int error_num = test();
+    std::cout << "test round=" << i << "\terror_num=" << error_num << std::endl;
+    if(error_num) fail_times++;
+  }
+  std::cout << "fail ratio=" << fail_times / TEST_TIMES << std::endl;
 }
