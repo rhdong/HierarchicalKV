@@ -17,6 +17,7 @@ constexpr size_t num_vector = num_buckets * num_vector_per_bucket;
 
 constexpr size_t memory_pool_size =
     num_vector * sizeof(ValueType) * DIM;  // = 128 * 1024 * 1024 * 4 * 16 = 8GB
+
 constexpr size_t bucket_vectors_size =
     num_vector_per_bucket * sizeof(ValueType) * DIM;
 
@@ -49,12 +50,11 @@ struct __align__(16) Bucket {
   int f;               // ignore it!
 };
 
-__global__ void write_read(Bucket* buckets, int bucket_idx,
-                           const ValueType val) {
+__global__ void write_read(Bucket* buckets, int bucket_idx) {
   int vector_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
   ValueType* vectors = buckets[bucket_idx].vectors;
-  *(vectors + vector_idx * DIM) =
-      bucket_idx * num_vector_per_bucket + vector_idx;
+  ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
+  *(vectors + vector_idx * DIM) = expected;
 }
 
 __global__ void read_when_error(Bucket* buckets, int bucket_idx,
@@ -67,12 +67,12 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
 __global__ void check_from_device(Bucket* buckets, int bucket_idx,
                                   int vector_idx, bool *correct) {
   ValueType* vectors = buckets[bucket_idx].vectors;
-  ValueType val = *(vectors + vector_idx * DIM);
+  ValueType device_val = *(vectors + vector_idx * DIM);
   ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
-  *correct = (expected == val);
+  *correct = (expected == device_val);
   if (!(*correct)) {
     printf("device side: ptr=%p\texpected=%d\tdevice_val=%d\t",
-           (vectors + vector_idx * DIM), expected, val);
+           (vectors + vector_idx * DIM), expected, device_val);
   }
 }
 
@@ -107,15 +107,12 @@ int test() {
             << ", bucket_vectors_size=" << (128 * 4 * 16)
             << ", memory_pool_size=" << (8ul << 30) << std::endl;
 
-  // Write magic_numbers to first element of each `vectors`.
-  // BTW, each `vectors` points to a section of memory pool with 8192 bytes, and
-  // each element of the `vectors` has 16 floats (64 bytes).
+  // Writing a `value` into `values` of each buckets every `interval` values.
+  // `value = bucket_idx * num_vector_per_bucket + vector_idx`.
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
-  ValueType magic_numbers = 88;
   for (int i = 0; i < num_buckets; i++) {
-    write_read<<<1, num_vector_per_bucket, 0, stream>>>(buckets, i,
-                                                        magic_numbers);
+    write_read<<<1, num_vector_per_bucket, 0, stream>>>(buckets, i);
     CUDA_CHECK(cudaStreamSynchronize(stream));
   }
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -126,12 +123,12 @@ int test() {
   size_t correct_num = 0;
   bool *d_correct;
   bool h_correct = false;
-  CUDA_CHECK(cudaMalloc(&d_correct, sizeof(bool)));
+  CUDA_CHECK(cudaHostAlloc(&d_correct, sizeof(bool), cudaHostAllocMapped));
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
     for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
       ValueType* ptr =
           (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
-           vector_idx * DIM);
+           vector_idx * DIM + 0); // write to first position of the `vector`.
       ValueType host_val = *ptr;
 
       // Check from device
