@@ -64,6 +64,16 @@ __global__ void read_when_error(Bucket* buckets, int bucket_idx,
   printf("device view: ptr=%p\tval=%d\n", (vectors + vector_idx * DIM), val);
 }
 
+__global__ void check_from_device(Bucket* buckets, int bucket_idx,
+                                  int vector_idx) {
+  ValueType* vectors = buckets[bucket_idx].vectors;
+  ValueType val = *(vectors + vector_idx * DIM);
+  ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
+  if(expected != val) {
+    printf("device view: ptr=%p\tval=%d\texpected=%d\n", (vectors + vector_idx * DIM), val, expected);
+  }
+}
+
 int test() {
   Bucket* buckets;
 
@@ -117,6 +127,8 @@ int test() {
       ValueType val =
           host_memory_pool[bucket_idx * num_vector_per_bucket * DIM +
                            vector_idx * DIM];
+      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
       if (val != (bucket_idx * num_vector_per_bucket + vector_idx)) {
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
