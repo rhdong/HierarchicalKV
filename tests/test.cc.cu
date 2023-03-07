@@ -129,12 +129,12 @@ int test() {
           (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
            vector_idx * DIM);
       ValueType val = *ptr;
-      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
+
       CUDA_CHECK(cudaStreamSynchronize(stream));
       if (val != (bucket_idx * num_vector_per_bucket + vector_idx)) {
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        //        printf("host   view: ptr=%p\tval=%d\n\n", ptr, val);
+        printf("host   view: ptr=%p\tval=%d\n\n", ptr, val);
         error_num++;
       } else {
         correct_num++;
