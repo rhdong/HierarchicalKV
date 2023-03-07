@@ -150,5 +150,5 @@ int main() {
     std::cout << "test round=" << i << "\terror_num=" << error_num << std::endl;
     if(error_num) fail_times++;
   }
-  std::cout << "fail ratio=" << fail_times / TEST_TIMES << std::endl;
+  std::cout << "fail ratio=" << fail_times * 1.0 / TEST_TIMES << std::endl;
 }
