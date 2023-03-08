@@ -8,8 +8,8 @@
 
 using namespace std;
 
-using ValueType = int;
-constexpr int DIM = 16;
+using ValueType = void*;
+constexpr int DIM = 8;
 
 constexpr size_t num_vector_per_bucket = 128;
 constexpr size_t num_buckets = 1024 * 1024;
@@ -53,25 +53,25 @@ struct __align__(16) Bucket {
 __global__ void write_read(Bucket* buckets, int bucket_idx) {
   int vector_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
   ValueType* vectors = buckets[bucket_idx].vectors;
-  ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
+  ValueType expected = static_cast<ValueType>(vectors + vector_idx * DIM);
   *(vectors + vector_idx * DIM) = expected;
 }
 
 __global__ void read_when_error(Bucket* buckets, int bucket_idx,
                                 int vector_idx) {
   ValueType* vectors = buckets[bucket_idx].vectors;
-  ValueType val = *(vectors + vector_idx * DIM);
-  printf("device_val=%d\t", val);
+  ValueType device_val = *(vectors + vector_idx * DIM);
+  printf("device_val=%p\t", device_val);
 }
 
 __global__ void check_from_device(Bucket* buckets, int bucket_idx,
                                   int vector_idx, bool* correct) {
   ValueType* vectors = buckets[bucket_idx].vectors;
   ValueType device_val = *(vectors + vector_idx * DIM);
-  ValueType expected = bucket_idx * num_vector_per_bucket + vector_idx;
+  ValueType expected = static_cast<ValueType>(vectors + vector_idx * DIM);
   *correct = (expected == device_val);
   if (!(*correct)) {
-    printf("device side: ptr=%p\texpected=%d\tdevice_val=%d\t",
+    printf("device side: ptr=%p\texpected=%p\tdevice_val=%p\t",
            (vectors + vector_idx * DIM), expected, device_val);
   }
 }
@@ -126,10 +126,10 @@ int test() {
   CUDA_CHECK(cudaHostAlloc(&d_correct, sizeof(bool), cudaHostAllocMapped));
   for (int bucket_idx = 0; bucket_idx < num_buckets; bucket_idx++) {
     for (int vector_idx = 0; vector_idx < num_vector_per_bucket; vector_idx++) {
-      ValueType* ptr =
+      ValueType* host_ptr =
           (host_memory_pool + bucket_idx * num_vector_per_bucket * DIM +
            vector_idx * DIM + 0);  // write to first position of the `vector`.
-      ValueType host_val = *ptr;
+      ValueType host_val = *host_ptr;
 
       // Check from device
       check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
@@ -137,17 +137,17 @@ int test() {
       CUDA_CHECK(cudaStreamSynchronize(stream));
       if (!(*d_correct)) {
         error_num++;
-        printf("host_val=%d\n", host_val);
+        printf("host_val=%p\n", host_val);
       }
 
       // Check from host
-      ValueType expected = (bucket_idx * num_vector_per_bucket + vector_idx);
+      ValueType expected = static_cast<ValueType>(host_ptr);
       h_correct = (host_val == expected);
       if (!h_correct) {
-        printf("host   side: ptr=%p\texpected=%d\t", ptr, expected);
+        printf("host   side: ptr=%p\texpected=%p\t", host_ptr, expected);
         read_when_error<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        printf("host_val=%d\n\n", host_val);
+        printf("host_val=%p\n\n", host_val);
         error_num++;
       } else {
         correct_num++;
