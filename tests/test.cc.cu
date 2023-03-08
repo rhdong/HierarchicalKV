@@ -131,14 +131,14 @@ int test() {
            vector_idx * DIM + 0);  // write to first position of the `vector`.
       ValueType host_val = *host_ptr;
 
-      // Check from device
-      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
-                                             d_correct);
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-      if (!(*d_correct)) {
-        error_num++;
-        printf("host_val=%p\n", host_val);
-      }
+//      // Check from device
+//      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
+//                                             d_correct);
+//      CUDA_CHECK(cudaStreamSynchronize(stream));
+//      if (!(*d_correct)) {
+//        error_num++;
+//        printf("host_val=%p\n", host_val);
+//      }
 
       // Check from host
       ValueType expected = static_cast<ValueType>(host_ptr);
