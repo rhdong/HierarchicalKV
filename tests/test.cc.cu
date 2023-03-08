@@ -107,8 +107,8 @@ int test() {
             << ", bucket_vectors_size=" << (128 * 4 * 16)
             << ", memory_pool_size=" << (8ul << 30) << std::endl;
 
-  // Writing a `value` into `values` of each buckets every `interval` values.
-  // `value = bucket_idx * num_vector_per_bucket + vector_idx`.
+  // Writing a value into `values` of each buckets every `interval` values.
+  // `value = the address of writing position`.
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
   for (int i = 0; i < num_buckets; i++) {
@@ -131,14 +131,14 @@ int test() {
            vector_idx * DIM + 0);  // write to first position of the `vector`.
       ValueType host_val = *host_ptr;
 
-//      // Check from device
-//      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
-//                                             d_correct);
-//      CUDA_CHECK(cudaStreamSynchronize(stream));
-//      if (!(*d_correct)) {
-//        error_num++;
-//        printf("host_val=%p\n", host_val);
-//      }
+      // Check from device
+      check_from_device<<<1, 1, 0, stream>>>(buckets, bucket_idx, vector_idx,
+                                             d_correct);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      if (!(*d_correct)) {
+        error_num++;
+        printf("host_val=%p\n", host_val);
+      }
 
       // Check from host
       ValueType expected = static_cast<ValueType>(host_ptr);
