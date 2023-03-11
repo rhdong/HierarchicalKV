@@ -941,7 +941,7 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
       auto dst = bucket->vectors + key_pos * dim;
 
       if (rank == src_lane) {
-        update_meta(bucket, key_pos, metas, key_idx);
+        update_meta(bucket, key_upsert_kernel_with_io_corepos, metas, key_idx);
       }
       if (local_size >= bucket_max_size) {
         refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
