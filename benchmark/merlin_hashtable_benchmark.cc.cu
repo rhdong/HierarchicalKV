@@ -280,7 +280,7 @@ int main() {
 //    test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32, 0.75);
 //    test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32, 1.00);
 
-    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
+    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 32, 0.50);
     //    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
     //    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
     //
