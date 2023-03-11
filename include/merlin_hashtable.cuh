@@ -169,7 +169,6 @@ class HashTable {
    * table object.
    */
   ~HashTable() {
-
     std::cout << "deinit start," << options_.max_capacity << std::endl;
     if (initialized_) {
       CUDA_CHECK(cudaDeviceSynchronize());

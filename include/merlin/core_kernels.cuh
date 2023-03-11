@@ -194,6 +194,7 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
                              (*table)->dim;
 
     V* slice;
+    V* d_slice;
     if ((*table)->remaining_hbm_for_vectors >= slice_real_size) {
       CUDA_CHECK(cudaMalloc(&slice, slice_real_size));
       (*table)->remaining_hbm_for_vectors -= slice_real_size;
@@ -203,8 +204,9 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
           cudaHostAlloc(&slice, slice_real_size,
                         cudaHostAllocMapped | cudaHostAllocWriteCombined));
     }
-
-    set_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, slice);
+    CUDA_CHECK(cudaHostGetDevicePointer(&d_slice, slice, 0));
+    assert(d_slice == slice);
+    set_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, d_slice);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     {
@@ -351,17 +353,24 @@ template <class K, class V, class M>
 void destroy_table(Table<K, V, M>** table) {
   AtomicKey<K>** keys;
   AtomicMeta<M>** metas;
-  CUDA_CHECK(cudaHostAlloc(&keys, sizeof(AtomicKey<K>**), cudaHostAllocMapped));
+  AtomicKey<K>** d_keys;
+  AtomicMeta<M>** d_metas;
+  CUDA_CHECK(cudaHostAlloc(&keys, sizeof(AtomicKey<K>*), cudaHostAllocMapped));
   CUDA_CHECK(
-      cudaHostAlloc(&metas, sizeof(AtomicMeta<M>**), cudaHostAllocMapped));
+      cudaHostAlloc(&metas, sizeof(AtomicMeta<M>*), cudaHostAllocMapped));
+
+  CUDA_CHECK(cudaHostGetDevicePointer(&d_keys, keys, 0));
+  CUDA_CHECK(cudaHostGetDevicePointer(&d_metas, metas, 0));
+  assert(d_keys == keys);
+  assert(d_metas == metas);
 
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
   for (int i = 0; i < (*table)->buckets_num; i++) {
-    CUDA_CHECK(cudaMemset(keys, 0, sizeof(AtomicKey<K>**)));
-    CUDA_CHECK(cudaMemset(metas, 0, sizeof(AtomicMeta<M>**)));
+    CUDA_CHECK(cudaMemset(keys, 0, sizeof(AtomicKey<K>*)));
+    CUDA_CHECK(cudaMemset(metas, 0, sizeof(AtomicMeta<M>*)));
     get_key_meta<K, V, M>
-        <<<1, 1, 0, stream>>>((*table)->buckets, i, keys, metas);
+        <<<1, 1, 0, stream>>>((*table)->buckets, i, d_keys, d_metas);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CUDA_CHECK(cudaFree(*keys));
     CUDA_CHECK(cudaFree(*metas));
@@ -370,9 +379,12 @@ void destroy_table(Table<K, V, M>** table) {
   CUDA_CHECK(cudaFreeHost(metas));
 
   V** slice;
-  CUDA_CHECK(cudaHostAlloc(&slice, sizeof(V**), cudaHostAllocMapped));
+  CUDA_CHECK(cudaHostAlloc(&slice, sizeof(V*), cudaHostAllocMapped));
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
-    get_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, slice);
+    V** d_slice;
+    CUDA_CHECK(cudaHostGetDevicePointer(&d_slice, slice, 0));
+
+    get_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, d_slice);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if (is_on_device(*slice)) {
       CUDA_CHECK(cudaFree(*slice));
