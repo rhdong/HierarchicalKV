@@ -198,13 +198,14 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
     if ((*table)->remaining_hbm_for_vectors >= slice_real_size) {
       CUDA_CHECK(cudaMalloc(&slice, slice_real_size));
       (*table)->remaining_hbm_for_vectors -= slice_real_size;
+      d_slice = slice;
     } else {
       (*table)->is_pure_hbm = false;
       CUDA_CHECK(
           cudaHostAlloc(&slice, slice_real_size,
                         cudaHostAllocMapped | cudaHostAllocWriteCombined));
+      CUDA_CHECK(cudaHostGetDevicePointer(&d_slice, slice, 0));
     }
-    CUDA_CHECK(cudaHostGetDevicePointer(&d_slice, slice, 0));
     assert(d_slice == slice);
     set_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, d_slice);
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -379,10 +380,10 @@ void destroy_table(Table<K, V, M>** table) {
   CUDA_CHECK(cudaFreeHost(metas));
 
   V** slice;
+  V** d_slice;
   CUDA_CHECK(cudaHostAlloc(&slice, sizeof(V*), cudaHostAllocMapped));
+  CUDA_CHECK(cudaHostGetDevicePointer(&d_slice, slice, 0));
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
-    V** d_slice;
-    CUDA_CHECK(cudaHostGetDevicePointer(&d_slice, slice, 0));
 
     get_slice<K, V, M><<<1, 1, 0, stream>>>((*table)->slices, i, d_slice);
     CUDA_CHECK(cudaStreamSynchronize(stream));
