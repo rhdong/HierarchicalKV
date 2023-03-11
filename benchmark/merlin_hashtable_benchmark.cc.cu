@@ -104,7 +104,6 @@ void test_main(const size_t dim,
   options.max_hbm_for_vectors = nv::merlin::GB(hbm4values);
   options.io_by_cpu = io_by_cpu;
   options.evict_strategy = EvictStrategy::kCustomized;
-  options.use_constant_memory = false;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
   table->init(options);
