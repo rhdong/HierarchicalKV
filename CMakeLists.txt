@@ -50,6 +50,8 @@ endif()
 # Some neat defaults.
 set(CUDA_SEPARABLE_COMPILATION ON)
 
+add_compile_definitions(CUDA_ERROR_CHECK)
+
 # Select target CUDA binary architecture.
 foreach(cuda_arch ${sm})
   list(APPEND cuda_arch_list ${cuda_arch})

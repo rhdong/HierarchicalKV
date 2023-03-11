@@ -104,6 +104,7 @@ void test_main(const size_t dim,
   options.max_hbm_for_vectors = nv::merlin::GB(hbm4values);
   options.io_by_cpu = io_by_cpu;
   options.evict_strategy = EvictStrategy::kCustomized;
+  options.use_constant_memory = false;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
   table->init(options);
@@ -184,6 +185,7 @@ void test_main(const size_t dim,
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if (start == 0) {
       table->erase(key_num_per_op, d_keys, stream);  // warmup for erase kernel.
+      CUDA_CHECK(cudaStreamSynchronize(stream));
     }
     start += (key_num_per_op * (1.0 - hitrate));
   }
@@ -280,36 +282,36 @@ int main() {
     test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32, 1.00);
 
     test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
-    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
-    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
-
-    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
-    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
-    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
-
-    test_main(128, 128 * 1024 * 1024UL, key_num_per_op, 64, 0.50);
-    test_main(128, 128 * 1024 * 1024UL, key_num_per_op, 64, 0.75);
-    test_main(128, 128 * 1024 * 1024UL, key_num_per_op, 64, 1.00);
-    cout << endl;
-
-    cout << "### On HBM+HMEM hybrid mode: " << endl;
-    print_title();
-    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
-    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
-    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
-
-    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 0.50);
-    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 0.75);
-    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 1.00);
-
-    test_main(128, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
-    test_main(128, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
-    test_main(128, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
-
-    test_main(128, 512 * 1024 * 1024UL, key_num_per_op, 56, 0.50);
-    test_main(128, 512 * 1024 * 1024UL, key_num_per_op, 56, 0.75);
-    test_main(128, 512 * 1024 * 1024UL, key_num_per_op, 56, 1.00);
-    cout << endl;
+//    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
+//    test_main(16, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
+//
+//    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
+//    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
+//    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
+//
+//    test_main(128, 128 * 1024 * 1024UL, key_num_per_op, 64, 0.50);
+//    test_main(128, 128 * 1024 * 1024UL, key_num_per_op, 64, 0.75);
+//    test_main(128, 128 * 1024 * 1024UL, key_num_per_op, 64, 1.00);
+//    cout << endl;
+//
+//    cout << "### On HBM+HMEM hybrid mode: " << endl;
+//    print_title();
+//    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
+//    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
+//    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
+//
+//    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 0.50);
+//    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 0.75);
+//    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 1.00);
+//
+//    test_main(128, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50);
+//    test_main(128, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75);
+//    test_main(128, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00);
+//
+//    test_main(128, 512 * 1024 * 1024UL, key_num_per_op, 56, 0.50);
+//    test_main(128, 512 * 1024 * 1024UL, key_num_per_op, 56, 0.75);
+//    test_main(128, 512 * 1024 * 1024UL, key_num_per_op, 56, 1.00);
+//    cout << endl;
 
     CUDA_CHECK(cudaDeviceSynchronize());
   } catch (const nv::merlin::CudaException& e) {

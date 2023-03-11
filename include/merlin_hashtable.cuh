@@ -169,6 +169,8 @@ class HashTable {
    * table object.
    */
   ~HashTable() {
+
+    std::cout << "deinit start," << options_.max_capacity << std::endl;
     if (initialized_) {
       CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -179,6 +181,7 @@ class HashTable {
       dev_mem_pool_.reset();
       host_mem_pool_.reset();
     }
+    std::cout << "deinit end," << options_.max_capacity << std::endl;
   }
 
  private:
@@ -198,6 +201,8 @@ class HashTable {
       return;
     }
     options_ = options;
+
+    std::cout << "init start," << options.max_capacity << std::endl;
 
     // Construct table.
     cudaDeviceProp deviceProp;
@@ -226,6 +231,8 @@ class HashTable {
 
     CUDA_CHECK(cudaDeviceSynchronize());
     initialized_ = true;
+
+    std::cout << "init finish," << options.max_capacity << std::endl;
     CudaCheckError();
   }
 
@@ -1167,7 +1174,7 @@ class HashTable {
   TableCore* d_table_ = nullptr;
   size_t shared_mem_size_ = 0;
   std::atomic_bool reach_max_capacity_{false};
-  bool initialized_ = false;
+  std::atomic_bool initialized_{false};
   mutable std::shared_timed_mutex mutex_;
   const unsigned int kernel_select_interval_ = 7;
   int c_table_index_ = -1;
