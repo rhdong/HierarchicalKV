@@ -84,6 +84,7 @@ file(GLOB_RECURSE merlin_hkvs_src RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.cpp *.c
 # target_link_libraries(hierarchical_kv PUBLIC ...)
 
 
+set(CMAKE_BUILD_TYPE "Debug")
 add_executable(merlin_hashtable_benchmark benchmark/merlin_hashtable_benchmark.cc.cu)
 target_compile_features(merlin_hashtable_benchmark PUBLIC cxx_std_14)
 set_target_properties(merlin_hashtable_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
