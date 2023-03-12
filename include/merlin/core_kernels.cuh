@@ -1132,10 +1132,8 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
       // override_result == OverrideResult::SUCCESS
 
       if (rank == src_lane) {
-        evicted_keys[key_idx] =
-            bucket->keys[key_pos].load(cuda::std::memory_order_relaxed);
-        bucket->keys[key_pos].store(insert_key,
-                                    cuda::std::memory_order_relaxed);
+        evicted_keys[key_idx] = bucket->keys[key_pos].exchange(
+            insert_key, cuda::std::memory_order_relaxed);
       }
 
       refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
