@@ -2030,7 +2030,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
         }
       }
       ASSERT_EQ(found_num, KEY_NUM);
-      if (task_n == 0 && current_capacity != table->capacity()) {
+      if (true) {
         std::cout << "[test_multi_tables_on_multi_threads] The capacity "
                      "changed from "
                   << current_capacity << " to " << table->capacity()
