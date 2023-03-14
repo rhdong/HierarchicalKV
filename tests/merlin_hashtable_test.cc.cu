@@ -1984,6 +1984,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     K* d_keys;
     V* d_vectors;
     bool* d_found;
+    bool first = true;
 
     CUDA_CHECK(cudaMallocManaged(&d_keys, KEY_NUM * sizeof(K)));
     CUDA_CHECK(cudaMallocManaged(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
@@ -2001,7 +2002,8 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
                             cudaMemcpyHostToDevice));
       CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
 
-      table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
+      table->insert_or_assign(first ? 0 : KEY_NUM, d_keys, d_vectors, nullptr, stream);
+      first = false;
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       CUDA_CHECK(cudaMemset(d_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
