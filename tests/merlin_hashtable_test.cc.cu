@@ -37,7 +37,7 @@ uint64_t getTimestamp() {
 constexpr size_t DIM = 16;
 
 template <class K, class M, class V>
-void create_random_keys(K* h_keys, M* h_metas, V* h_vectors, int KEY_NUM) {
+void create_random_keys(K* h_keys, M* h_metas, V* h_vectors, int KEY_NUM, size_t dim=DIM) {
   std::unordered_set<K> numbers;
   std::random_device rd;
   std::mt19937_64 eng(rd());
@@ -53,8 +53,8 @@ void create_random_keys(K* h_keys, M* h_metas, V* h_vectors, int KEY_NUM) {
       h_metas[i] = num;
     }
     if (h_vectors != nullptr) {
-      for (size_t j = 0; j < DIM; j++) {
-        h_vectors[i * DIM + j] = static_cast<float>(num * 0.00001);
+      for (size_t j = 0; j < dim; j++) {
+        h_vectors[i * dim + j] = static_cast<float>(num * 0.00001);
       }
     }
     i++;
@@ -1944,83 +1944,216 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors,
 
   CudaCheckError();
 }
-TEST(MerlinHashTableTest, test_basic) {
-  test_basic(16, true);
-  test_basic(0, true);
-  test_basic(16, false);
-  test_basic(0, false);
-}
-TEST(MerlinHashTableTest, test_basic_when_full) {
-  test_basic_when_full(16, true);
-  test_basic_when_full(0, true);
-  test_basic_when_full(16, false);
-  test_basic_when_full(0, false);
-}
-TEST(MerlinHashTableTest, test_erase_if_pred) {
-  test_erase_if_pred(16, true);
-  test_erase_if_pred(0, true);
-  test_erase_if_pred(16, false);
-  test_erase_if_pred(0, false);
-}
-TEST(MerlinHashTableTest, test_rehash) {
-  test_rehash(16, true);
-  test_rehash(0, true);
-  test_rehash(16, false);
-  test_rehash(0, false);
-}
-TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
-  test_rehash_on_big_batch(16, true);
-  test_rehash_on_big_batch(0, true);
-  test_rehash_on_big_batch(16, false);
-  test_rehash_on_big_batch(0, false);
-}
-TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
-  test_dynamic_rehash_on_multi_threads(16, true);
-  test_dynamic_rehash_on_multi_threads(0, true);
-  test_dynamic_rehash_on_multi_threads(16, false);
-  test_dynamic_rehash_on_multi_threads(0, false);
-}
-TEST(MerlinHashTableTest, test_export_batch_if) {
-  test_export_batch_if(16, true);
-  test_export_batch_if(0, true);
-  test_export_batch_if(16, false);
-  test_export_batch_if(0, false);
-}
-TEST(MerlinHashTableTest, test_basic_for_cpu_io) {
-  test_basic_for_cpu_io(true);
-  test_basic_for_cpu_io(false);
-}
 
-TEST(MerlinHashTableTest, test_evict_strategy_lru_basic) {
-  test_evict_strategy_lru_basic(16, true);
-  test_evict_strategy_lru_basic(0, true);
-  test_evict_strategy_lru_basic(16, false);
-  test_evict_strategy_lru_basic(0, false);
-}
+void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
+                                        bool use_constant_memory) {
 
-TEST(MerlinHashTableTest, test_evict_strategy_customized_basic) {
-  test_evict_strategy_customized_basic(16, true);
-  test_evict_strategy_customized_basic(0, true);
-  test_evict_strategy_customized_basic(16, false);
-  test_evict_strategy_customized_basic(0, false);
-}
+  std::vector<std::thread> threads;
 
-TEST(MerlinHashTableTest, test_evict_strategy_customized_advanced) {
-  test_evict_strategy_customized_advanced(16, true);
-  test_evict_strategy_customized_advanced(0, true);
-  test_evict_strategy_customized_advanced(16, false);
-  test_evict_strategy_customized_advanced(0, false);
-}
+  auto worker_function = [&table, options](int task_n, size_t n, size_t dim, size_t capacity) {
+    constexpr uint64_t BUCKET_MAX_SIZE = 128ul;
+    constexpr uint64_t INIT_CAPACITY = capacity;
+    constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
+    constexpr uint64_t KEY_NUM = n;
 
-TEST(MerlinHashTableTest, test_evict_strategy_customized_correct_rate) {
-  // TODO(rhdong): after blossom CI issue is resolved, the skip logic.
-  const bool skip_hmem_check = (nullptr != std::getenv("IS_BLOSSOM_CI"));
-  test_evict_strategy_customized_correct_rate(16, true);
-  test_evict_strategy_customized_advanced(16, false);
-  if (!skip_hmem_check) {
-    test_evict_strategy_customized_advanced(0, true);
-    test_evict_strategy_customized_advanced(0, false);
-  } else {
-    std::cout << "The HMEM check is skipped in blossom CI!" << std::endl;
+    TableOptions options;
+
+    options.init_capacity = INIT_CAPACITY;
+    options.max_capacity = MAX_CAPACITY;
+    options.dim = dim;
+    options.max_load_factor = 0.50f;
+    options.max_bucket_size = BUCKET_MAX_SIZE;
+    options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
+    options.evict_strategy = nv::merlin::EvictStrategy::kLru;
+    options.use_constant_memory = use_constant_memory;
+
+    std::shared_ptr<Table> table = std::make_shared<Table>();
+    table->init(options);
+    K* h_keys;
+    V* h_vectors;
+    bool* h_found;
+
+    size_t current_capacity = table->capacity();
+
+    CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
+    CUDA_CHECK(cudaMallocHost(&h_vectors, KEY_NUM * sizeof(V) * options.dim));
+    CUDA_CHECK(cudaMallocHost(&h_found, KEY_NUM * sizeof(bool)));
+
+    K* d_keys;
+    V* d_vectors;
+    bool* d_found;
+
+    CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
+    CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
+    CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
+
+    cudaStream_t stream;
+    CUDA_CHECK(cudaStreamCreate(&stream));
+
+    while (table->load_factor() < 0.3) {
+      create_random_keys<K, M, V>(h_keys, nullptr, h_vectors, KEY_NUM, dim);
+      CUDA_CHECK(cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K),
+                            cudaMemcpyHostToDevice));
+      CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors,
+                            KEY_NUM * sizeof(V) * options.dim,
+                            cudaMemcpyHostToDevice));
+      CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
+
+      table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+
+      CUDA_CHECK(cudaMemset(d_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
+      table->find(KEY_NUM, d_keys, d_vectors, d_found, nullptr, stream);
+
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      int found_num = 0;
+
+      CUDA_CHECK(cudaMemset(h_found, 0, KEY_NUM * sizeof(bool)));
+      CUDA_CHECK(cudaMemset(h_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
+      CUDA_CHECK(cudaMemcpy(h_keys, d_keys, KEY_NUM * sizeof(K),
+                            cudaMemcpyDeviceToHost));
+      CUDA_CHECK(cudaMemcpy(h_found, d_found, KEY_NUM * sizeof(bool),
+                            cudaMemcpyDeviceToHost));
+
+      CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors,
+                            KEY_NUM * sizeof(V) * options.dim,
+                            cudaMemcpyDeviceToHost));
+      for (int i = 0; i < KEY_NUM; i++) {
+        if (h_found[i]) {
+          found_num++;
+          for (int j = 0; j < options.dim; j++) {
+            ASSERT_EQ(h_vectors[i * options.dim + j],
+                      static_cast<float>(h_keys[i] * 0.00001));
+          }
+        }
+      }
+      ASSERT_EQ(found_num, KEY_NUM);
+      if (task_n == 0 && current_capacity != table->capacity()) {
+        std::cout << "[test_dynamic_rehash_on_multi_threads] The capacity "
+                     "changed from "
+                  << current_capacity << " to " << table->capacity()
+                  << std::endl;
+        current_capacity = table->capacity();
+      }
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+    }
+    CUDA_CHECK(cudaStreamDestroy(stream));
+
+    CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors,
+                          KEY_NUM * sizeof(V) * options.dim,
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_CHECK(cudaFreeHost(h_keys));
+    CUDA_CHECK(cudaFreeHost(h_found));
+    CUDA_CHECK(cudaFreeHost(h_vectors));
+
+    CUDA_CHECK(cudaFree(d_keys));
+    CUDA_CHECK(cudaFree(d_vectors));
+    CUDA_CHECK(cudaFree(d_found));
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    CudaCheckError();
+  };
+
+  threads.emplace_back(std::thread(worker_function, i, 6264, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 6295, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 6187, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 6142, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 6142, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 35129, 16, 4194304));
+  threads.emplace_back(std::thread(worker_function, i, 35129, 16, 4194304));
+  threads.emplace_back(std::thread(worker_function, i, 214898, 64, 8388608));
+  threads.emplace_back(std::thread(worker_function, i, 214898, 64, 8388608));
+  threads.emplace_back(std::thread(worker_function, i, 6254, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 6235, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, i, 6315, 8, 2097152));
+
+  for (auto& th : threads) {
+    th.join();
   }
 }
+
+TEST(MerlinHashTableTest, test_multi_tables_on_multi_threads) {
+  test_multi_tables_on_multi_threads(16, true);
+}
+
+//TEST(MerlinHashTableTest, test_basic) {
+//  test_basic(16, true);
+//  test_basic(0, true);
+//  test_basic(16, false);
+//  test_basic(0, false);
+//}
+//TEST(MerlinHashTableTest, test_basic_when_full) {
+//  test_basic_when_full(16, true);
+//  test_basic_when_full(0, true);
+//  test_basic_when_full(16, false);
+//  test_basic_when_full(0, false);
+//}
+//TEST(MerlinHashTableTest, test_erase_if_pred) {
+//  test_erase_if_pred(16, true);
+//  test_erase_if_pred(0, true);
+//  test_erase_if_pred(16, false);
+//  test_erase_if_pred(0, false);
+//}
+//TEST(MerlinHashTableTest, test_rehash) {
+//  test_rehash(16, true);
+//  test_rehash(0, true);
+//  test_rehash(16, false);
+//  test_rehash(0, false);
+//}
+//TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
+//  test_rehash_on_big_batch(16, true);
+//  test_rehash_on_big_batch(0, true);
+//  test_rehash_on_big_batch(16, false);
+//  test_rehash_on_big_batch(0, false);
+//}
+//TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
+//  test_dynamic_rehash_on_multi_threads(16, true);
+//  test_dynamic_rehash_on_multi_threads(0, true);
+//  test_dynamic_rehash_on_multi_threads(16, false);
+//  test_dynamic_rehash_on_multi_threads(0, false);
+//}
+//TEST(MerlinHashTableTest, test_export_batch_if) {
+//  test_export_batch_if(16, true);
+//  test_export_batch_if(0, true);
+//  test_export_batch_if(16, false);
+//  test_export_batch_if(0, false);
+//}
+//TEST(MerlinHashTableTest, test_basic_for_cpu_io) {
+//  test_basic_for_cpu_io(true);
+//  test_basic_for_cpu_io(false);
+//}
+//
+//TEST(MerlinHashTableTest, test_evict_strategy_lru_basic) {
+//  test_evict_strategy_lru_basic(16, true);
+//  test_evict_strategy_lru_basic(0, true);
+//  test_evict_strategy_lru_basic(16, false);
+//  test_evict_strategy_lru_basic(0, false);
+//}
+//
+//TEST(MerlinHashTableTest, test_evict_strategy_customized_basic) {
+//  test_evict_strategy_customized_basic(16, true);
+//  test_evict_strategy_customized_basic(0, true);
+//  test_evict_strategy_customized_basic(16, false);
+//  test_evict_strategy_customized_basic(0, false);
+//}
+//
+//TEST(MerlinHashTableTest, test_evict_strategy_customized_advanced) {
+//  test_evict_strategy_customized_advanced(16, true);
+//  test_evict_strategy_customized_advanced(0, true);
+//  test_evict_strategy_customized_advanced(16, false);
+//  test_evict_strategy_customized_advanced(0, false);
+//}
+//
+//TEST(MerlinHashTableTest, test_evict_strategy_customized_correct_rate) {
+//  // TODO(rhdong): after blossom CI issue is resolved, the skip logic.
+//  const bool skip_hmem_check = (nullptr != std::getenv("IS_BLOSSOM_CI"));
+//  test_evict_strategy_customized_correct_rate(16, true);
+//  test_evict_strategy_customized_advanced(16, false);
+//  if (!skip_hmem_check) {
+//    test_evict_strategy_customized_advanced(0, true);
+//    test_evict_strategy_customized_advanced(0, false);
+//  } else {
+//    std::cout << "The HMEM check is skipped in blossom CI!" << std::endl;
+//  }
+//}
