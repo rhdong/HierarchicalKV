@@ -1950,7 +1950,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
 
   std::vector<std::thread> threads;
 
-  auto worker_function = [&max_hbm_for_vectors](int task_n, size_t n, size_t dim, size_t capacity) {
+  auto worker_function = [&max_hbm_for_vectors, &use_constant_memory](int task_n, size_t n, size_t dim, size_t capacity) {
     const size_t BUCKET_MAX_SIZE = 128ul;
     const size_t MAX_CAPACITY = capacity;
     const size_t KEY_NUM = n;
