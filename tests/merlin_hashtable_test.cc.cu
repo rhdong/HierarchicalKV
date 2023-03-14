@@ -1950,9 +1950,9 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
 
   std::vector<std::thread> threads;
 
-  auto worker_function = [](int task_n, size_t n, size_t dim, size_t capacity) {
+  auto worker_function = [&max_hbm_for_vectors](int task_n, size_t n, size_t dim, size_t capacity) {
     const size_t BUCKET_MAX_SIZE = 128ul;
-    const size_t MAX_CAPACITY = INIT_CAPACITY;
+    const size_t MAX_CAPACITY = capacity;
     const size_t KEY_NUM = n;
     const size_t INIT_CAPACITY = capacity;
 
@@ -2029,7 +2029,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
       }
       ASSERT_EQ(found_num, KEY_NUM);
       if (task_n == 0 && current_capacity != table->capacity()) {
-        std::cout << "[test_dynamic_rehash_on_multi_threads] The capacity "
+        std::cout << "[test_multi_tables_on_multi_threads] The capacity "
                      "changed from "
                   << current_capacity << " to " << table->capacity()
                   << std::endl;
@@ -2055,18 +2055,18 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     CudaCheckError();
   };
 
-  threads.emplace_back(std::thread(worker_function, i, 6264, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 6295, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 6187, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 6142, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 6142, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 35129, 16, 4194304));
-  threads.emplace_back(std::thread(worker_function, i, 35129, 16, 4194304));
-  threads.emplace_back(std::thread(worker_function, i, 214898, 64, 8388608));
-  threads.emplace_back(std::thread(worker_function, i, 214898, 64, 8388608));
-  threads.emplace_back(std::thread(worker_function, i, 6254, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 6235, 8, 2097152));
-  threads.emplace_back(std::thread(worker_function, i, 6315, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 0, 6264, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 1, 6295, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 2, 6187, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 3, 6142, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 4, 6142, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 5, 35129, 16, 4194304));
+  threads.emplace_back(std::thread(worker_function, 6, 35129, 16, 4194304));
+  threads.emplace_back(std::thread(worker_function, 7, 214898, 64, 8388608));
+  threads.emplace_back(std::thread(worker_function, 8, 214898, 64, 8388608));
+  threads.emplace_back(std::thread(worker_function, 9, 6254, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 10, 6235, 8, 2097152));
+  threads.emplace_back(std::thread(worker_function, 11, 6315, 8, 2097152));
 
   for (auto& th : threads) {
     th.join();
