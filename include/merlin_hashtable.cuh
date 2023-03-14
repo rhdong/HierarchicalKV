@@ -301,6 +301,7 @@ class HashTable {
           load_factor, options_.block_size, stream, n, c_table_index_, d_table_,
           keys, reinterpret_cast<const value_type*>(values), metas);
       CUDA_CHECK(cudaStreamSynchronize(stream));
+      CudaCheckError();
     } else {
       const size_type dev_ws_size{n * (sizeof(value_type*) + sizeof(int))};
       auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};
