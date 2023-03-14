@@ -1950,7 +1950,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
 
   std::vector<std::thread> threads;
 
-  auto worker_function = [&table, options](int task_n, size_t n, size_t dim, size_t capacity) {
+  auto worker_function = [](int task_n, size_t n, size_t dim, size_t capacity) {
     constexpr uint64_t BUCKET_MAX_SIZE = 128ul;
     constexpr uint64_t INIT_CAPACITY = capacity;
     constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
