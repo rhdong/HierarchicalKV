@@ -1985,9 +1985,9 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     V* d_vectors;
     bool* d_found;
 
-    CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
-    CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
-    CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
+    CUDA_CHECK(cudaMallocManaged(&d_keys, KEY_NUM * sizeof(K)));
+    CUDA_CHECK(cudaMallocManaged(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
+    CUDA_CHECK(cudaMallocManaged(&d_found, KEY_NUM * sizeof(bool)));
 
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
