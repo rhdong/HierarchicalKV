@@ -1992,7 +1992,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
-    while (table->load_factor() < 0.3) {
+    while (table->load_factor() < 0.7) {
       create_random_keys<K, M, V>(h_keys, nullptr, h_vectors, KEY_NUM, dim);
       CUDA_CHECK(cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K),
                             cudaMemcpyHostToDevice));
