@@ -2045,56 +2045,16 @@ void test_insert_or_assign_multi_threads(
     CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors,
                           KEY_NUM * sizeof(V) * options.dim,
                           cudaMemcpyDeviceToHost));
-    thread_local bool print_unequal {false};
-    thread_local uint64_t err_times {0};
     for (int i = 0; i < KEY_NUM; i++) {
       if (h_found[i]) {
         found_num++;
         for (int j = 0; j < options.dim; j++) {
-          if (batch == 2) {
-            if (h_vectors[i * options.dim + j] != 
-                static_cast<float>(h_keys[i] * 0.00001)) {
-              if (!print_unequal) {
-                std::cout << " [Thread " << task_n << "]\t";
-                UNEQUAL_EXPR(h_vectors[i * options.dim + j], 
-                            static_cast<float>(h_keys[i] * 0.00001));
-                print_unequal = true;
-              }
-              err_times += 1;
-            }
-          }
-          else {
-            ASSERT_EQ(h_vectors[i * options.dim + j],
-                    static_cast<float>(h_keys[i] * 0.00001));
-          }
+          ASSERT_EQ(h_vectors[i * options.dim + j],
+                  static_cast<float>(h_keys[i] * 0.00001));
         }
       }
     }
-
-    bool print_thread_id {false};
-    if (batch == 0 || batch == 1) {
-      ASSERT_EQ(found_num, KEY_NUM);
-      ASSERT_EQ(err_times, 0);
-    }
-    else {
-      if (found_num != KEY_NUM or err_times != 0) {
-        std::cout << " [Thread " << task_n << "]\t"
-              << "Number of keys(insert/found/error) : "
-              << "(" << KEY_NUM << "/" << found_num << "/" << err_times << ") \t";
-        print_thread_id = true;
-      }
-    }
-    if (current_capacity != table->capacity() && !capacity_silent) {
-      if (!print_thread_id)
-        std::cout << " [Thread " << task_n << "]\t";
-      
-      std::cout << "The capacity changed from "
-            << current_capacity << " to " << table->capacity() 
-            << std::endl;     
-    }
-    else if (print_thread_id) {
-      std::cout << std::endl;
-    }
+    ASSERT_EQ(found_num, KEY_NUM);
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
     
@@ -2168,57 +2128,17 @@ void test_insert_or_assign_multi_threads(
     CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors,
                           KEY_NUM * sizeof(V) * options.dim,
                           cudaMemcpyDeviceToHost));
-    thread_local bool print_unequal {false};
-    thread_local uint64_t err_times {0};
     uint32_t i_value = 0x2020202;
     for (int i = 0; i < KEY_NUM; i++) {
       if (h_found[i]) {
         found_num++;
         for (int j = 0; j < options.dim; j++) {
-          if (batch == 2) {
-            if (h_vectors[i * options.dim + j] != 
-                *(reinterpret_cast<float*>(&i_value))) {
-              if (!print_unequal) {
-                std::cout << " [Thread " << task_n << "]\t";
-                UNEQUAL_EXPR(h_vectors[i * options.dim + j], 
-                            *(reinterpret_cast<float*>(&i_value)));
-                print_unequal = true;
-              }
-              err_times += 1;
-            }
-          }
-          else {
-            ASSERT_EQ(h_vectors[i * options.dim + j],
-                      *(reinterpret_cast<float*>(&i_value)));
-          }
+          ASSERT_EQ(h_vectors[i * options.dim + j],
+                    *(reinterpret_cast<float*>(&i_value)));
         }
       }
     }
-
-    bool print_thread_id {false};
-    if (batch == 0 || batch == 1) {
-      ASSERT_EQ(found_num, KEY_NUM);
-      ASSERT_EQ(err_times, 0);
-    }
-    else {
-      if (found_num != KEY_NUM or err_times != 0) {
-        std::cout << " [Thread " << task_n << "]\t"
-              << "Number of keys(insert/found/error) : "
-              << "(" << KEY_NUM << "/" << found_num << "/" << err_times << ") \t";
-        print_thread_id = true;
-      }
-    }
-    if (current_capacity != table->capacity() && !capacity_silent) {
-      if (!print_thread_id)
-        std::cout << " [Thread " << task_n << "]\t";
-      
-      std::cout << "The capacity changed from "
-            << current_capacity << " to " << table->capacity() 
-            << std::endl;     
-    }
-    else if (print_thread_id) {
-      std::cout << std::endl;
-    }
+    ASSERT_EQ(found_num, KEY_NUM);
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
     
@@ -2276,13 +2196,6 @@ void test_insert_or_assign_multi_threads(
   ASSERT_EQ(table->capacity(), MAX_CAPACITY);
 }
 
-TEST(MerlinHashTableTest, test_export_batch_if) {
-  test_export_batch_if(16, true);
-  test_export_batch_if(0, true);
-  test_export_batch_if(16, false);
-  test_export_batch_if(0, false);
-}
-
 TEST(MerlinHashTableTest, test_insert_or_assign_multi_threads) {
   test_insert_or_assign_multi_threads(16, true,  16, 64, 48, 8, 8);
   test_insert_or_assign_multi_threads(0, true,   16, 64, 48, 8, 8);
@@ -2304,7 +2217,12 @@ TEST(MerlinHashTableTest, test_insert_or_assign_multi_threads) {
   test_insert_or_assign_multi_threads(16, false, 32, 128, 96, 32, 8);
   test_insert_or_assign_multi_threads(0, false,  32, 128, 96, 32, 8);
 }
-
+TEST(MerlinHashTableTest, test_export_batch_if) {
+  test_export_batch_if(16, true);
+  test_export_batch_if(0, true);
+  test_export_batch_if(16, false);
+  test_export_batch_if(0, false);
+}
 TEST(MerlinHashTableTest, test_basic) {
   test_basic(16, true);
   test_basic(0, true);
