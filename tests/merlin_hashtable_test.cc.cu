@@ -1952,7 +1952,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
 
   K* d_keys;
   CUDA_CHECK(cudaMalloc(&d_keys, 214898 * sizeof(K)));
-  auto worker_function = [&max_hbm_for_vectors, &use_constant_memory](
+  auto worker_function = [&max_hbm_for_vectors, &use_constant_memory, &d_keys](
                              int task_n, size_t n, size_t dim,
                              size_t capacity) {
     const size_t BUCKET_MAX_SIZE = 128ul;
