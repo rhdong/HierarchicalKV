@@ -2219,9 +2219,9 @@ TEST(MerlinHashTableTest, test_insert_or_assign_multi_threads) {
 }
 TEST(MerlinHashTableTest, test_export_batch_if) {
   test_export_batch_if(16, true);
-//  test_export_batch_if(0, true);
-//  test_export_batch_if(16, false);
-//  test_export_batch_if(0, false);
+  test_export_batch_if(0, true);
+  test_export_batch_if(16, false);
+  test_export_batch_if(0, false);
 }
 //TEST(MerlinHashTableTest, test_basic) {
 //  test_basic(16, true);
