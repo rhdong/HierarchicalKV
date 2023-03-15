@@ -1986,13 +1986,21 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     bool* d_found;
     bool first = true;
 
-    CUDA_CHECK(cudaMallocManaged(&d_keys, KEY_NUM * sizeof(K)));
-    CUDA_CHECK(cudaMallocManaged(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
-    CUDA_CHECK(cudaMallocManaged(&d_found, KEY_NUM * sizeof(bool)));
+    CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
+    CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
+    CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
 
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
+    size_t* d_dump_counter;
+    CUDA_CHECK(cudaMalloc(&d_dump_counter, sizeof(size_t)));
 
+    table->export_batch_if(ExportIfPred<K, M>, pattern, threshold,
+                           table->capacity(), 0, d_dump_counter, d_keys,
+                           d_vectors, nullptr, stream);
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    CUDA_CHECK(cudaFree(d_dump_counter));
     while (table->load_factor() < 1.0) {
       create_random_keys<K, M, V>(h_keys, nullptr, h_vectors, KEY_NUM, dim);
       CUDA_CHECK(cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K),
