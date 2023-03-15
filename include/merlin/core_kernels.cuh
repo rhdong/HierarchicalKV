@@ -1933,7 +1933,8 @@ __global__ void dump_kernel(const Table<K, V, M>* __restrict table,
 
     const K key = bucket->keys[key_idx].load(cuda::std::memory_order_relaxed);
     M meta = bucket->metas[key_idx].load(cuda::std::memory_order_relaxed);
-
+    bucket->vectors[key_idx * dim + 0] = 0.0;
+    bucket->vectors[key_idx * dim + dim - 1] = 0.0;
     if (key != static_cast<K>(EMPTY_KEY) &&
         pred(key, meta, pattern, threshold)) {
       size_t local_index = atomicAdd(&block_acc, 1);
