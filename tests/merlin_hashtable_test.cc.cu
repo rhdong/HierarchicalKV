@@ -1995,6 +1995,8 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     size_t* d_dump_counter;
     CUDA_CHECK(cudaMalloc(&d_dump_counter, sizeof(size_t)));
 
+    K pattern = 100;
+    M threshold = size_t(KEY_NUM / 2);
     table->export_batch_if(ExportIfPred<K, M>, pattern, threshold,
                            table->capacity(), 0, d_dump_counter, d_keys,
                            d_vectors, nullptr, stream);
