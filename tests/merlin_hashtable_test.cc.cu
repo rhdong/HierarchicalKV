@@ -2014,11 +2014,15 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
       K pattern = 100;
       M threshold = h_metas[size_t(KEY_NUM / 2)];
 
+      size_t* d_dump_counter;
+      CUDA_CHECK(cudaMalloc(&d_dump_counter, sizeof(size_t)));
+
       table->export_batch_if(ExportIfPred<K, M>, pattern, threshold,
                              table->capacity(), 0, d_dump_counter, d_keys,
-                             d_vectors, d_metas, stream);
+                             d_vectors, nullptr, stream);
 
       CUDA_CHECK(cudaStreamSynchronize(stream));
+      CUDA_CHECK(cudaFree(d_dump_counter));
       int found_num = 0;
 
       CUDA_CHECK(cudaMemset(h_found, 0, KEY_NUM * sizeof(bool)));
