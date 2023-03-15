@@ -1965,7 +1965,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     options.dim = dim;
     options.max_load_factor = 0.50f;
     options.max_bucket_size = BUCKET_MAX_SIZE;
-    options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
+    options.max_hbm_for_vectors = MAX_CAPACITY * dim * sizeof(V);//nv::merlin::GB(max_hbm_for_vectors);
     options.evict_strategy = nv::merlin::EvictStrategy::kLru;
     options.use_constant_memory = use_constant_memory;
 
