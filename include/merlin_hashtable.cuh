@@ -170,10 +170,10 @@ class HashTable {
    * table object.
    */
   ~HashTable() {
-    if (initialized_) {
+    if (initialized_.load()) {
       CUDA_CHECK(cudaDeviceSynchronize());
 
-      initialized_ = false;
+      initialized_.store(false);
       destroy_table<key_type, value_type, meta_type>(&table_);
       CUDA_CHECK(cudaFree(d_table_));
       release_constant_table<>(c_table_index_);
@@ -195,7 +195,7 @@ class HashTable {
    * @param options The configuration options.
    */
   void init(const HashTableOptions options) {
-    if (initialized_) {
+    if (initialized_.load()) {
       return;
     }
     options_ = options;
@@ -226,7 +226,7 @@ class HashTable {
         options_.host_memory_pool);
 
     CUDA_CHECK(cudaDeviceSynchronize());
-    initialized_ = true;
+    initialized_.store(true);
     CudaCheckError();
   }
 
@@ -1499,7 +1499,7 @@ class HashTable {
   TableCore* d_table_ = nullptr;
   size_t shared_mem_size_ = 0;
   std::atomic_bool reach_max_capacity_{false};
-  bool initialized_ = false;
+  std::atomic_bool initialized_{false};
   mutable std::shared_timed_mutex mutex_;
   const unsigned int kernel_select_interval_ = 7;
   int c_table_index_ = -1;
