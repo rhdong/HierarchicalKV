@@ -2078,87 +2078,87 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
   }
 }
 
+ TEST(MerlinHashTableTest, test_basic) {
+  test_basic(16, true);
+  test_basic(0, true);
+  test_basic(16, false);
+  test_basic(0, false);
+}
+ TEST(MerlinHashTableTest, test_basic_when_full) {
+  test_basic_when_full(16, true);
+  test_basic_when_full(0, true);
+  test_basic_when_full(16, false);
+  test_basic_when_full(0, false);
+}
+ TEST(MerlinHashTableTest, test_erase_if_pred) {
+  test_erase_if_pred(16, true);
+  test_erase_if_pred(0, true);
+  test_erase_if_pred(16, false);
+  test_erase_if_pred(0, false);
+}
+ TEST(MerlinHashTableTest, test_rehash) {
+  test_rehash(16, true);
+  test_rehash(0, true);
+  test_rehash(16, false);
+  test_rehash(0, false);
+}
+ TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
+  test_rehash_on_big_batch(16, true);
+  test_rehash_on_big_batch(0, true);
+  test_rehash_on_big_batch(16, false);
+  test_rehash_on_big_batch(0, false);
+}
+ TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
+  test_dynamic_rehash_on_multi_threads(16, true);
+  test_dynamic_rehash_on_multi_threads(0, true);
+  test_dynamic_rehash_on_multi_threads(16, false);
+  test_dynamic_rehash_on_multi_threads(0, false);
+}
+ TEST(MerlinHashTableTest, test_export_batch_if) {
+  test_export_batch_if(16, true);
+  test_export_batch_if(0, true);
+  test_export_batch_if(16, false);
+  test_export_batch_if(0, false);
+}
+ TEST(MerlinHashTableTest, test_basic_for_cpu_io) {
+  test_basic_for_cpu_io(true);
+  test_basic_for_cpu_io(false);
+}
+
+ TEST(MerlinHashTableTest, test_evict_strategy_lru_basic) {
+  test_evict_strategy_lru_basic(16, true);
+  test_evict_strategy_lru_basic(0, true);
+  test_evict_strategy_lru_basic(16, false);
+  test_evict_strategy_lru_basic(0, false);
+}
+
+ TEST(MerlinHashTableTest, test_evict_strategy_customized_basic) {
+  test_evict_strategy_customized_basic(16, true);
+  test_evict_strategy_customized_basic(0, true);
+  test_evict_strategy_customized_basic(16, false);
+  test_evict_strategy_customized_basic(0, false);
+}
+
+ TEST(MerlinHashTableTest, test_evict_strategy_customized_advanced) {
+  test_evict_strategy_customized_advanced(16, true);
+  test_evict_strategy_customized_advanced(0, true);
+  test_evict_strategy_customized_advanced(16, false);
+  test_evict_strategy_customized_advanced(0, false);
+}
+
+ TEST(MerlinHashTableTest, test_evict_strategy_customized_correct_rate) {
+  // TODO(rhdong): after blossom CI issue is resolved, the skip logic.
+  const bool skip_hmem_check = (nullptr != std::getenv("IS_BLOSSOM_CI"));
+  test_evict_strategy_customized_correct_rate(16, true);
+  test_evict_strategy_customized_advanced(16, false);
+  if (!skip_hmem_check) {
+    test_evict_strategy_customized_advanced(0, true);
+    test_evict_strategy_customized_advanced(0, false);
+  } else {
+    std::cout << "The HMEM check is skipped in blossom CI!" << std::endl;
+  }
+}
+
 TEST(MerlinHashTableTest, test_multi_tables_on_multi_threads) {
   test_multi_tables_on_multi_threads(16, true);
 }
-
-// TEST(MerlinHashTableTest, test_basic) {
-//  test_basic(16, true);
-//  test_basic(0, true);
-//  test_basic(16, false);
-//  test_basic(0, false);
-//}
-// TEST(MerlinHashTableTest, test_basic_when_full) {
-//  test_basic_when_full(16, true);
-//  test_basic_when_full(0, true);
-//  test_basic_when_full(16, false);
-//  test_basic_when_full(0, false);
-//}
-// TEST(MerlinHashTableTest, test_erase_if_pred) {
-//  test_erase_if_pred(16, true);
-//  test_erase_if_pred(0, true);
-//  test_erase_if_pred(16, false);
-//  test_erase_if_pred(0, false);
-//}
-// TEST(MerlinHashTableTest, test_rehash) {
-//  test_rehash(16, true);
-//  test_rehash(0, true);
-//  test_rehash(16, false);
-//  test_rehash(0, false);
-//}
-// TEST(MerlinHashTableTest, test_rehash_on_big_batch) {
-//  test_rehash_on_big_batch(16, true);
-//  test_rehash_on_big_batch(0, true);
-//  test_rehash_on_big_batch(16, false);
-//  test_rehash_on_big_batch(0, false);
-//}
-// TEST(MerlinHashTableTest, test_dynamic_rehash_on_multi_threads) {
-//  test_dynamic_rehash_on_multi_threads(16, true);
-//  test_dynamic_rehash_on_multi_threads(0, true);
-//  test_dynamic_rehash_on_multi_threads(16, false);
-//  test_dynamic_rehash_on_multi_threads(0, false);
-//}
-// TEST(MerlinHashTableTest, test_export_batch_if) {
-//  test_export_batch_if(16, true);
-//  test_export_batch_if(0, true);
-//  test_export_batch_if(16, false);
-//  test_export_batch_if(0, false);
-//}
-// TEST(MerlinHashTableTest, test_basic_for_cpu_io) {
-//  test_basic_for_cpu_io(true);
-//  test_basic_for_cpu_io(false);
-//}
-//
-// TEST(MerlinHashTableTest, test_evict_strategy_lru_basic) {
-//  test_evict_strategy_lru_basic(16, true);
-//  test_evict_strategy_lru_basic(0, true);
-//  test_evict_strategy_lru_basic(16, false);
-//  test_evict_strategy_lru_basic(0, false);
-//}
-//
-// TEST(MerlinHashTableTest, test_evict_strategy_customized_basic) {
-//  test_evict_strategy_customized_basic(16, true);
-//  test_evict_strategy_customized_basic(0, true);
-//  test_evict_strategy_customized_basic(16, false);
-//  test_evict_strategy_customized_basic(0, false);
-//}
-//
-// TEST(MerlinHashTableTest, test_evict_strategy_customized_advanced) {
-//  test_evict_strategy_customized_advanced(16, true);
-//  test_evict_strategy_customized_advanced(0, true);
-//  test_evict_strategy_customized_advanced(16, false);
-//  test_evict_strategy_customized_advanced(0, false);
-//}
-//
-// TEST(MerlinHashTableTest, test_evict_strategy_customized_correct_rate) {
-//  // TODO(rhdong): after blossom CI issue is resolved, the skip logic.
-//  const bool skip_hmem_check = (nullptr != std::getenv("IS_BLOSSOM_CI"));
-//  test_evict_strategy_customized_correct_rate(16, true);
-//  test_evict_strategy_customized_advanced(16, false);
-//  if (!skip_hmem_check) {
-//    test_evict_strategy_customized_advanced(0, true);
-//    test_evict_strategy_customized_advanced(0, false);
-//  } else {
-//    std::cout << "The HMEM check is skipped in blossom CI!" << std::endl;
-//  }
-//}
