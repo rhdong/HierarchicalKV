@@ -2012,7 +2012,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
 
       CUDA_CHECK(cudaStreamSynchronize(stream));
       K pattern = 100;
-      M threshold = h_metas[size_t(KEY_NUM / 2)];
+      M threshold = size_t(KEY_NUM / 2);
 
       size_t* d_dump_counter;
       CUDA_CHECK(cudaMalloc(&d_dump_counter, sizeof(size_t)));
