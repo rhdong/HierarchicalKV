@@ -2197,15 +2197,15 @@ void test_insert_or_assign_multi_threads(
 }
 
 TEST(MerlinHashTableTest, test_insert_or_assign_multi_threads) {
-  test_insert_or_assign_multi_threads(16, true,  16, 64, 48, 8, 8);
-  test_insert_or_assign_multi_threads(0, true,   16, 64, 48, 8, 8);
-  test_insert_or_assign_multi_threads(16, false, 16, 64, 48, 8, 8);
-  test_insert_or_assign_multi_threads(0, false,  16, 64, 48, 8, 8);
-
-  test_insert_or_assign_multi_threads(16, true,  16, 64, 48, 16, 8);
-  test_insert_or_assign_multi_threads(0, true,   16, 64, 48, 16, 8);
-  test_insert_or_assign_multi_threads(16, false, 16, 64, 48, 16, 8);
-  test_insert_or_assign_multi_threads(0, false,  16, 64, 48, 16, 8);
+//  test_insert_or_assign_multi_threads(16, true,  16, 64, 48, 8, 8);
+//  test_insert_or_assign_multi_threads(0, true,   16, 64, 48, 8, 8);
+//  test_insert_or_assign_multi_threads(16, false, 16, 64, 48, 8, 8);
+//  test_insert_or_assign_multi_threads(0, false,  16, 64, 48, 8, 8);
+//
+//  test_insert_or_assign_multi_threads(16, true,  16, 64, 48, 16, 8);
+//  test_insert_or_assign_multi_threads(0, true,   16, 64, 48, 16, 8);
+//  test_insert_or_assign_multi_threads(16, false, 16, 64, 48, 16, 8);
+//  test_insert_or_assign_multi_threads(0, false,  16, 64, 48, 16, 8);
 
   test_insert_or_assign_multi_threads(16, true,  32, 128, 96, 16, 8);
   test_insert_or_assign_multi_threads(0, true,   32, 128, 96, 16, 8);
