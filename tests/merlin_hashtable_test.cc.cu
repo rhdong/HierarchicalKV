@@ -2013,7 +2013,8 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
       CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
 
       CUDA_CHECK(cudaStreamSynchronize(stream));
-      table->insert_or_assign(first ? 0 : KEY_NUM*2, d_keys, d_vectors, nullptr, stream);
+      printf("xxxxxxxxxxxxxx, %llu, %p\n", d_keys, d_keys);
+      table->insert_or_assign(first ? 0 : KEY_NUM, d_keys, d_vectors, nullptr, stream);
       first = false;
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
