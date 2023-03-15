@@ -1950,6 +1950,8 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
                                         bool use_constant_memory) {
   std::vector<std::thread> threads;
 
+  K* d_keys;
+  CUDA_CHECK(cudaMalloc(&d_keys, 214898 * sizeof(K)));
   auto worker_function = [&max_hbm_for_vectors, &use_constant_memory](
                              int task_n, size_t n, size_t dim,
                              size_t capacity) {
@@ -1981,12 +1983,10 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     CUDA_CHECK(cudaMallocHost(&h_vectors, KEY_NUM * sizeof(V) * options.dim));
     CUDA_CHECK(cudaMallocHost(&h_found, KEY_NUM * sizeof(bool)));
 
-    K* d_keys;
     V* d_vectors;
     bool* d_found;
     bool first = true;
 
-    CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
     CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
     CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
 
@@ -2075,7 +2075,6 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
     CUDA_CHECK(cudaFreeHost(h_found));
     CUDA_CHECK(cudaFreeHost(h_vectors));
 
-    CUDA_CHECK(cudaFree(d_keys));
     CUDA_CHECK(cudaFree(d_vectors));
     CUDA_CHECK(cudaFree(d_found));
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -2099,6 +2098,7 @@ void test_multi_tables_on_multi_threads(size_t max_hbm_for_vectors,
   for (auto& th : threads) {
     th.join();
   }
+  CUDA_CHECK(cudaFree(d_keys));
 }
 
 TEST(MerlinHashTableTest, test_multi_tables_on_multi_threads) {
