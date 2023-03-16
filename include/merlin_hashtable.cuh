@@ -202,8 +202,8 @@ class HashTable {
 
     // Construct table.
     cudaDeviceProp deviceProp;
-    CUDA_CHECK(cudaSetDevice(options_.device_id));
-    CUDA_CHECK(cudaGetDeviceProperties(&deviceProp, 0));
+    CUDA_CHECK(cudaGetDevice(&(options_.device_id)));
+    CUDA_CHECK(cudaGetDeviceProperties(&deviceProp, options_.device_id));
     shared_mem_size_ = deviceProp.sharedMemPerBlock;
     create_table<key_type, value_type, meta_type>(
         &table_, options_.dim, options_.init_capacity, options_.max_capacity,
