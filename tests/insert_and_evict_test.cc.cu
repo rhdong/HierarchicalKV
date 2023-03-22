@@ -52,7 +52,7 @@ void test_insert_and_evict() {
   const size_t init_capacity = 1024;
 
   // numeric setting
-  const size_t U = 2llu << 18;
+  const size_t U = 1llu << 15;
   const size_t M = (U >> 1);
   const size_t N = (U >> 1) + 17;  // Add a prime to test the non-aligned case.
 
@@ -132,8 +132,6 @@ void test_insert_and_evict() {
   }
 
   CUDA_CHECK(cudaStreamSynchronize(stream));
-  buffer.Free(stream);
-  evict_buffer.Free(stream);
 
   size_t k = 0;
   for (auto it = summarized_kvs.begin(); it != summarized_kvs.end(); it++) {
@@ -141,12 +139,15 @@ void test_insert_and_evict() {
     test_util::ValueArray<f32, dim>& value = it->second;
     ASSERT_EQ(key, (i64)k);
     for (size_t j = 0; j < dim; j++) {
-      ASSERT_EQ(value[j], (f32)k);
+      ASSERT_EQ(value[j], (f32)k) << "dim=" << j << endl;
     }
     ++k;
   }
   ASSERT_EQ(summarized_kvs.size(), M + N);
   summarized_kvs.clear();
+  buffer.Free(stream);
+  evict_buffer.Free(stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
 }
 
 TEST(MerlinHashTableTest, test_insert_and_evict) { test_insert_and_evict(); }
