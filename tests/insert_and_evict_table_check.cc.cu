@@ -122,6 +122,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
   CUDA_CHECK(cudaFreeAsync(d_tmp_keys, stream));
   CUDA_CHECK(cudaFreeAsync(d_tmp_values, stream));
   CUDA_CHECK(cudaFreeAsync(d_tmp_metas, stream));
+  CUDA_CHECK(cudaStreamSynchronize(stream));
 
   free(h_tmp_keys);
   free(h_tmp_values);
