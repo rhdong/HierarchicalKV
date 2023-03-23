@@ -137,10 +137,10 @@ void test_insert_and_evict_table_check() {
   const size_t init_capacity = 1024;
 
   // numeric setting
-  //  const size_t U = init_capacity;//2llu << 18;
-  //  const size_t B = 32;//100000;
-  const size_t U = 2llu << 18;
-  const size_t B = 100000;
+  const size_t U = init_capacity;//2llu << 18;
+  const size_t B = init_capacity / 3;//100000;
+//  const size_t U = 2llu << 18;
+//  const size_t B = 100000;
 
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
