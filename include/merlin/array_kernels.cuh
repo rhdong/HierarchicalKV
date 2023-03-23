@@ -48,7 +48,7 @@ __global__ void gpu_cell_count(const bool* masks, Tidx* offsets, size_t n,
     }
   }
   unsigned int vote = g.ballot(is_existed);
-  int g_ones = __popc((int)vote);
+  int g_ones = __popc(vote);
   if (rank == 0 && tid < n) {
     offsets[tid / TILE_SIZE] = static_cast<Tidx>(g_ones);
     atomicAdd(static_cast<uint64_t*>(n_existed), static_cast<uint64_t>(g_ones));
