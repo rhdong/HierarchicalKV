@@ -118,6 +118,10 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
   }
   std::cout << "Check evict behavior got key_miss_cnt: " << key_miss_cnt
             << ", and value_diff_cnt: " << value_diff_cnt << std::endl;
+
+  free(h_tmp_keys);
+  free(h_tmp_values);
+  free(h_tmp_metas);
 }
 
 void test_insert_and_evict_table_check() {
