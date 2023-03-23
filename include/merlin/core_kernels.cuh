@@ -399,15 +399,15 @@ template <class V, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void copy_vector(
     cg::thread_block_tile<TILE_SIZE> const& g, const V* src, V* dst,
     const size_t dim) {
-  for (auto i = g.thread_rank(); i < dim; i += g.size()) {
-    dst[i] = src[i];
-  }
+//  for (auto i = g.thread_rank(); i < dim; i += g.size()) {
+//    dst[i] = src[i];
+//  }
 
-  //  cuda::barrier<cuda::thread_scope_device> bar;
-  //  init(&bar, 1);
-  //  cuda::memcpy_async(g, dst, src, dim * sizeof(V), bar);
-  //
-  //  bar.arrive_and_wait();
+    cuda::barrier<cuda::thread_scope_device> bar;
+    init(&bar, 1);
+    cuda::memcpy_async(g, dst, src, dim * sizeof(V), bar);
+
+    bar.arrive_and_wait();
 }
 
 /* Write the N data from src to each address in *dst by using CPU threads,
