@@ -89,5 +89,5 @@ TARGET_LINK_LIBRARIES(insert_and_evict_test gtest_main)
 
 add_executable(insert_and_evict_table_check tests/insert_and_evict_table_check.cc.cu)
 target_compile_features(insert_and_evict_table_check PUBLIC cxx_std_14)
-set_target_properties(insert_and_evict_test PROPERTIES  CUDA_ARCHITECTURES OFF)
-TARGET_LINK_LIBRARIES(insert_and_evict_test gtest_main)
+set_target_properties(insert_and_evict_table_check PROPERTIES  CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(insert_and_evict_table_check gtest_main)
