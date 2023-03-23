@@ -82,32 +82,12 @@ file(GLOB_RECURSE merlin_hkvs_src RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *.cpp *.c
 # target_link_libraries(hierarchical_kv PUBLIC ...)
 
 
-add_executable(merlin_hashtable_benchmark benchmark/merlin_hashtable_benchmark.cc.cu)
-target_compile_features(merlin_hashtable_benchmark PUBLIC cxx_std_14)
-set_target_properties(merlin_hashtable_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
-
-add_executable(merlin_hashtable_test tests/merlin_hashtable_test.cc.cu)
-target_compile_features(merlin_hashtable_test PUBLIC cxx_std_14)
-set_target_properties(merlin_hashtable_test PROPERTIES  CUDA_ARCHITECTURES OFF)
-TARGET_LINK_LIBRARIES(merlin_hashtable_test gtest_main)
-
-add_executable(find_or_insert_test tests/find_or_insert_test.cc.cu)
-target_compile_features(find_or_insert_test PUBLIC cxx_std_14)
-set_target_properties(find_or_insert_test PROPERTIES  CUDA_ARCHITECTURES OFF)
-TARGET_LINK_LIBRARIES(find_or_insert_test gtest_main)
-
-add_executable(merlin_memory_pool_test tests/memory_pool_test.cc.cu)
-target_compile_features(merlin_memory_pool_test PUBLIC cxx_std_14)
-set_target_properties(merlin_memory_pool_test PROPERTIES  CUDA_ARCHITECTURES OFF)
-TARGET_LINK_LIBRARIES(merlin_memory_pool_test gtest_main)
-
-set(CMAKE_BUILD_TYPE "Debug")
-add_executable(save_and_load_test tests/save_and_load_test.cc.cu)
-target_compile_features(save_and_load_test PUBLIC cxx_std_14)
-set_target_properties(save_and_load_test PROPERTIES  CUDA_ARCHITECTURES OFF)
-TARGET_LINK_LIBRARIES(save_and_load_test gtest_main)
-
 add_executable(insert_and_evict_test tests/insert_and_evict_test.cc.cu)
 target_compile_features(insert_and_evict_test PUBLIC cxx_std_14)
+set_target_properties(insert_and_evict_test PROPERTIES  CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(insert_and_evict_test gtest_main)
+
+add_executable(insert_and_evict_table_check tests/insert_and_evict_table_check.cc.cu)
+target_compile_features(insert_and_evict_table_check PUBLIC cxx_std_14)
 set_target_properties(insert_and_evict_test PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(insert_and_evict_test gtest_main)
