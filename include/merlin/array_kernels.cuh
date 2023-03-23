@@ -83,6 +83,7 @@ __global__ void gpu_select_kvm_kernel(const bool* masks, size_t n,
       K target_key = 0;
       while (target_key != empty_key) {
         target_key = atomicCAS(keys + bias, empty_key, keys[tid]);
+        if(keys[tid] == empty_key) break;
       }
       if (metas) metas[bias] = metas[tid];
       for (size_t j = 0; j < dim; j++) {
