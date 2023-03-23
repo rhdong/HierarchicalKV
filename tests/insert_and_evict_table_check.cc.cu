@@ -132,15 +132,16 @@ void test_insert_and_evict_table_check() {
   TableOptions opt;
 
   // table setting
-  const size_t init_capacity = 1024;
+  const size_t init_capacity = 64;
 
   // numeric setting
   const size_t U = init_capacity;//2llu << 18;
-  const size_t B = 512;//100000;
+  const size_t B = 32//100000;
 
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
   opt.max_hbm_for_vectors = U * dim * sizeof(f32);
+  opt.max_bucket_size = init_capacity;
   opt.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
   opt.dim = dim;
 
