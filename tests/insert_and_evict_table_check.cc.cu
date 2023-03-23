@@ -119,6 +119,10 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
   std::cout << "Check evict behavior got key_miss_cnt: " << key_miss_cnt
             << ", and value_diff_cnt: " << value_diff_cnt << std::endl;
 
+  CUDA_CHECK(cudaFreeAsync(d_tmp_keys, stream));
+  CUDA_CHECK(cudaFreeAsync(d_tmp_values, stream));
+  CUDA_CHECK(cudaFreeAsync(d_tmp_metas, stream));
+
   free(h_tmp_keys);
   free(h_tmp_values);
   free(h_tmp_metas);
