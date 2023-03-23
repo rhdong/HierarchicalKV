@@ -81,9 +81,9 @@ __global__ void gpu_select_kvm_kernel(const bool* masks, size_t n,
       Tidx bias = offsets[tid / TILE_SIZE] + static_cast<Tidx>(prefix_n);
 
       K target_key = 0;
-      while (target_key != empty_key) {
+//      while (target_key != empty_key) {
         target_key = atomicCAS(keys + bias, empty_key, keys[tid]);
-      }
+//      }
       if (metas) metas[bias] = metas[tid];
       for (size_t j = 0; j < dim; j++) {
         values[dim * bias + j] = values[dim * tid + j];
