@@ -824,6 +824,7 @@ __forceinline__ __device__ OverrideResult try_swap_min_meta(
     const M cur_meta = bucket->cur_meta.load(cuda::std::memory_order_relaxed);
     if (bucket->metas[key_pos].compare_exchange_strong(
             min_meta, cur_meta + 1, cuda::std::memory_order_relaxed)) {
+      bucket->cur_meta.fetch_add(1, cuda::std::memory_order_relaxed);
       if (evicted_metas != nullptr) {
         evicted_metas[key_idx] = min_meta;
       }
@@ -1146,7 +1147,15 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
                                             evicted_metas, key_idx);
       }
       override_result = g.shfl(override_result, src_lane);
-      if (override_result == OverrideResult::REFUSED) break;
+      if (override_result == OverrideResult::REFUSED) {
+        evicted_keys[key_idx] = insert_key;
+        if (metas != nullptr) {
+          evicted_metas[key_idx] = metas[key_idx];
+        }
+        copy_vector<V, TILE_SIZE>(g, insert_value,
+                                  evicted_values + key_idx * dim, dim);
+        break;
+      }
 
       if (override_result == OverrideResult::CONTINUE) {
         refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
