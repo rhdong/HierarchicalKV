@@ -24,7 +24,7 @@
 #include "merlin_localfile.hpp"
 #include "test_util.cuh"
 
-constexpr size_t dim = 4;
+constexpr size_t dim = 64;
 using i64 = int64_t;
 using u64 = uint64_t;
 using f32 = float;
@@ -138,9 +138,9 @@ void test_insert_and_evict_table_check() {
   // table setting
 
   // numeric setting
-  const size_t U = 2llu << 18;
-  const size_t init_capacity = U;
-  const size_t B = 100000 + 13;
+  const size_t U = 524288;
+  const size_t init_capacity = 1024;
+  const size_t B = 100000;
 
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
