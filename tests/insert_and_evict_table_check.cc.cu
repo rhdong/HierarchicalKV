@@ -32,7 +32,7 @@ using Table = nv::merlin::HashTable<i64, f32, u64>;
 using TableOptions = nv::merlin::HashTableOptions;
 
 template <typename K, typename V, typename M>
-void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
+bool CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
                          K* evicted_keys, V* evicted_values, M* evicted_metas,
                          size_t len, cudaStream_t stream) {
   std::map<i64, test_util::ValueArray<f32, dim>> map_before_insert;
@@ -77,7 +77,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
     map_before_insert[h_tmp_keys[i]] = *vec;
   }
 
-  size_t filtered_len = table->insert_and_evict(len, keys, values, metas, evicted_keys, evicted_values, evicted_metas, stream);
+  size_t filtered_len = table->insert_and_evict(len, keys, values, nullptr, evicted_keys, evicted_values, evicted_metas, stream);
 
   size_t table_size_after = table->size(stream);
   size_t table_size_verify1 = table->export_batch(table->capacity(), 0, d_tmp_keys, d_tmp_values, d_tmp_metas, stream);
@@ -95,7 +95,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
   CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas + table_size_after, evicted_metas, filtered_len * sizeof(M), cudaMemcpyDeviceToHost, stream));
   CUDA_CHECK(cudaStreamSynchronize(stream));
   int64_t new_cap_i64 = (int64_t)new_cap;
-  for (int64_t i = new_cap_i64; i >= 0; i--) {
+  for (int64_t i = new_cap_i64 - 1; i >= 0; i--) {
     test_util::ValueArray<V, dim>* vec = reinterpret_cast<test_util::ValueArray<V, dim>*>(h_tmp_values + i * dim);
     map_after_insert[h_tmp_keys[i]] = *vec;
   }
@@ -129,6 +129,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
   free(h_tmp_values);
   free(h_tmp_metas);
   CUDA_CHECK(cudaStreamSynchronize(stream));
+  return (value_diff_cnt == 0);
 }
 
 void test_insert_and_evict_table_check() {
@@ -144,7 +145,7 @@ void test_insert_and_evict_table_check() {
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
   opt.max_hbm_for_vectors = U * dim * sizeof(f32);
-  opt.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
+  opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
   opt.dim = dim;
 
   cudaStream_t stream;
@@ -168,7 +169,7 @@ void test_insert_and_evict_table_check() {
     data_buffer.SyncData(true, stream);
 
     printf("----> check p0\n");
-    CheckInsertAndEvict<i64, f32, u64>(table.get(),
+    bool if_ok = CheckInsertAndEvict<i64, f32, u64>(table.get(),
                         data_buffer.keys_ptr(), data_buffer.values_ptr(), data_buffer.metas_ptr(),
                         evict_buffer.keys_ptr(), evict_buffer.values_ptr(), evict_buffer.metas_ptr(),
                         B, stream);
@@ -176,6 +177,7 @@ void test_insert_and_evict_table_check() {
 
     offset += B;
     meta += 1;
+    if(!if_ok) break;
   }
 }
 
