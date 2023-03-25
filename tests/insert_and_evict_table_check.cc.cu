@@ -153,7 +153,7 @@ void test_insert_and_evict_table_check() {
   // numeric setting
   const size_t U = 524288;
   const size_t init_capacity = 1024;
-  const size_t B = 100000;
+  const size_t B = 524288 + 13;
 
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
