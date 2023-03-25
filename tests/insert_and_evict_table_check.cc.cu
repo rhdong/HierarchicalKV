@@ -19,6 +19,9 @@
 #include <stdio.h>
 #include <array>
 #include <map>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
 #include "merlin/types.cuh"
 #include "merlin_hashtable.cuh"
 #include "merlin_localfile.hpp"
@@ -77,7 +80,17 @@ bool CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
     map_before_insert[h_tmp_keys[i]] = *vec;
   }
 
+
+  auto start = std::chrono::steady_clock::now();
   size_t filtered_len = table->insert_and_evict(len, keys, values, nullptr, evicted_keys, evicted_values, evicted_metas, stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  auto end = std::chrono::steady_clock::now();
+  auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        end - start);
+
+  float dur = diff.count();
+
+  std::cout << "dur=" << dur << std::endl;
 
   size_t table_size_after = table->size(stream);
   size_t table_size_verify1 = table->export_batch(table->capacity(), 0, d_tmp_keys, d_tmp_values, d_tmp_metas, stream);
