@@ -190,7 +190,7 @@ void test_insert_and_evict_table_check() {
 
     offset += B;
     meta += 1;
-    if(!if_ok) break;
+//    if(!if_ok) break;
   }
 }
 
