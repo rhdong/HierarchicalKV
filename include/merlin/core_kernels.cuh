@@ -889,20 +889,20 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
       src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       auto dst = bucket->vectors + key_pos * dim;
-//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], 0);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
           insert_key) {
         if (rank == src_lane) {
           update_meta(bucket, key_pos, metas, key_idx);
         }
         copy_vector<V, TILE_SIZE>(g, insert_value, dst, dim);
-//        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
         if (local_size >= bucket_max_size) {
           refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
         }
         continue;
       } else {
-//        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       }
     }
 
@@ -926,10 +926,10 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
         if (local_size >= bucket_max_size) {
           refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
         }
-//        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
         copy_vector<V, TILE_SIZE>(g, insert_value,
                                   bucket->vectors + key_pos * dim, dim);
-//        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 
         break;
       }
@@ -962,10 +962,10 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
           if (local_size >= bucket_max_size) {
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
           }
-//          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,
                                     bucket->vectors + key_pos * dim, dim);
-//          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
         } else if (occupy_result == OccupyResult::DUPLICATE) {
           break;
@@ -1004,10 +1004,10 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
 
       refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
 
-//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, TILE_SIZE>(g, insert_value,
                                 bucket->vectors + key_pos * dim, dim);
-//      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       break;
     }
   }
@@ -1056,14 +1056,14 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       auto dst = bucket->vectors + key_pos * dim;
 
-      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], 0);
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
       if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
           insert_key) {
         if (rank == src_lane) {
           update_meta(bucket, key_pos, metas, key_idx);
         }
         copy_vector<V, TILE_SIZE>(g, insert_value, dst, dim);
-        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], 0);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
         if (local_size >= bucket_max_size) {
           refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
         }
