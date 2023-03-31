@@ -821,9 +821,10 @@ __forceinline__ __device__ OverrideResult try_swap_min_meta(
     Bucket<K, V, M>* __restrict bucket, const int key_pos, M min_meta,
     const M* __restrict metas, M* __restrict evicted_metas, const int key_idx) {
   if (metas == nullptr) {
-    const M cur_meta = bucket->cur_meta.load(cuda::std::memory_order_relaxed);
+    const M cur_meta = bucket->cur_meta.load(cuda::std::memory_order_acquire);
     if (bucket->metas[key_pos].compare_exchange_strong(
-            min_meta, cur_meta + 1, cuda::std::memory_order_relaxed)) {
+            min_meta, cur_meta + 1, cuda::std::memory_order_acq_rel)) {
+      bucket->cur_meta.fetch_add(1, cuda::std::memory_order_acq_rel);
       if (evicted_metas != nullptr) {
         evicted_metas[key_idx] = min_meta;
       }
@@ -836,7 +837,7 @@ __forceinline__ __device__ OverrideResult try_swap_min_meta(
       return OverrideResult::REFUSED;
     }
     if (bucket->metas[key_pos].compare_exchange_strong(
-            min_meta, metas[key_idx], cuda::std::memory_order_relaxed)) {
+            min_meta, metas[key_idx], cuda::std::memory_order_acq_rel)) {
       if (evicted_metas != nullptr) {
         evicted_metas[key_idx] = min_meta;
       }
@@ -888,17 +889,21 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
       src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       auto dst = bucket->vectors + key_pos * dim;
-
-      if (rank == src_lane) {
-        update_meta(bucket, key_pos, metas, key_idx);
-      }
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
-      }
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
-      copy_vector<V, TILE_SIZE>(g, insert_value, dst, dim);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
-      continue;
+      if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
+          insert_key) {
+        if (rank == src_lane) {
+          update_meta(bucket, key_pos, metas, key_idx);
+        }
+        copy_vector<V, TILE_SIZE>(g, insert_value, dst, dim);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+        if (local_size >= bucket_max_size) {
+          refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
+        }
+        continue;
+      } else {
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+      }
     }
 
     tile_offset = 0;
@@ -1051,16 +1056,21 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       auto dst = bucket->vectors + key_pos * dim;
 
-      if (rank == src_lane) {
-        update_meta(bucket, key_pos, metas, key_idx);
-      }
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
-      }
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
-      copy_vector<V, TILE_SIZE>(g, insert_value, dst, dim);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
-      continue;
+      if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
+          insert_key) {
+        if (rank == src_lane) {
+          update_meta(bucket, key_pos, metas, key_idx);
+        }
+        copy_vector<V, TILE_SIZE>(g, insert_value, dst, dim);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+        if (local_size >= bucket_max_size) {
+          refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
+        }
+        continue;
+      } else {
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx], src_lane);
+      }
     }
 
     tile_offset = 0;
@@ -1146,7 +1156,15 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
                                             evicted_metas, key_idx);
       }
       override_result = g.shfl(override_result, src_lane);
-      if (override_result == OverrideResult::REFUSED) break;
+      if (override_result == OverrideResult::REFUSED) {
+        evicted_keys[key_idx] = insert_key;
+        if (metas != nullptr) {
+          evicted_metas[key_idx] = metas[key_idx];
+        }
+        copy_vector<V, TILE_SIZE>(g, insert_value,
+                                  evicted_values + key_idx * dim, dim);
+        break;
+      }
 
       if (override_result == OverrideResult::CONTINUE) {
         refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
@@ -1434,7 +1452,6 @@ __global__ void upsert_kernel(const Table<K, V, M>* __restrict table,
             *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
           }
           local_size = g.shfl(local_size, src_lane);
-          ;
 
           if (local_size >= bucket_max_size) {
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
