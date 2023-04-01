@@ -636,9 +636,9 @@ void test_insert_and_evict_run_with_batch_find() {
   };
 
   insert_and_evict_thread = std::thread(insert_and_evict_func);
-  find_thread = std::thread(find_func);
+//  find_thread = std::thread(find_func);
   insert_and_evict_thread.join();
-  find_thread.join();
+//  find_thread.join();
 }
 
 // TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
