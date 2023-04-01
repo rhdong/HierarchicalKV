@@ -1036,7 +1036,6 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int rank = g.thread_rank();
-  Bucket<K, V, M>* bucket;
   unsigned found_vote;
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
@@ -1052,8 +1051,8 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
     uint32_t tile_offset = 0;
     int src_lane = -1;
 
-    bucket = get_key_position<K>(buckets, insert_key, bkt_idx, start_idx,
-                                 buckets_num, bucket_max_size);
+    Bucket<K, V, M>* bucket = get_key_position<K>(
+        buckets, insert_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     local_size = buckets_size[bkt_idx];
 
@@ -1620,7 +1619,7 @@ __forceinline__ __device__ void lookup_kernel_with_io_core(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
 
-    Bucket<K, V, M>* bucket = get_key_position<K>(
+    const Bucket<K, V, M>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     auto const found_vote = find_in_bucket<K, V, M, TILE_SIZE>(
@@ -1630,15 +1629,15 @@ __forceinline__ __device__ void lookup_kernel_with_io_core(
       const int src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       const V* src = bucket->vectors + key_pos * dim;
-//      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-//      if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
-//          find_key) {
-//        copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
-//        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-//      } else {
-//        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-//        continue;
-//      }
+      //      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      //      if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
+      //          find_key) {
+      //        copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
+      //        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      //      } else {
+      //        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      //        continue;
+      //      }
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
