@@ -349,7 +349,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 
     int s = step->load();
 
-    if(if_check) {
+    if (if_check) {
       CUDA_CHECK(cudaMallocAsync(&d_tmp_keys, cap * sizeof(K), stream));
       CUDA_CHECK(cudaMallocAsync(&d_tmp_values, cap * dim * sizeof(V), stream));
       CUDA_CHECK(cudaMallocAsync(&d_tmp_metas, cap * sizeof(M), stream));
@@ -360,7 +360,8 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
       h_tmp_metas = (M*)malloc(cap * sizeof(M));
 
       CUDA_CHECK(cudaMemsetAsync(d_tmp_keys, 0, cap * sizeof(K), stream));
-      CUDA_CHECK(cudaMemsetAsync(d_tmp_values, 0, cap * dim * sizeof(V), stream));
+      CUDA_CHECK(
+          cudaMemsetAsync(d_tmp_values, 0, cap * dim * sizeof(V), stream));
       CUDA_CHECK(cudaMemsetAsync(d_tmp_metas, 0, cap * sizeof(M), stream));
 
       size_t table_size_verify0 = table->export_batch(
@@ -383,9 +384,9 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
       CUDA_CHECK(cudaMemcpyAsync(h_tmp_values + table_size_before * dim,
                                  values + len * s * dim, len * dim * sizeof(V),
                                  cudaMemcpyDeviceToHost, stream));
-      CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas + table_size_before, metas + len * s,
-                                 len * sizeof(M), cudaMemcpyDeviceToHost,
-                                 stream));
+      CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas + table_size_before,
+                                 metas + len * s, len * sizeof(M),
+                                 cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       for (size_t i = 0; i < cap; i++) {
@@ -406,7 +407,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 
     float dur = diff.count();
 
-    if(if_check) {
+    if (if_check) {
       table_size_after = table->size(stream);
       table_size_verify1 = table->export_batch(
           table->capacity(), 0, d_tmp_keys, d_tmp_values, d_tmp_metas, stream);
@@ -424,14 +425,14 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
                                  table_size_after * sizeof(M),
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaMemcpyAsync(h_tmp_keys + table_size_after, evicted_keys,
-                                 filtered_len * sizeof(K), cudaMemcpyDeviceToHost,
-                                 stream));
+                                 filtered_len * sizeof(K),
+                                 cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaMemcpyAsync(h_tmp_values + table_size_after * dim,
                                  evicted_values, filtered_len * dim * sizeof(V),
                                  cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas + table_size_after, evicted_metas,
-                                 filtered_len * sizeof(M), cudaMemcpyDeviceToHost,
-                                 stream));
+                                 filtered_len * sizeof(M),
+                                 cudaMemcpyDeviceToHost, stream));
       CUDA_CHECK(cudaStreamSynchronize(stream));
       int64_t new_cap_i64 = (int64_t)new_cap;
       for (int64_t i = new_cap_i64 - 1; i >= 0; i--) {
@@ -562,7 +563,8 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     std::cout << "Check insert behavior got find_step: " << find_step
               << ",\tduration: " << dur
               << ",\twhile value_diff_cnt: " << value_diff_cnt
-              << ", while cap: " << cap << std::endl << std::endl;
+              << ", while cap: " << cap << std::endl
+              << std::endl;
     ASSERT_EQ(value_diff_cnt, 0);
     find_step++;
   }
@@ -579,7 +581,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
 }
 
 void test_insert_and_evict_run_with_batch_find() {
-  const size_t U = 16 * 1024 * 1024; //524288;
+  const size_t U = 16 * 1024 * 1024;  // 524288;
   const size_t init_capacity = U;
   const size_t B = 256 * 1024;
   constexpr size_t batch_num = 128;
@@ -624,7 +626,7 @@ void test_insert_and_evict_run_with_batch_find() {
         table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
         global_buffer.metas_ptr(), evict_buffer.keys_ptr(),
         evict_buffer.values_ptr(), evict_buffer.metas_ptr(), B, &step,
-        batch_num, stream, true);
+        batch_num, stream, false);
   };
 
   auto find_func = [&table, &global_buffer, &B, &step, &batch_num,
