@@ -1629,18 +1629,15 @@ __forceinline__ __device__ void lookup_kernel_with_io_core(
       const int src_lane = __ffs(found_vote) - 1;
       key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       const V* src = bucket->vectors + key_pos * dim;
-      //      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-      //      if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
-      //          find_key) {
-      //        copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
-      //        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-      //      } else {
-      //        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-      //        continue;
-      //      }
       lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
-      copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
-      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
+          find_key) {
+        copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+      } else {
+        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
+        continue;
+      }
 
       if (rank == 0) {
         if (metas != nullptr) {
