@@ -450,7 +450,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
         }
       }
     }
-    std::cout << "Check insert behavior got step: " << step
+    std::cout << "Check insert behavior got step: " << step->load()
             << ", while value_diff_cnt: " << value_diff_cnt
             << ", while table_size_before: " << table_size_before
             << ", while table_size_after: " << table_size_after
