@@ -474,7 +474,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 void test_insert_and_evict_run_with_batch_find() {
   const size_t U = 524288;
   const size_t init_capacity = 1024;
-  const size_t B = 10000;
+  const size_t B = 524288 + 13;
   constexpr size_t batch_num = 128;
   constexpr size_t find_interval = 4;
 
