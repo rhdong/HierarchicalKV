@@ -339,7 +339,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
   V* d_tmp_values = nullptr;
   M* d_tmp_metas = nullptr;
 
-  while (step->load() < batch_num) {
+  while (step->load() < total_step) {
     size_t table_size_before = table->size(stream);
     size_t cap = table_size_before + len;
     int s = step->load();
@@ -465,7 +465,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
     free(h_tmp_values);
     free(h_tmp_metas);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    
+
     step->fetch_add(1);
   }
 
