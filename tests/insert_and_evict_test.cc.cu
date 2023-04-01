@@ -638,7 +638,7 @@ void test_insert_and_evict_run_with_batch_find() {
     BatchCheckFind<i64, f32, u64>(table.get(), global_buffer.keys_ptr(),
                                   global_buffer.values_ptr(),
                                   global_buffer.metas_ptr(), B, &step,
-                                  batch_num, find_interval, stream, if_check);
+                                  batch_num, find_interval, stream, true);
   };
 
   find_thread = std::thread(find_func);
