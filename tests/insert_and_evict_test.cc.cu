@@ -607,7 +607,7 @@ void test_insert_and_evict_run_with_batch_find() {
     test_util::create_random_keys<i64, u64, f32, dim>(
         global_buffer.keys_ptr(false) + B * i,
         global_buffer.metas_ptr(false) + B * i,
-        global_buffer.values_ptr(false) + B * i * dim, (int)B, B * 16);
+        global_buffer.values_ptr(false) + B * i * dim, (int)B);
   }
   global_buffer.SyncData(true, stream);
 
