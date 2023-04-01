@@ -152,7 +152,8 @@ void test_insert_and_evict_basic() {
 template <typename K, typename V, typename M>
 void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
                          K* evicted_keys, V* evicted_values, M* evicted_metas,
-                         size_t len, cudaStream_t stream) {
+                         size_t len, std::atomic<int>* step, size_t total_step,
+                         cudaStream_t stream, bool if_check = true) {
   std::map<i64, test_util::ValueArray<f32, dim>> map_before_insert;
   std::map<i64, test_util::ValueArray<f32, dim>> map_after_insert;
   K* h_tmp_keys = nullptr;
@@ -322,9 +323,67 @@ void test_insert_and_evict_advanced() {
   }
 }
 
-TEST(MerlinHashTableTest, test_insert_and_evict_basic) {
+void test_insert_and_evict_run_with_batch_find() {
+  const size_t U = 524288;
+  const size_t init_capacity = 1024;
+  const size_t B = 10000;
+  constexpr size_t batch_num = 128;
+  constexpr size_t find_interval = 4;
+
+  std::thread insert_and_evict_thread;
+  std::thread find_thread;
+  std::atomic<int> step{0};
+
+  TableOptions opt;
+
+  opt.max_capacity = U;
+  opt.init_capacity = init_capacity;
+  opt.max_hbm_for_vectors = U * dim * sizeof(f32);
+  opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
+  opt.dim = dim;
+
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+
+  std::unique_ptr<Table> table = std::make_unique<Table>();
+  table->init(opt);
+
+  test_util::KVMSBuffer<i64, f32, u64> evict_buffer;
+  evict_buffer.Reserve(B, dim, stream);
+  evict_buffer.ToZeros(stream);
+
+  test_util::KVMSBuffer<i64, f32, u64> data_buffer;
+  data_buffer.Reserve(B, dim, stream);
+
+  test_util::KVMSBuffer<i64, f32, u64> find_buffer;
+  find_buffer.Reserve(B * find_interval, dim, stream);
+
+  size_t offset = 0;
+  u64 meta = 0;
+  for (int i = 0; i < 20; i++) {
+    test_util::create_random_keys<i64, u64, f32, dim>(
+        data_buffer.keys_ptr(false), data_buffer.metas_ptr(false),
+        data_buffer.values_ptr(false), (int)B, B * 16);
+    data_buffer.SyncData(true, stream);
+
+    CheckInsertAndEvict<i64, f32, u64>(
+        table.get(), data_buffer.keys_ptr(), data_buffer.values_ptr(),
+        data_buffer.metas_ptr(), evict_buffer.keys_ptr(),
+        evict_buffer.values_ptr(), evict_buffer.metas_ptr(), B, stream);
+
+    offset += B;
+    meta += 1;
+  }
+}
+
+TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
   test_insert_and_evict_basic();
 }
-TEST(MerlinHashTableTest, test_insert_and_evict_advanced) {
+
+TEST(InsertAndEvictTest, test_insert_and_evict_advanced) {
   test_insert_and_evict_advanced();
+}
+
+TEST(InsertAndEvictTest, test_insert_and_evict_run_with_batch_find) {
+  test_insert_and_evict_run_with_batch_find();
 }
