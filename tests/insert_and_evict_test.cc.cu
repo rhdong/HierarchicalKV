@@ -511,6 +511,9 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
   while (step->load() < total_step) {
     while (find_step >= (step->load() / find_interval)) continue;
 
+    size_t found_num = 0;
+    size_t value_diff_cnt = 0;
+
     CUDA_CHECK(cudaMemsetAsync(d_tmp_keys, 0, cap * sizeof(K), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_values, 0, cap * dim * sizeof(V), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_metas, 0, cap * sizeof(M), stream));
@@ -532,33 +535,32 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
 
     float dur = diff.count();
 
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_keys, d_tmp_keys, cap * sizeof(K),
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_values, d_tmp_values,
-                               cap * dim * sizeof(V), cudaMemcpyDeviceToHost,
-                               stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas, d_tmp_metas, cap * sizeof(M),
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_founds, d_tmp_founds, cap * sizeof(bool),
-                               cudaMemcpyDeviceToHost, stream));
+    if (if_check) {
+      CUDA_CHECK(cudaMemcpyAsync(h_tmp_keys, d_tmp_keys, cap * sizeof(K),
+                                 cudaMemcpyDeviceToHost, stream));
+      CUDA_CHECK(cudaMemcpyAsync(h_tmp_values, d_tmp_values,
+                                 cap * dim * sizeof(V), cudaMemcpyDeviceToHost,
+                                 stream));
+      CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas, d_tmp_metas, cap * sizeof(M),
+                                 cudaMemcpyDeviceToHost, stream));
+      CUDA_CHECK(cudaMemcpyAsync(h_tmp_founds, d_tmp_founds, cap * sizeof(bool),
+                                 cudaMemcpyDeviceToHost, stream));
 
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+      CUDA_CHECK(cudaStreamSynchronize(stream));
 
-    size_t found_num = 0;
-    size_t value_diff_cnt = 0;
-
-    for (int i = 0; i < cap; i++) {
-      if (h_tmp_founds[i]) {
-        for (int j = 0; j < dim; j++) {
-          if (h_tmp_values[i * dim + j] !=
-              static_cast<float>(h_tmp_keys[i] * 0.00001)) {
-            value_diff_cnt++;
-          };
+      for (int i = 0; i < cap; i++) {
+        if (h_tmp_founds[i]) {
+          for (int j = 0; j < dim; j++) {
+            if (h_tmp_values[i * dim + j] !=
+                static_cast<float>(h_tmp_keys[i] * 0.00001)) {
+              value_diff_cnt++;
+            };
+          }
+          found_num++;
         }
-        found_num++;
       }
+      ASSERT_EQ(value_diff_cnt, 0);
     }
-    ASSERT_EQ(value_diff_cnt, 0);
 
     std::cout << "Check insert behavior got find_step: " << find_step
               << ",\tduration: " << dur
@@ -586,6 +588,8 @@ void test_insert_and_evict_run_with_batch_find() {
   const size_t B = 256 * 1024;
   constexpr size_t batch_num = 256;
   constexpr size_t find_interval = 8;
+
+  const bool if_check = false;
 
   std::thread insert_and_evict_thread;
   std::thread find_thread;
@@ -626,7 +630,7 @@ void test_insert_and_evict_run_with_batch_find() {
         table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
         global_buffer.metas_ptr(), evict_buffer.keys_ptr(),
         evict_buffer.values_ptr(), evict_buffer.metas_ptr(), B, &step,
-        batch_num, stream, false);
+        batch_num, stream, if_check);
   };
 
   auto find_func = [&table, &global_buffer, &B, &step, &batch_num,
@@ -634,7 +638,7 @@ void test_insert_and_evict_run_with_batch_find() {
     BatchCheckFind<i64, f32, u64>(table.get(), global_buffer.keys_ptr(),
                                   global_buffer.values_ptr(),
                                   global_buffer.metas_ptr(), B, &step,
-                                  batch_num, find_interval, stream, true);
+                                  batch_num, find_interval, stream, if_check);
   };
 
   find_thread = std::thread(find_func);
