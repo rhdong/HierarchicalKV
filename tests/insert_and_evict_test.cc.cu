@@ -509,7 +509,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     CUDA_CHECK(cudaMemsetAsync(d_tmp_founds, 0, cap * sizeof(bool), stream));
 
     CUDA_CHECK(cudaMemcpyAsync(d_tmp_keys, keys + cap * find_step,
-                               cap * sizeof(K), cudaMemcpyDeviceToHost,
+                               cap * sizeof(K), cudaMemcpyDeviceToDevice,
                                stream));
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
