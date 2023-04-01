@@ -451,7 +451,7 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
       }
     }
     std::cout << "Check insert behavior got step: " << step->load()
-              << ",\tduration: " << diff
+              << ",\tduration: " << dur
               << ",\twhile value_diff_cnt: " << value_diff_cnt
               << ", while table_size_before: " << table_size_before
               << ", while table_size_after: " << table_size_after
@@ -504,7 +504,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     h_tmp_keys = (K*)malloc(cap * sizeof(K));
     h_tmp_values = (V*)malloc(cap * dim * sizeof(V));
     h_tmp_metas = (M*)malloc(cap * sizeof(M));
-    h_tmp_found = (bool*)malloc(cap * sizeof(bool));
+    h_tmp_founds = (bool*)malloc(cap * sizeof(bool));
 
     CUDA_CHECK(cudaMemsetAsync(d_tmp_keys, 0, cap * sizeof(K), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_values, 0, cap * dim * sizeof(V), stream));
@@ -530,7 +530,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
                                stream));
     CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas, d_tmp_metas, cap * sizeof(M),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_found, d_tmp_found, cap * sizeof(bool),
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_founds, d_tmp_found, cap * sizeof(bool),
                                cudaMemcpyDeviceToHost, stream));
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -539,7 +539,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     size_t value_diff_cnt = 0;
 
     for (int i = 0; i < cap; i++) {
-      if (h_tmp_found[i]) {
+      if (h_tmp_founds[i]) {
         for (int j = 0; j < options.dim; j++) {
           if (h_vectors[i * options.dim + j] !=
               static_cast<float>(h_keys[i] * 0.00001)) {
@@ -552,7 +552,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     ASSERT_EQ(value_diff_cnt, 0);
 
     std::cout << "Check insert behavior got find_step: " << find_step
-              << ",\tduration: " << diff
+              << ",\tduration: " << dur
               << ",\twhile value_diff_cnt: " << value_diff_cnt
               << ", while table_size_before: " << table_size_before
               << ", while table_size_after: " << table_size_after
@@ -566,7 +566,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     free(h_tmp_keys);
     free(h_tmp_values);
     free(h_tmp_metas);
-    free(h_tmp_found);
+    free(h_tmp_founds);
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
     find_step++;
