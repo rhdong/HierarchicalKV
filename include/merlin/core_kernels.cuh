@@ -1619,7 +1619,7 @@ __forceinline__ __device__ void lookup_kernel_with_io_core(
     size_t start_idx = 0;
     uint32_t tile_offset = 0;
 
-    Bucket<K, V, M>* bucket = get_key_position<K>(
+    const Bucket<K, V, M>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
     auto const found_vote = find_in_bucket<K, V, M, TILE_SIZE>(
