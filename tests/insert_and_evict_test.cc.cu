@@ -555,7 +555,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     std::cout << "Check insert behavior got find_step: " << find_step
               << ",\tduration: " << dur
               << ",\twhile value_diff_cnt: " << value_diff_cnt
-              << ", while cap: " << cap << std::endl;
+              << ", while cap: " << cap << std::endl << std::endl;
     ASSERT_EQ(value_diff_cnt, 0);
     find_step++;
   }
@@ -572,9 +572,9 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
 }
 
 void test_insert_and_evict_run_with_batch_find() {
-  const size_t U = 524288;
-  const size_t init_capacity = 1024;
-  const size_t B = 10000;
+  const size_t U = 16 * 1024 * 1024; //524288;
+  const size_t init_capacity = U;
+  const size_t B = 256 * 1024;
   constexpr size_t batch_num = 128;
   constexpr size_t find_interval = 4;
 
