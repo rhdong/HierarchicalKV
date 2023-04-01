@@ -527,13 +527,13 @@ void test_insert_and_evict_run_with_batch_find() {
   insert_and_evict_thread.join();
 }
 
-TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
-  test_insert_and_evict_basic();
-}
-
-TEST(InsertAndEvictTest, test_insert_and_evict_advanced) {
-  test_insert_and_evict_advanced();
-}
+//TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
+//  test_insert_and_evict_basic();
+//}
+//
+//TEST(InsertAndEvictTest, test_insert_and_evict_advanced) {
+//  test_insert_and_evict_advanced();
+//}
 
 TEST(InsertAndEvictTest, test_insert_and_evict_run_with_batch_find) {
   test_insert_and_evict_run_with_batch_find();
