@@ -486,13 +486,13 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
   M* d_tmp_metas = nullptr;
   bool* d_tmp_founds = nullptr;
 
-  size_t find_step = 0;
+  int find_step = 0;
   size_t cap = len * find_interval;
 
   while (step->load() < total_step) {
-    std::cout << "d1" << std::endl;
-    while (find_step * find_interval > step->load()) continue;
-    std::cout << "d2" << std::endl;
+    std::cout << "d1 " << step->load() << std::endl;
+    while (find_step >= (step->load() / find_interval)) continue;
+    std::cout << "d2 " << step->load() << std::endl;
 
     CUDA_CHECK(cudaMallocAsync(&d_tmp_keys, cap * sizeof(K), stream));
     CUDA_CHECK(cudaMallocAsync(&d_tmp_values, cap * dim * sizeof(V), stream));
