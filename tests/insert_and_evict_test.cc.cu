@@ -511,10 +511,13 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     CUDA_CHECK(cudaMemsetAsync(d_tmp_metas, 0, cap * sizeof(M), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_found, 0, cap * sizeof(bool), stream));
 
+    CUDA_CHECK(cudaMemcpyAsync(d_tmp_keys, keys + cap * find_step, cap * sizeof(K),
+                           cudaMemcpyDeviceToHost, stream));
+
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     auto start = std::chrono::steady_clock::now();
-    size_t filtered_len = table->find(cap, keys + cap * find_step, d_tmp_values,
+    table->find(cap, d_tmp_keys, d_tmp_values,
                                       d_tmp_found, d_tmp_metas, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end = std::chrono::steady_clock::now();
@@ -540,9 +543,9 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
 
     for (int i = 0; i < cap; i++) {
       if (h_tmp_founds[i]) {
-        for (int j = 0; j < options.dim; j++) {
-          if (h_vectors[i * options.dim + j] !=
-              static_cast<float>(h_keys[i] * 0.00001)) {
+        for (int j = 0; j < dim; j++) {
+          if (h_tmp_values[i * dim + j] !=
+              static_cast<float>(d_tmp_keys[i] * 0.00001)) {
             value_diff_cnt++;
           };
         }
@@ -554,8 +557,6 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     std::cout << "Check insert behavior got find_step: " << find_step
               << ",\tduration: " << dur
               << ",\twhile value_diff_cnt: " << value_diff_cnt
-              << ", while table_size_before: " << table_size_before
-              << ", while table_size_after: " << table_size_after
               << ", while len: " << len << std::endl;
     ASSERT_EQ(value_diff_cnt, 0);
 
