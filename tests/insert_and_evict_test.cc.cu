@@ -624,11 +624,7 @@ void test_insert_and_evict_run_with_batch_find() {
         evict_buffer.values_ptr(), evict_buffer.metas_ptr(), B, &step,
         batch_num, stream, true);
   };
-  template <typename K, typename V, typename M>
-  void BatchCheckFind(Table * table, K * keys, V * values, M * metas,
-                      size_t len, std::atomic<int> * step, size_t total_step,
-                      size_t find_interval, cudaStream_t stream,
-                      bool if_check = true) {}
+
   auto find_func = [&table, &global_buffer, &B, &step, &batch_num,
                     &find_interval, &stream]() {
     BatchCheckInsertAndEvict<i64, f32, u64>(
