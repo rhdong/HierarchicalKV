@@ -476,8 +476,6 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
                     std::atomic<int>* step, size_t total_step,
                     size_t find_interval, cudaStream_t stream,
                     bool if_check = true) {
-  std::map<i64, test_util::ValueArray<f32, dim>> map_before_insert;
-  std::map<i64, test_util::ValueArray<f32, dim>> map_after_insert;
 
   K* h_tmp_keys = nullptr;
   V* h_tmp_values = nullptr;
@@ -487,18 +485,18 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
   K* d_tmp_keys = nullptr;
   V* d_tmp_values = nullptr;
   M* d_tmp_metas = nullptr;
-  bool* d_tmp_found = nullptr;
+  bool* d_tmp_founds = nullptr;
 
   size_t find_step = 0;
   size_t cap = len * find_interval;
 
   while (step->load() < total_step) {
-    while (find_step * find_interval >= step->load()) continue;
+    while (find_step * find_interval > step->load()) continue;
 
     CUDA_CHECK(cudaMallocAsync(&d_tmp_keys, cap * sizeof(K), stream));
     CUDA_CHECK(cudaMallocAsync(&d_tmp_values, cap * dim * sizeof(V), stream));
     CUDA_CHECK(cudaMallocAsync(&d_tmp_metas, cap * sizeof(M), stream));
-    CUDA_CHECK(cudaMallocAsync(&d_tmp_found, cap * sizeof(bool), stream));
+    CUDA_CHECK(cudaMallocAsync(&d_tmp_founds, cap * sizeof(bool), stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     h_tmp_keys = (K*)malloc(cap * sizeof(K));
@@ -509,7 +507,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     CUDA_CHECK(cudaMemsetAsync(d_tmp_keys, 0, cap * sizeof(K), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_values, 0, cap * dim * sizeof(V), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_metas, 0, cap * sizeof(M), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_tmp_found, 0, cap * sizeof(bool), stream));
+    CUDA_CHECK(cudaMemsetAsync(d_tmp_founds, 0, cap * sizeof(bool), stream));
 
     CUDA_CHECK(cudaMemcpyAsync(d_tmp_keys, keys + cap * find_step,
                                cap * sizeof(K), cudaMemcpyDeviceToHost,
@@ -518,7 +516,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     auto start = std::chrono::steady_clock::now();
-    table->find(cap, d_tmp_keys, d_tmp_values, d_tmp_found, d_tmp_metas,
+    table->find(cap, d_tmp_keys, d_tmp_values, d_tmp_founds, d_tmp_metas,
                 stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end = std::chrono::steady_clock::now();
@@ -534,7 +532,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
                                stream));
     CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas, d_tmp_metas, cap * sizeof(M),
                                cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_founds, d_tmp_found, cap * sizeof(bool),
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_founds, d_tmp_founds, cap * sizeof(bool),
                                cudaMemcpyDeviceToHost, stream));
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -564,7 +562,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     CUDA_CHECK(cudaFreeAsync(d_tmp_keys, stream));
     CUDA_CHECK(cudaFreeAsync(d_tmp_values, stream));
     CUDA_CHECK(cudaFreeAsync(d_tmp_metas, stream));
-    CUDA_CHECK(cudaFreeAsync(d_tmp_found, stream));
+    CUDA_CHECK(cudaFreeAsync(d_tmp_founds, stream));
     free(h_tmp_keys);
     free(h_tmp_values);
     free(h_tmp_metas);
