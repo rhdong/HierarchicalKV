@@ -584,7 +584,7 @@ void test_insert_and_evict_run_with_batch_find() {
   const size_t U = 16 * 1024 * 1024;  // 524288;
   const size_t init_capacity = U;
   const size_t B = 256 * 1024;
-  constexpr size_t batch_num = 128;
+  constexpr size_t batch_num = 256;
   constexpr size_t find_interval = 4;
 
   std::thread insert_and_evict_thread;
@@ -637,9 +637,9 @@ void test_insert_and_evict_run_with_batch_find() {
                                   batch_num, find_interval, stream, true);
   };
 
-//  find_thread = std::thread(find_func);
+  find_thread = std::thread(find_func);
   insert_and_evict_thread = std::thread(insert_and_evict_func);
-//  find_thread.join();
+  find_thread.join();
   insert_and_evict_thread.join();
 }
 
