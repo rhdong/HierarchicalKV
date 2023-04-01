@@ -555,7 +555,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     std::cout << "Check insert behavior got find_step: " << find_step
               << ",\tduration: " << dur
               << ",\twhile value_diff_cnt: " << value_diff_cnt
-              << ", while len: " << len << std::endl;
+              << ", while cap: " << cap << std::endl;
     ASSERT_EQ(value_diff_cnt, 0);
 
     CUDA_CHECK(cudaFreeAsync(d_tmp_keys, stream));
@@ -604,16 +604,13 @@ void test_insert_and_evict_run_with_batch_find() {
   evict_buffer.Reserve(B, dim, stream);
   evict_buffer.ToZeros(stream);
 
-  test_util::KVMSBuffer<i64, f32, u64> find_buffer;
-  find_buffer.Reserve(B * find_interval, dim, stream);
-
   for (int i = 0; i < batch_num; i++) {
     test_util::create_random_keys<i64, u64, f32, dim>(
         global_buffer.keys_ptr(false) + B * i,
         global_buffer.metas_ptr(false) + B * i,
         global_buffer.values_ptr(false) + B * i * dim, (int)B, B * 16);
-    global_buffer.SyncData(true, stream);
   }
+  global_buffer.SyncData(true, stream);
 
   auto insert_and_evict_func = [&table, &global_buffer, &evict_buffer, &B,
                                 &step, &batch_num, &stream]() {
