@@ -476,7 +476,6 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
                     std::atomic<int>* step, size_t total_step,
                     size_t find_interval, cudaStream_t stream,
                     bool if_check = true) {
-
   K* h_tmp_keys = nullptr;
   V* h_tmp_values = nullptr;
   M* h_tmp_metas = nullptr;
