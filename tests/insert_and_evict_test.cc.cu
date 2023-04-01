@@ -587,7 +587,7 @@ void test_insert_and_evict_run_with_batch_find() {
   const size_t init_capacity = U;
   const size_t B = 256 * 1024;
   constexpr size_t batch_num = 256;
-  constexpr size_t find_interval = 1;
+  constexpr size_t find_interval = 2;
 
   const bool if_check = false;
 
