@@ -490,16 +490,13 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
   size_t cap = len * find_interval;
 
   while (step->load() < total_step) {
-    std::cout << "d1 " << step->load() << std::endl;
     while (find_step >= (step->load() / find_interval)) continue;
-    std::cout << "d2 " << step->load() << std::endl;
 
     CUDA_CHECK(cudaMallocAsync(&d_tmp_keys, cap * sizeof(K), stream));
     CUDA_CHECK(cudaMallocAsync(&d_tmp_values, cap * dim * sizeof(V), stream));
     CUDA_CHECK(cudaMallocAsync(&d_tmp_metas, cap * sizeof(M), stream));
     CUDA_CHECK(cudaMallocAsync(&d_tmp_founds, cap * sizeof(bool), stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    std::cout << "d3" << std::endl;
 
     h_tmp_keys = (K*)malloc(cap * sizeof(K));
     h_tmp_values = (V*)malloc(cap * dim * sizeof(V));
@@ -517,7 +514,6 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
-    std::cout << "d4" << std::endl;
     auto start = std::chrono::steady_clock::now();
     table->find(cap, d_tmp_keys, d_tmp_values, d_tmp_founds, d_tmp_metas,
                 stream);
@@ -539,24 +535,22 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
                                cudaMemcpyDeviceToHost, stream));
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    std::cout << "d5" << std::endl;
 
     size_t found_num = 0;
     size_t value_diff_cnt = 0;
 
-//    for (int i = 0; i < cap; i++) {
-//      if (h_tmp_founds[i]) {
-//        for (int j = 0; j < dim; j++) {
-//          if (h_tmp_values[i * dim + j] !=
-//              static_cast<float>(d_tmp_keys[i] * 0.00001)) {
-//            value_diff_cnt++;
-//          };
-//        }
-//        found_num++;
-//      }
-//    }
+    for (int i = 0; i < cap; i++) {
+      if (h_tmp_founds[i]) {
+        for (int j = 0; j < dim; j++) {
+          if (h_tmp_values[i * dim + j] !=
+              static_cast<float>(h_tmp_keys[i] * 0.00001)) {
+            value_diff_cnt++;
+          };
+        }
+        found_num++;
+      }
+    }
     ASSERT_EQ(value_diff_cnt, 0);
-    std::cout << "d6" << std::endl;
 
     std::cout << "Check insert behavior got find_step: " << find_step
               << ",\tduration: " << dur
