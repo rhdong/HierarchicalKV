@@ -627,7 +627,7 @@ void test_insert_and_evict_run_with_batch_find() {
 
   auto find_func = [&table, &global_buffer, &B, &step, &batch_num,
                     &find_interval, &stream]() {
-    BatchCheckInsertAndEvict<i64, f32, u64>(
+    BatchCheckFind<i64, f32, u64>(
         table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
         global_buffer.metas_ptr(), B, &step, batch_num, find_interval, stream,
         true);
