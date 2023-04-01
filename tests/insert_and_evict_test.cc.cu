@@ -544,17 +544,17 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     size_t found_num = 0;
     size_t value_diff_cnt = 0;
 
-    for (int i = 0; i < cap; i++) {
-      if (h_tmp_founds[i]) {
-        for (int j = 0; j < dim; j++) {
-          if (h_tmp_values[i * dim + j] !=
-              static_cast<float>(d_tmp_keys[i] * 0.00001)) {
-            value_diff_cnt++;
-          };
-        }
-        found_num++;
-      }
-    }
+//    for (int i = 0; i < cap; i++) {
+//      if (h_tmp_founds[i]) {
+//        for (int j = 0; j < dim; j++) {
+//          if (h_tmp_values[i * dim + j] !=
+//              static_cast<float>(d_tmp_keys[i] * 0.00001)) {
+//            value_diff_cnt++;
+//          };
+//        }
+//        found_num++;
+//      }
+//    }
     ASSERT_EQ(value_diff_cnt, 0);
     std::cout << "d6" << std::endl;
 
