@@ -374,9 +374,9 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
     CUDA_CHECK(cudaMemcpyAsync(h_tmp_keys + table_size_before, keys + len * s,
                                len * sizeof(K), cudaMemcpyDeviceToHost,
                                stream));
-    CUDA_CHECK(cudaMemcpyAsync(h_tmp_values + table_size_before * dim, values + len * s * dim,
-                               len * dim * sizeof(V), cudaMemcpyDeviceToHost,
-                               stream));
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_values + table_size_before * dim,
+                               values + len * s * dim, len * dim * sizeof(V),
+                               cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas + table_size_before, metas + len * s,
                                len * sizeof(M), cudaMemcpyDeviceToHost,
                                stream));
@@ -390,9 +390,9 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
     }
 
     auto start = std::chrono::steady_clock::now();
-    size_t filtered_len =
-        table->insert_and_evict(len, keys + len * s, values + len * s * dim, nullptr, evicted_keys,
-                                evicted_values, evicted_metas, stream);
+    size_t filtered_len = table->insert_and_evict(
+        len, keys + len * s, values + len * s * dim, nullptr, evicted_keys,
+        evicted_values, evicted_metas, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end = std::chrono::steady_clock::now();
     auto diff =
@@ -451,10 +451,11 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
       }
     }
     std::cout << "Check insert behavior got step: " << step->load()
-            << ", while value_diff_cnt: " << value_diff_cnt
-            << ", while table_size_before: " << table_size_before
-            << ", while table_size_after: " << table_size_after
-            << ", while len: " << len << std::endl;
+              << ",\tduration: " << diff
+              << ",\twhile value_diff_cnt: " << value_diff_cnt
+              << ", while table_size_before: " << table_size_before
+              << ", while table_size_after: " << table_size_after
+              << ", while len: " << len << std::endl;
     ASSERT_EQ(key_miss_cnt, 0);
     ASSERT_EQ(value_diff_cnt, 0);
 
@@ -468,13 +469,114 @@ void BatchCheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 
     step->fetch_add(1);
   }
+}
 
+template <typename K, typename V, typename M>
+void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
+                    std::atomic<int>* step, size_t total_step,
+                    size_t find_interval, cudaStream_t stream,
+                    bool if_check = true) {
+  std::map<i64, test_util::ValueArray<f32, dim>> map_before_insert;
+  std::map<i64, test_util::ValueArray<f32, dim>> map_after_insert;
+
+  K* h_tmp_keys = nullptr;
+  V* h_tmp_values = nullptr;
+  M* h_tmp_metas = nullptr;
+  bool* h_tmp_founds = nullptr;
+
+  K* d_tmp_keys = nullptr;
+  V* d_tmp_values = nullptr;
+  M* d_tmp_metas = nullptr;
+  M* d_tmp_found = nullptr;
+
+  size_t find_step = 0;
+  size_t cap = len * find_interval;
+
+  while (step->load() < total_step) {
+    while (find_step * find_interval >= step->load()) continue;
+
+    CUDA_CHECK(cudaMallocAsync(&d_tmp_keys, cap * sizeof(K), stream));
+    CUDA_CHECK(cudaMallocAsync(&d_tmp_values, cap * dim * sizeof(V), stream));
+    CUDA_CHECK(cudaMallocAsync(&d_tmp_metas, cap * sizeof(M), stream));
+    CUDA_CHECK(cudaMallocAsync(&d_tmp_found, cap * sizeof(bool), stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    h_tmp_keys = (K*)malloc(cap * sizeof(K));
+    h_tmp_values = (V*)malloc(cap * dim * sizeof(V));
+    h_tmp_metas = (M*)malloc(cap * sizeof(M));
+    h_tmp_found = (bool*)malloc(cap * sizeof(bool));
+
+    CUDA_CHECK(cudaMemsetAsync(d_tmp_keys, 0, cap * sizeof(K), stream));
+    CUDA_CHECK(cudaMemsetAsync(d_tmp_values, 0, cap * dim * sizeof(V), stream));
+    CUDA_CHECK(cudaMemsetAsync(d_tmp_metas, 0, cap * sizeof(M), stream));
+    CUDA_CHECK(cudaMemsetAsync(d_tmp_found, 0, cap * sizeof(bool), stream));
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    auto start = std::chrono::steady_clock::now();
+    size_t filtered_len = table->find(cap, keys + cap * find_step, d_tmp_values,
+                                      d_tmp_found, d_tmp_metas, stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    auto end = std::chrono::steady_clock::now();
+    auto diff =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+
+    float dur = diff.count();
+
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_keys, d_tmp_keys, cap * sizeof(K),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_values, d_tmp_values,
+                               cap * dim * sizeof(V), cudaMemcpyDeviceToHost,
+                               stream));
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_metas, d_tmp_metas, cap * sizeof(M),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaMemcpyAsync(h_tmp_found, d_tmp_found, cap * sizeof(bool),
+                               cudaMemcpyDeviceToHost, stream));
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    size_t found_num = 0;
+    size_t value_diff_cnt = 0;
+
+    for (int i = 0; i < cap; i++) {
+      if (h_tmp_found[i]) {
+        for (int j = 0; j < options.dim; j++) {
+          if (h_vectors[i * options.dim + j] !=
+              static_cast<float>(h_keys[i] * 0.00001)) {
+            value_diff_cnt++;
+          };
+        }
+        found_num++;
+      }
+    }
+    ASSERT_EQ(value_diff_cnt, 0);
+
+    std::cout << "Check insert behavior got find_step: " << find_step
+              << ",\tduration: " << diff
+              << ",\twhile value_diff_cnt: " << value_diff_cnt
+              << ", while table_size_before: " << table_size_before
+              << ", while table_size_after: " << table_size_after
+              << ", while len: " << len << std::endl;
+    ASSERT_EQ(value_diff_cnt, 0);
+
+    CUDA_CHECK(cudaFreeAsync(d_tmp_keys, stream));
+    CUDA_CHECK(cudaFreeAsync(d_tmp_values, stream));
+    CUDA_CHECK(cudaFreeAsync(d_tmp_metas, stream));
+    CUDA_CHECK(cudaFreeAsync(d_tmp_found, stream));
+    free(h_tmp_keys);
+    free(h_tmp_values);
+    free(h_tmp_metas);
+    free(h_tmp_found);
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    find_step++;
+  }
 }
 
 void test_insert_and_evict_run_with_batch_find() {
   const size_t U = 524288;
   const size_t init_capacity = 1024;
-  const size_t B = 524288 + 13;
+  const size_t B = 10000;
   constexpr size_t batch_num = 128;
   constexpr size_t find_interval = 4;
 
@@ -514,24 +616,38 @@ void test_insert_and_evict_run_with_batch_find() {
     global_buffer.SyncData(true, stream);
   }
 
-  auto insert_and_evict_func = [&table, &global_buffer, &evict_buffer, &B, &step, &batch_num,
-                                &stream]() {
+  auto insert_and_evict_func = [&table, &global_buffer, &evict_buffer, &B,
+                                &step, &batch_num, &stream]() {
     BatchCheckInsertAndEvict<i64, f32, u64>(
         table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
         global_buffer.metas_ptr(), evict_buffer.keys_ptr(),
         evict_buffer.values_ptr(), evict_buffer.metas_ptr(), B, &step,
         batch_num, stream, true);
   };
+  template <typename K, typename V, typename M>
+  void BatchCheckFind(Table * table, K * keys, V * values, M * metas,
+                      size_t len, std::atomic<int> * step, size_t total_step,
+                      size_t find_interval, cudaStream_t stream,
+                      bool if_check = true) {}
+  auto find_func = [&table, &global_buffer, &B, &step, &batch_num,
+                    &find_interval, &stream]() {
+    BatchCheckInsertAndEvict<i64, f32, u64>(
+        table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
+        global_buffer.metas_ptr(), B, &step, batch_num, find_interval, stream,
+        true);
+  };
 
   insert_and_evict_thread = std::thread(insert_and_evict_func);
+  find_thread = std::thread(find_func);
   insert_and_evict_thread.join();
+  find_thread.join();
 }
 
-//TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
+// TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
 //  test_insert_and_evict_basic();
 //}
 //
-//TEST(InsertAndEvictTest, test_insert_and_evict_advanced) {
+// TEST(InsertAndEvictTest, test_insert_and_evict_advanced) {
 //  test_insert_and_evict_advanced();
 //}
 
