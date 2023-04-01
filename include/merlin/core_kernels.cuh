@@ -1639,7 +1639,9 @@ __forceinline__ __device__ void lookup_kernel_with_io_core(
 //        unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 //        continue;
 //      }
+      lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       copy_vector<V, TILE_SIZE>(g, src, find_value, dim);
+      unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
 
       if (rank == 0) {
         if (metas != nullptr) {
