@@ -511,14 +511,15 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
     CUDA_CHECK(cudaMemsetAsync(d_tmp_metas, 0, cap * sizeof(M), stream));
     CUDA_CHECK(cudaMemsetAsync(d_tmp_found, 0, cap * sizeof(bool), stream));
 
-    CUDA_CHECK(cudaMemcpyAsync(d_tmp_keys, keys + cap * find_step, cap * sizeof(K),
-                           cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaMemcpyAsync(d_tmp_keys, keys + cap * find_step,
+                               cap * sizeof(K), cudaMemcpyDeviceToHost,
+                               stream));
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     auto start = std::chrono::steady_clock::now();
-    table->find(cap, d_tmp_keys, d_tmp_values,
-                                      d_tmp_found, d_tmp_metas, stream);
+    table->find(cap, d_tmp_keys, d_tmp_values, d_tmp_found, d_tmp_metas,
+                stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end = std::chrono::steady_clock::now();
     auto diff =
@@ -628,10 +629,10 @@ void test_insert_and_evict_run_with_batch_find() {
 
   auto find_func = [&table, &global_buffer, &B, &step, &batch_num,
                     &find_interval, &stream]() {
-    BatchCheckFind<i64, f32, u64>(
-        table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
-        global_buffer.metas_ptr(), B, &step, batch_num, find_interval, stream,
-        true);
+    BatchCheckFind<i64, f32, u64>(table.get(), global_buffer.keys_ptr(),
+                                  global_buffer.values_ptr(),
+                                  global_buffer.metas_ptr(), B, &step,
+                                  batch_num, find_interval, stream, true);
   };
 
   insert_and_evict_thread = std::thread(insert_and_evict_func);
