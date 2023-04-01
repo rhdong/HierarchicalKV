@@ -514,7 +514,7 @@ void test_insert_and_evict_run_with_batch_find() {
   }
 
   auto insert_and_evict_func = [&table, &global_buffer, &B, &step, &batch_num,
-                                &stream](&step) {
+                                &stream]() {
     BatchCheckInsertAndEvict<i64, f32, u64>(
         table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
         global_buffer.metas_ptr(), evict_buffer.keys_ptr(),
@@ -523,7 +523,7 @@ void test_insert_and_evict_run_with_batch_find() {
   };
 
   insert_and_evict_thread = std::thread(insert_and_evict_func);
-  insert_and_evict_thread.join()
+  insert_and_evict_thread.join();
 }
 
 TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
