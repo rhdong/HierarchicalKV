@@ -513,7 +513,7 @@ void test_insert_and_evict_run_with_batch_find() {
     global_buffer.SyncData(true, stream);
   }
 
-  auto insert_and_evict_func = [&table, &global_buffer, &B, &step, &batch_num,
+  auto insert_and_evict_func = [&table, &global_buffer, &evict_buffer, &B, &step, &batch_num,
                                 &stream]() {
     BatchCheckInsertAndEvict<i64, f32, u64>(
         table.get(), global_buffer.keys_ptr(), global_buffer.values_ptr(),
