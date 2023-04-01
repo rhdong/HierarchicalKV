@@ -487,7 +487,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
   K* d_tmp_keys = nullptr;
   V* d_tmp_values = nullptr;
   M* d_tmp_metas = nullptr;
-  M* d_tmp_found = nullptr;
+  bool* d_tmp_found = nullptr;
 
   size_t find_step = 0;
   size_t cap = len * find_interval;
