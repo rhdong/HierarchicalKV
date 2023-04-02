@@ -583,7 +583,7 @@ void BatchCheckFind(Table* table, K* keys, V* values, M* metas, size_t len,
 }
 
 void test_insert_and_evict_run_with_batch_find() {
-  const size_t U = 16 * 1024 * 1024;  // 524288;
+  const size_t U = 16 * 1024 * 1024;
   const size_t init_capacity = U;
   const size_t B = 256 * 1024;
   constexpr size_t batch_num = 256;
@@ -638,7 +638,7 @@ void test_insert_and_evict_run_with_batch_find() {
     BatchCheckFind<i64, f32, u64>(table.get(), global_buffer.keys_ptr(),
                                   global_buffer.values_ptr(),
                                   global_buffer.metas_ptr(), B, &step,
-                                  batch_num, find_interval, stream, true);
+                                  batch_num, find_interval, stream, if_check);
   };
 
   find_thread = std::thread(find_func);
