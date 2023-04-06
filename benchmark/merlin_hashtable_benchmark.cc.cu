@@ -177,7 +177,7 @@ float test_one_api(const API_Select api, const size_t dim,
   options.max_hbm_for_vectors = nv::merlin::GB(hbm4values);
   options.io_by_cpu = io_by_cpu;
   options.evict_strategy = EvictStrategy::kCustomized;
-  options.max_bucket_size = 32;
+//  options.max_bucket_size = 32;
 
   std::unique_ptr<Table> table = std::make_unique<Table>();
   table->init(options);
