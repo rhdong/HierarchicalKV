@@ -56,5 +56,37 @@ class FlexPinnedBuffer {
   size_t size_;
 };
 
+
+template <class T>
+class FlexDeviceBuffer {
+ public:
+  FlexDeviceBuffer(const size_t size = 1) : ptr_(nullptr) {
+    if (!ptr_) {
+      size_ = size;
+      CUDA_CHECK(cudaMalloc(&ptr_, sizeof(T) * size_));
+    }
+  }
+  ~FlexDeviceBuffer() {
+    try {
+      if (!ptr_) CUDA_CHECK(cudaFreeHost(ptr_));
+    } catch (const nv::merlin::CudaException& e) {
+      cerr << "[HierarchicalKV] Failed to free FlexDeviceBuffer!" << endl;
+    }
+  }
+
+  __inline__ T* alloc_or_reuse(const size_t size = 0) {
+    if (size > size_) {
+      CUDA_CHECK(cudaFree(ptr_));
+      size_ = size;
+      CUDA_CHECK(cudaMalloc(&ptr_, sizeof(T) * size_));
+    }
+    return ptr_;
+  }
+
+ private:
+  T* ptr_;
+  size_t size_;
+};
+
 }  // namespace merlin
 }  // namespace nv

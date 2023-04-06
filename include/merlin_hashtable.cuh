@@ -436,17 +436,18 @@ class HashTable {
     // always use max tile to avoid data-deps as possible.
     const int TILE_SIZE = 32;
     size_t n_offsets = (n + TILE_SIZE - 1) / TILE_SIZE;
-    const size_type dev_ws_size =
-        n_offsets * sizeof(int64_t) + n * sizeof(bool) + sizeof(size_type);
 
-    auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};
-    auto d_offsets{dev_ws.get<int64_t*>(0)};
-    auto dn_evicted = reinterpret_cast<size_type*>(d_offsets + n_offsets);
-    auto d_masks = reinterpret_cast<bool*>(dn_evicted + 1);
+    static thread_local FlexDeviceBuffer<int64_t> d_offsets;
+    static thread_local FlexDeviceBuffer<size_type> dn_evicted;
+    static thread_local FlexDeviceBuffer<bool> d_masks;
 
-    CUDA_CHECK(cudaMemsetAsync(d_offsets, 0, n_offsets * sizeof(int64_t)));
-    CUDA_CHECK(cudaMemsetAsync(dn_evicted, 0, sizeof(size_type), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_masks, 0, n * sizeof(bool), stream));
+    int64_t* l_d_offsets = d_offsets.alloc_or_reuse(n_offsets);
+    size_type* l_dn_evicted = dn_evicted.alloc_or_reuse(1);
+    bool* l_d_masks = d_masks.alloc_or_reuse(n);
+
+    CUDA_CHECK(cudaMemsetAsync(l_d_offsets, 0, n_offsets * sizeof(int64_t)));
+    CUDA_CHECK(cudaMemsetAsync(l_dn_evicted, 0, sizeof(size_type), stream));
+    CUDA_CHECK(cudaMemsetAsync(l_d_masks, 0, n * sizeof(bool), stream));
 
     size_type block_size = options_.block_size;
     size_type grid_size = SAFE_GET_GRID_SIZE(n, block_size);
@@ -458,12 +459,12 @@ class HashTable {
                              evicted_keys, evicted_values, evicted_metas);
 
     keys_not_empty<K>
-        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
+        <<<grid_size, block_size, 0, stream>>>(evicted_keys, l_d_masks, n);
     size_type n_evicted = 0;
     gpu_boolean_mask<K, V, M, int64_t, TILE_SIZE>(
-        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
+        grid_size, block_size, l_d_masks, n, l_dn_evicted, l_d_offsets, evicted_keys,
         evicted_values, evicted_metas, dim(), stream);
-    CUDA_CHECK(cudaMemcpyAsync(&n_evicted, dn_evicted, sizeof(size_type),
+    CUDA_CHECK(cudaMemcpyAsync(&n_evicted, l_dn_evicted, sizeof(size_type),
                                cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CudaCheckError();
