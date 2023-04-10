@@ -11,4 +11,13 @@ http_archive(
     ],
 )
 
+rules_python_version = "740825b7f74930c62f44af95c9a4c1bd428d2c53" # Latest @ 2021-06-23
+
+http_archive(
+    name = "rules_python",
+    # Bazel will print the proper value to add here during the first build.
+    # sha256 = "FIXME",
+    strip_prefix = "rules_python-{}".format(rules_python_version),
+    url = "https://github.com/bazelbuild/rules_python/archive/{}.zip".format(rules_python_version),
+)
 cuda_configure(name = "local_config_cuda")
