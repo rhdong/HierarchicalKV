@@ -259,10 +259,14 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
     }
     test_util::ValueArray<V, dim>& vec0 = it.second;
     test_util::ValueArray<V, dim>& vec1 = map_after_insert.at(it.first);
+    std::cout << "value_diff_cnt "
+              << "key: " << it.first;
     for (size_t j = 0; j < dim; j++) {
       if (vec0[j] != vec1[j]) {
         ++value_diff_cnt;
-        break;
+        std::cout << "j: " << j
+                  << ", vec0[j] " << vec0[j]
+                  << ", vec1[j] " << vec1[j] << std::endl;
       }
     }
   }
