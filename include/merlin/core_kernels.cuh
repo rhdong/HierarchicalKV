@@ -1147,6 +1147,13 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
               insert_key) {
             copy_vector<V, TILE_SIZE>(g, insert_value,
                                       bucket->vectors + key_pos * dim, dim);
+          } else {
+            evicted_keys[key_idx] = insert_key;
+            if (metas != nullptr) {
+              evicted_metas[key_idx] = metas[key_idx];
+            }
+            copy_vector<V, TILE_SIZE>(g, insert_value,
+                                      evicted_values + key_idx * dim, dim);
           }
           unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
