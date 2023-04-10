@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.2
 
 # sed -i '$aRUN if [ "${$HKV_DEV_MODE}" == "true" ]; then  rm -rf /usr/local/hugectr /usr/local/hps_trt && apt update -y --fix-missing && apt install -y gdb; fi' ci.Dockerfile
-# docker build --no-cache --build-arg '$HKV_DEV_MODE=true' --build-arg 'MERLIN_VERSION=main' --build-arg 'TRITON_VERSION=22.12' --build-arg 'TENSORFLOW_VERSION=22.12' --build-arg 'TORCH_VERSION=22.12' --build-arg 'BASE_IMAGE=gitlab-master.nvidia.com:5005/dl/hugectr/hugectr:merlin_base_23.02' -t gitlab-master.nvidia.com:5005/dl/hkv/hkv:devel_all -f ci.Dockerfile .
+# docker build --no-cache --build-arg '$HKV_DEV_MODE=true' --build-arg 'MERLIN_VERSION=main' --build-arg 'TRITON_VERSION=22.12' --build-arg 'TENSORFLOW_VERSION=22.12' --build-arg 'TORCH_VERSION=22.12' --build-arg 'BASE_IMAGE=gitlab-master.nvidia.com:5005/dl/hugectr/hugectr:merlin_base_23.02' -t gitlab-master.nvidia.com:5005/dl/hugectr/hugectr/hkv:devel_all -f ci.Dockerfile .
 
 ARG MERLIN_VERSION=22.12
 ARG TRITON_VERSION=22.11
@@ -22,9 +22,6 @@ ENV CUDA_CUDA_LIBRARY=${CUDA_HOME}/lib64/stubs
 ENV PATH=${CUDA_HOME}/lib64/:${PATH}:${CUDA_HOME}/bin
 ENV PATH=$PATH:/usr/lib/x86_64-linux-gnu/
 RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
-
-RUN pip install --no-cache-dir --upgrade notebook ipython
-RUN pip install --no-cache-dir mpi4py
 
 COPY install/install_bazel.sh /install/
 RUN /install/install_bazel.sh "5.3.1"
