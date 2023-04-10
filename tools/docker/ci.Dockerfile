@@ -4,7 +4,6 @@
 # docker build --no-cache --build-arg 'BASE_IMAGE=gitlab-master.nvidia.com:5005/dl/hugectr/hugectr:merlin_base_23.02' -t gitlab-master.nvidia.com:5005/dl/hugectr/hugectr/hkv:devel_all -f ci.Dockerfile .
 
 ARG MERLIN_VERSION=22.12
-ARG TRITON_VERSION=22.11
 
 ARG BASE_IMAGE=nvcr.io/nvstaging/merlin/merlin-base:${MERLIN_VERSION}
 
