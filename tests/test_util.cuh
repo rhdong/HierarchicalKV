@@ -127,7 +127,9 @@ void create_random_keys(K* h_keys, M* h_metas, V* h_vectors, int KEY_NUM,
   int i = 0;
 
   while (numbers.size() < KEY_NUM) {
-    numbers.insert(distr(eng) % range);
+    K key = distr(eng) % range;
+    if(key == 0L) continue;
+    numbers.insert(key);
   }
   for (const K num : numbers) {
     h_keys[i] = num;
