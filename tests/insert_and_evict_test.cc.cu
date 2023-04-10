@@ -269,6 +269,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
         std::cout << "\t - j: " << j
                   << ", vec0[j] " << vec0[j]
                   << ", vec1[j] " << vec1[j] << std::endl;
+         break;
       }
     }
   }
