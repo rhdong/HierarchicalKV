@@ -248,6 +248,8 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
         reinterpret_cast<test_util::ValueArray<V, dim>*>(h_tmp_values +
                                                          i * dim);
     map_after_insert[h_tmp_keys[i]] = *vec;
+    std::cout << "map_after_insert "
+          << "key: " << it.first << std::endl;
   }
 
   size_t key_miss_cnt = 0;
