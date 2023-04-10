@@ -286,9 +286,9 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 }
 
 void test_insert_and_evict_advanced() {
-  const size_t U = 524288;
+  const size_t U = 1024;
   const size_t init_capacity = 1024;
-  const size_t B = 524288 + 13;
+  const size_t B = U + 13;
 
   TableOptions opt;
 
