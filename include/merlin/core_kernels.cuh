@@ -1149,9 +1149,9 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
                                       bucket->vectors + key_pos * dim, dim);
           } else {
             evicted_keys[key_idx] = insert_key;
-            if (metas != nullptr) {
-              evicted_metas[key_idx] = metas[key_idx];
-            }
+//            if (metas != nullptr) {
+//              evicted_metas[key_idx] = metas[key_idx];
+//            }
             copy_vector<V, TILE_SIZE>(g, insert_value,
                                       evicted_values + key_idx * dim, dim);
           }
