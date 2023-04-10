@@ -286,8 +286,8 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 }
 
 void test_insert_and_evict_advanced() {
-  const size_t U = 1024;
-  const size_t init_capacity = 1024;
+  const size_t U = 32;
+  const size_t init_capacity = 32;
   const size_t B = U + 13;
 
   TableOptions opt;
@@ -297,6 +297,7 @@ void test_insert_and_evict_advanced() {
   opt.max_hbm_for_vectors = U * dim * sizeof(f32);
   opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
   opt.dim = dim;
+  opt.max_bucket_size = 32;
 
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
