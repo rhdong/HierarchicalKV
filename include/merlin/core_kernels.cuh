@@ -2577,7 +2577,7 @@ __forceinline__ __device__ void find_or_insert_kernel_with_io_core(
           }
           lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           if (bucket->keys[key_pos].load(cuda::std::memory_order_relaxed) ==
-              insert_key) {
+              find_or_insert_key) {
             copy_vector<V, TILE_SIZE>(g, find_or_insert_value,
                                       bucket->vectors + key_pos * dim, dim);
           }
