@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.2
 
 # sed -i '$aRUN if [ "${$HKV_DEV_MODE}" == "true" ]; then  rm -rf /usr/local/hugectr /usr/local/hps_trt && apt update -y --fix-missing && apt install -y gdb; fi' ci.Dockerfile
-# docker build --no-cache --build-arg '$HKV_DEV_MODE=true' --build-arg 'MERLIN_VERSION=main' --build-arg 'TRITON_VERSION=22.12' --build-arg 'TENSORFLOW_VERSION=22.12' --build-arg 'TORCH_VERSION=22.12' --build-arg 'BASE_IMAGE=gitlab-master.nvidia.com:5005/dl/hugectr/hugectr:merlin_base_23.02' -t gitlab-master.nvidia.com:5005/dl/hugectr/hugectr/hkv:devel_all -f ci.Dockerfile .
+# docker build --no-cache --build-arg 'BASE_IMAGE=gitlab-master.nvidia.com:5005/dl/hugectr/hugectr:merlin_base_23.02' -t gitlab-master.nvidia.com:5005/dl/hugectr/hugectr/hkv:devel_all -f ci.Dockerfile .
 
 ARG MERLIN_VERSION=22.12
 ARG TRITON_VERSION=22.11
@@ -10,8 +10,6 @@ ARG BASE_IMAGE=nvcr.io/nvstaging/merlin/merlin-base:${MERLIN_VERSION}
 
 FROM ${BASE_IMAGE} as base
 
-ARG HUGECTR_VER=main
-ARG HUGECTR_BACKEND_VER=main
 
 # Envs
 ENV CUDA_SHORT_VERSION=11.6
