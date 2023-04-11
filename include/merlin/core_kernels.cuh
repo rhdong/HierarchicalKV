@@ -756,17 +756,20 @@ try_occupy(cg::thread_block_tile<TILE_SIZE> g,
            AtomicKey<K>* current_atomic_key) {
   K expected_key = static_cast<K>(EMPTY_KEY);
   if (current_atomic_key->compare_exchange_strong(
-          expected_key, find_key, cuda::std::memory_order_relaxed)) {
+          expected_key, static_cast<K>(LOCKED_KEY), cuda::std::memory_order_relaxed)) {
     return OccupyResult::OCCUPIED_EMPTY;
   }
   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
     if (current_atomic_key->compare_exchange_strong(
-            expected_key, find_key, cuda::std::memory_order_relaxed)) {
+            expected_key, static_cast<K>(LOCKED_KEY), cuda::std::memory_order_relaxed)) {
       return OccupyResult::OCCUPIED_RECLAIMED;
     }
   }
   if (expected_key == find_key) {
     return OccupyResult::DUPLICATE;
+  }
+  if (expected_key == static_cast<K>(LOCKED_KEY)) {
+    return OccupyResult::LOCKED;
   }
   return OccupyResult::CONTINUE;
 }
@@ -1123,8 +1126,10 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
         AtomicKey<K>* current_atomic_key = &(bucket->keys[key_pos]);
 
         if (rank == src_lane) {
-          occupy_result = try_occupy<K, V, M, TILE_SIZE>(g, bucket, insert_key,
-                                                         current_atomic_key);
+          do {
+            occupy_result = try_occupy<K, V, M, TILE_SIZE>(g, bucket, insert_key,
+                                                           current_atomic_key);
+          } while(occupy_result == OccupyResult::LOCKED);
         }
 
         occupy_result = g.shfl(occupy_result, src_lane);
@@ -1147,13 +1152,6 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
               insert_key) {
             copy_vector<V, TILE_SIZE>(g, insert_value,
                                       bucket->vectors + key_pos * dim, dim);
-          } else {
-            evicted_keys[key_idx] = insert_key;
-            if (metas != nullptr) {
-//              evicted_metas[key_idx] = metas[key_idx];
-            }
-//            copy_vector<V, TILE_SIZE>(g, insert_value,
-//                                      evicted_values + key_idx * dim, dim);
           }
           unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;

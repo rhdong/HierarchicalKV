@@ -35,6 +35,7 @@ struct KVM {
 
 constexpr uint64_t EMPTY_KEY = UINT64_C(0xFFFFFFFFFFFFFFFF);
 constexpr uint64_t RECLAIM_KEY = UINT64_C(0xFFFFFFFFFFFFFFFE);
+constexpr uint64_t LOCKED_KEY = UINT64_C(0xFFFFFFFFFFFFFFFD);
 constexpr uint64_t MAX_META = UINT64_C(0xFFFFFFFFFFFFFFFF);
 constexpr uint64_t EMPTY_META = UINT64_C(0);
 
@@ -188,7 +189,8 @@ enum class OccupyResult {
   CONTINUE,        ///< Insert did not succeed, continue trying to insert
   OCCUPIED_EMPTY,  ///< New pair inserted successfully
   OCCUPIED_RECLAIMED,
-  DUPLICATE,  ///< Insert did not succeed, key is already present,
+  DUPLICATE,  ///< Insert did not succeed, key is already present
+  LOCKED,  ///< Insert did not succeed, key is under being processed by other threads
 };
 
 enum class OverrideResult {
