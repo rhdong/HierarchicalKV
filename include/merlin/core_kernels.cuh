@@ -783,6 +783,17 @@ __forceinline__ __device__ Bucket<K, V, M>* get_key_position(
 }
 
 template <class K, class V, class M>
+__forceinline__ __device__ Bucket<K, V, M>* get_key_position_new(
+    Bucket<K, V, M>* __restrict buckets, const K key, size_t& start_idx,
+    const size_t buckets_num, const size_t bucket_max_size) {
+  const uint32_t hashed_key = Murmur3HashDevice(key);
+  const size_t global_idx = hashed_key % (buckets_num * bucket_max_size);
+  const size_t bkt_idx = global_idx / bucket_max_size;
+  start_idx = global_idx % bucket_max_size;
+  return buckets + bkt_idx;
+}
+
+template <class K, class V, class M>
 __forceinline__ __device__ void update_meta(Bucket<K, V, M>* __restrict bucket,
                                             const int key_pos,
                                             const M* __restrict metas,
@@ -1017,6 +1028,217 @@ __forceinline__ __device__ void upsert_kernel_with_io_core(
                                 bucket->vectors + key_pos * dim, dim);
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       break;
+    }
+  }
+}
+
+template <class K, class V, class M, uint32_t TILE_SIZE = 4>
+__forceinline__ __device__ OccupyResult
+try_occupy_new(const Bucket<K, V, M>* __restrict bucket, K find_key,
+               AtomicKey<K>* current_atomic_key) {
+  K expected_key = static_cast<K>(EMPTY_KEY);
+  if (current_atomic_key->compare_exchange_strong(
+          expected_key, static_cast<K>(LOCKED_KEY),
+          cuda::std::memory_order_relaxed)) {
+    return OccupyResult::OCCUPIED_EMPTY;
+  }
+  if (expected_key == static_cast<K>(RECLAIM_KEY)) {
+    if (current_atomic_key->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY),
+            cuda::std::memory_order_relaxed)) {
+      return OccupyResult::OCCUPIED_RECLAIMED;
+    }
+  }
+  if (expected_key == find_key) {
+    return OccupyResult::DUPLICATE;
+  }
+  if (expected_key == static_cast<K>(LOCKED_KEY)) {
+    return OccupyResult::LOCKED;
+  }
+  return OccupyResult::CONTINUE;
+}
+
+template <class K, class V, class M, uint32_t TILE_SIZE = 4>
+__forceinline__ __device__ void lock_min_meta_pos(
+    cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* bucket,
+    const size_t bucket_max_size) {
+  M min_val = MAX_META;
+  int min_pos = 0;
+
+  for (int i = g.thread_rank(); i < bucket_max_size; i += TILE_SIZE) {
+    const K key = bucket->keys[i].load(cuda::std::memory_order_relaxed);
+    if (key == static_cast<K>(EMPTY_KEY) ||
+        key == static_cast<K>(RECLAIM_KEY)) {
+      continue;
+    }
+    const M meta = bucket->metas[i].load(cuda::std::memory_order_acquire);
+    if (meta < min_val) {
+      min_pos = i;
+      min_val = meta;
+    }
+  }
+  M global_min_val = cg::reduce(g, min_val, cg::less<M>());
+  if (min_val == global_min_val) {
+    bucket->min_pos.store(min_pos, cuda::std::memory_order_release);
+    bucket->min_meta.store(min_val, cuda::std::memory_order_release);
+  }
+}
+
+template <class K, class V, class M, uint32_t TILE_SIZE = 4>
+__device__ __forceinline__ OccupyResult find_and_lock(
+    cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* __restrict__ bucket,
+    const K desired_key, K& evicted_key, const size_t start_idx, int& key_pos,
+    int& src_lane, const size_t bucket_max_size) {
+  K expected_key = static_cast<K>(EMPTY_KEY);
+
+  AtomicKey<K>* current_key = nullptr;
+  AtomicKey<M>* current_meta = nullptr;
+
+  K local_min_meta_key = static_cast<K>(EMPTY_KEY);
+
+  M local_min_meta_val = MAX_META;
+  M temp_min_meta_val = MAX_META;
+  int local_min_meta_pos = -1;
+
+  unsigned vote = false;
+  bool result = false;
+
+  for (uint32_t tile_offset = 0; tile_offset < bucket_max_size;
+       tile_offset += TILE_SIZE) {
+    key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
+
+    current_key = bucket->key(key_pos);
+    current_meta = bucket->meta(key_pos);
+
+    // Step 1: try find and lock the desired_key.
+    do {
+      expected_key = desired_key;
+      result = current_key->compare_exchange_strong(
+          expected_key, static_cast<K>(LOCKED_KEY),
+          cuda::std::memory_order_acq_rel);
+      vote = g.ballot(result);
+      if (vote) {
+        src_lane = __ffs(vote) - 1;
+        key_pos = g.shfl(key_pos, src_lane);
+        return OccupyResult::DUPLICATE;
+      }
+      vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
+    } while (vote != 0);
+
+    // Step 2: (TBD)try find empty location.
+    //    vote = g.ballot(expected_key == static_cast<K>(EMPTY_KEY));
+    //    while (vote) {
+    //      src_lane = __ffs(vote) - 1;
+    //      if (src_lane == g.thread_rank()) {
+    //        expected_key = static_cast<K>(EMPTY_KEY);
+    //        result = current_key->compare_exchange_strong(
+    //            expected_key, static_cast<K>(LOCKED_KEY),
+    //            cuda::std::memory_order_acq_rel);
+    //      }
+    //      result = g.shfl(result, src_lane);
+    //      if (result) {
+    //        key_pos = g.shfl(key_pos, src_lane);
+    //        return OccupyResult::OCCUPIED_EMPTY;
+    //      }
+    //      vote -= ((unsigned(0x1)) << src_lane);
+    //    }
+
+    // Step 3: (TBD) record reclaim location.
+
+    // Step 4: record min meta location.
+    expected_key = current_key->load(cuda::std::memory_order_relaxed);
+    temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
+    if (temp_min_meta_val < local_min_meta_val &&
+        static_cast<K>(LOCKED_KEY) != expected_key) {
+      local_min_meta_key = expected_key;
+      local_min_meta_val = temp_min_meta_val;
+      local_min_meta_pos = key_pos;
+    }
+  }
+
+  // Step 5: insert by evicting some one.
+  const M global_min_meta_val =
+      cg::reduce(g, local_min_meta_val, cg::less<M>());
+  vote = g.ballot(local_min_meta_val <= global_min_meta_val);
+  if (vote) {
+    src_lane = __ffs(vote) - 1;
+    result = false;
+    if (src_lane == g.thread_rank()) {
+      // TBD: Here can be compare_exchange_weak. Do benchmark.
+      current_key = bucket->key(local_min_meta_pos);
+      current_meta = bucket->meta(local_min_meta_pos);
+      evicted_key = local_min_meta_key;
+      result = current_key->compare_exchange_strong(
+          local_min_meta_key, static_cast<K>(LOCKED_KEY),
+          cuda::std::memory_order_acq_rel);
+      // Need to recover when fail.
+      if (result && (current_meta->load(cuda::std::memory_order_acquire) >
+                     global_min_meta_val)) {
+        expected_key = static_cast<K>(LOCKED_KEY);
+        current_key->compare_exchange_strong(expected_key, local_min_meta_key,
+                                             cuda::std::memory_order_acq_rel);
+        result = false;
+      }
+    }
+    result = g.shfl(result, src_lane);
+    if (result) {
+      // Not every `evicted_key` is correct expect the `src_lane` thread.
+      key_pos = g.shfl(local_min_meta_pos, src_lane);
+      return OccupyResult::EVICT;
+    }
+  }
+  return OccupyResult::CONTINUE;
+}
+
+template <class K, class V, class M, uint32_t TILE_SIZE = 4>
+__global__ void upsert_and_evict_kernel_with_io_core_new(
+    const Table<K, V, M>* __restrict table, const size_t bucket_max_size,
+    const size_t buckets_num, const size_t dim, const K* __restrict keys,
+    const V* __restrict values, const M* __restrict metas,
+    K* __restrict evicted_keys, V* __restrict evicted_values,
+    M* __restrict evicted_metas, size_t N) {
+  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+
+  for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
+       t += blockDim.x * gridDim.x) {
+    int key_pos = -1;
+    size_t key_idx = t / TILE_SIZE;
+
+    const K insert_key = keys[key_idx];
+    const V* insert_value = values + key_idx * dim;
+
+    size_t start_idx = 0;
+    int src_lane = -1;
+    K evicted_key;
+
+    Bucket<K, V, M>* bucket = get_key_position_new<K>(
+        table->buckets, insert_key, start_idx, buckets_num, bucket_max_size);
+
+    OccupyResult occupy_result{OccupyResult::INITIAL};
+    do {
+      occupy_result = find_and_lock<K, V, M, TILE_SIZE>(
+          g, bucket, insert_key, evicted_key, start_idx, key_pos, src_lane,
+          bucket_max_size);
+
+      occupy_result = g.shfl(occupy_result, src_lane);
+    } while (occupy_result == OccupyResult::CONTINUE);
+
+    if (occupy_result == OccupyResult::EVICT) {
+      if (g.thread_rank() == src_lane) {
+        evicted_keys[key_idx] = evicted_key;
+      }
+      if (metas != nullptr) {
+        evicted_metas[key_idx] = metas[key_idx];
+      }
+      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+                                evicted_values + key_idx * dim, dim);
+    }
+
+    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
+                              dim);
+    if (g.thread_rank() == src_lane) {
+      update_meta(bucket, key_pos, metas, key_idx);
+      bucket->keys[key_pos].store(insert_key, cuda::std::memory_order_release);
     }
   }
 }
@@ -1334,6 +1556,17 @@ struct SelectUpsertAndEvictKernelWithIO {
                                                    evicted_keys, evicted_values,
                                                    evicted_metas, N);
       }
+    } else if (load_factor == 1.000) {
+      const unsigned int tile_size = 16;
+      const size_t N = n * tile_size;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+      upsert_and_evict_kernel_with_io_core_new<K, V, M, tile_size>
+          <<<grid_size, block_size, 0, stream>>>(
+              table, 128, 4096,
+              64,  // table->bucket_max_size, table->buckets_num, table->dim,
+              keys, values, metas, evicted_keys, evicted_values, evicted_metas,
+              N);
     } else {
       const unsigned int tile_size = 16;
       const size_t N = n * tile_size;
