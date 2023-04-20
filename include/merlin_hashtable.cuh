@@ -453,9 +453,10 @@ class HashTable {
     CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
                                n * sizeof(K), stream));
 
-    Selector::execute_kernel(load_factor, options_.block_size, stream, n,
-                             c_table_index_, d_table_, keys, values, metas,
-                             evicted_keys, evicted_values, evicted_metas);
+    Selector::execute_kernel(
+        load_factor, options_.block_size, options_.max_bucket_size,
+        table_->buckets_num, options_.dim, stream, n, c_table_index_, d_table_,
+        keys, values, metas, evicted_keys, evicted_values, evicted_metas);
 
     keys_not_empty<K>
         <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
@@ -1509,7 +1510,7 @@ class HashTable {
   std::atomic_bool reach_max_capacity_{false};
   bool initialized_ = false;
   mutable std::shared_timed_mutex mutex_;
-  const unsigned int kernel_select_interval_ = 7;
+  const unsigned int kernel_select_interval_ = 2;
   int c_table_index_ = -1;
   std::unique_ptr<DeviceMemoryPool> dev_mem_pool_;
   std::unique_ptr<HostMemoryPool> host_mem_pool_;

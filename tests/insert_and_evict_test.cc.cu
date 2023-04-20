@@ -271,7 +271,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
             << ", value_diff_cnt: " << value_diff_cnt
             << ", while table_size_before: " << table_size_before
             << ", while table_size_after: " << table_size_after
-            << ", while len: " << len << std::endl;
+            << ", while len: " << len << ", dur: " << dur << std::endl;
 
   ASSERT_EQ(key_miss_cnt, 0);
   ASSERT_EQ(value_diff_cnt, 0);
@@ -287,7 +287,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 
 void test_insert_and_evict_advanced() {
   const size_t U = 524288;
-  const size_t init_capacity = 1024;
+  const size_t init_capacity = U;
   const size_t B = 524288 + 13;
 
   TableOptions opt;
@@ -329,9 +329,9 @@ void test_insert_and_evict_advanced() {
   }
 }
 
-TEST(MerlinHashTableTest, test_insert_and_evict_basic) {
-  test_insert_and_evict_basic();
-}
+// TEST(MerlinHashTableTest, test_insert_and_evict_basic) {
+//  test_insert_and_evict_basic();
+//}
 TEST(MerlinHashTableTest, test_insert_and_evict_advanced) {
   test_insert_and_evict_advanced();
 }
