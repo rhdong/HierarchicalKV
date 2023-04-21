@@ -1084,14 +1084,14 @@ __forceinline__ __device__ void lock_min_meta_pos(
 }
 
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ OccupyResult find_and_lock(
+__device__ __forceinline__ OccupyResult find_and_lock_when_full(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* __restrict__ bucket,
     const K desired_key, K& evicted_key, size_t start_idx, int& key_pos,
     int& src_lane, const size_t bucket_max_size) {
   K expected_key = static_cast<K>(EMPTY_KEY);
 
-  //  AtomicKey<K> current_key;
-  //  AtomicMeta<M> current_meta;
+  AtomicKey<K>* current_key;
+  AtomicMeta<M>* current_meta;
 
   K local_min_meta_key = static_cast<K>(EMPTY_KEY);
 
@@ -1108,15 +1108,15 @@ __device__ __forceinline__ OccupyResult find_and_lock(
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
-    AtomicKey<K>& current_key = *(bucket->keys(key_pos));
-    AtomicMeta<M>& current_meta = *(bucket->metas(key_pos));
+    current_key = bucket->keys(key_pos);
+    current_meta = bucket->metas(key_pos);
 
     // Step 1: try find and lock the desired_key.
     do {
       expected_key = desired_key;
       result = current_key.compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_acq_rel);
+          cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
@@ -1147,8 +1147,8 @@ __device__ __forceinline__ OccupyResult find_and_lock(
     // Step 3: (TBD) record reclaim location.
 
     // Step 4: record min meta location.
-    expected_key = current_key.load(cuda::std::memory_order_relaxed);
-    temp_min_meta_val = current_meta.load(cuda::std::memory_order_relaxed);
+    expected_key = current_key->load(cuda::std::memory_order_relaxed);
+    temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
     if (temp_min_meta_val < local_min_meta_val &&
         static_cast<K>(LOCKED_KEY) != expected_key) {
       local_min_meta_key = expected_key;
@@ -1166,18 +1166,19 @@ __device__ __forceinline__ OccupyResult find_and_lock(
     result = false;
     if (src_lane == g.thread_rank()) {
       // TBD: Here can be compare_exchange_weak. Do benchmark.
-      AtomicKey<K>& current_key = *(bucket->keys(local_min_meta_pos));
-      AtomicMeta<M>& current_meta = *(bucket->metas(local_min_meta_pos));
+      current_key = bucket->keys(local_min_meta_pos);
+      current_meta = bucket->metas(local_min_meta_pos);
       evicted_key = local_min_meta_key;
-      result = current_key.compare_exchange_strong(
+      result = current_key->compare_exchange_strong(
           local_min_meta_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_acq_rel);
+          cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
       // Need to recover when fail.
-      if (result && (current_meta.load(cuda::std::memory_order_acquire) >
+      if (result && (current_meta->load(cuda::std::memory_order_acquire) >
                      global_min_meta_val)) {
         expected_key = static_cast<K>(LOCKED_KEY);
-        current_key.compare_exchange_strong(expected_key, local_min_meta_key,
-                                            cuda::std::memory_order_acq_rel);
+        current_key->compare_exchange_strong(expected_key, local_min_meta_key,
+                                             cuda::std::memory_order_acq_rel,
+                                             cuda::std::memory_order_relaxed);
         result = false;
       }
     }
@@ -1192,7 +1193,7 @@ __device__ __forceinline__ OccupyResult find_and_lock(
 }
 
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
-__global__ void upsert_and_evict_kernel_with_io_core_new(
+__global__ void upsert_and_evict_kernel_with_io_core_when_full(
     const Table<K, V, M>* __restrict table, const size_t bucket_max_size,
     const size_t buckets_num, const size_t dim, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
@@ -1217,7 +1218,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_new(
 
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
-      occupy_result = find_and_lock<K, V, M, TILE_SIZE>(
+      occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
           g, bucket, insert_key, evicted_key, start_idx, key_pos, src_lane,
           bucket_max_size);
 
@@ -1565,7 +1566,7 @@ struct SelectUpsertAndEvictKernelWithIO {
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-      upsert_and_evict_kernel_with_io_core_new<K, V, M, tile_size>
+      upsert_and_evict_kernel_with_io_core_when_full<K, V, M, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
               table, bucket_max_size, buckets_num, dim, keys, values, metas,
               evicted_keys, evicted_values, evicted_metas, N);
