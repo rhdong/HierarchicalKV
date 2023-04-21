@@ -1114,7 +1114,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     // Step 1: try find and lock the desired_key.
     do {
       expected_key = desired_key;
-      result = current_key.compare_exchange_strong(
+      result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
