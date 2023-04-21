@@ -1126,27 +1126,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
     } while (vote != 0);
 
-    // Step 2: (TBD)try find empty location.
-    //    vote = g.ballot(expected_key == static_cast<K>(EMPTY_KEY));
-    //    while (vote) {
-    //      src_lane = __ffs(vote) - 1;
-    //      if (src_lane == g.thread_rank()) {
-    //        expected_key = static_cast<K>(EMPTY_KEY);
-    //        result = current_key->compare_exchange_strong(
-    //            expected_key, static_cast<K>(LOCKED_KEY),
-    //            cuda::std::memory_order_acq_rel);
-    //      }
-    //      result = g.shfl(result, src_lane);
-    //      if (result) {
-    //        key_pos = g.shfl(key_pos, src_lane);
-    //        return OccupyResult::OCCUPIED_EMPTY;
-    //      }
-    //      vote -= ((unsigned(0x1)) << src_lane);
-    //    }
-
-    // Step 3: (TBD) record reclaim location.
-
-    // Step 4: record min meta location.
+    // Step 2: record min meta location.
     expected_key = current_key->load(cuda::std::memory_order_relaxed);
     temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
     if (temp_min_meta_val < local_min_meta_val &&
@@ -1157,7 +1137,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     }
   }
 
-  // Step 5: insert by evicting some one.
+  // Step 3: insert by evicting some one.
   const M global_min_meta_val =
       cg::reduce(g, local_min_meta_val, cg::less<M>());
   vote = g.ballot(local_min_meta_val <= global_min_meta_val);
@@ -1232,12 +1212,12 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
       if (metas != nullptr) {
         evicted_metas[key_idx] = metas[key_idx];
       }
-      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
-                                evicted_values + key_idx * dim, dim);
+//      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+//                                evicted_values + key_idx * dim, dim);
     }
 
-    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
-                              dim);
+//    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
+//                              dim);
     if (g.thread_rank() == src_lane) {
       update_meta(bucket, key_pos, metas, key_idx);
       (bucket->keys(key_pos))
