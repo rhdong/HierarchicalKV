@@ -1173,7 +1173,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
 
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
 __global__ void upsert_and_evict_kernel_with_io_core_when_full(
-    const __grid_constant__ Table<K, V, M>* __restrict table, const __grid_constant__ int bucket_max_size,
+    const Table<K, V, M>* __restrict table, const __grid_constant__ int bucket_max_size,
     const __grid_constant__ int buckets_num, const __grid_constant__ int dim, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
     K* __restrict evicted_keys, V* __restrict evicted_values,
