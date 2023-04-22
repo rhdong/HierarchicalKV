@@ -444,29 +444,29 @@ class HashTable {
     auto dn_evicted = reinterpret_cast<size_type*>(d_offsets + n_offsets);
     auto d_masks = reinterpret_cast<bool*>(dn_evicted + 1);
 
-//    CUDA_CHECK(cudaMemsetAsync(d_offsets, 0, n_offsets * sizeof(int64_t)));
-//    CUDA_CHECK(cudaMemsetAsync(dn_evicted, 0, sizeof(size_type), stream));
-//    CUDA_CHECK(cudaMemsetAsync(d_masks, 0, n * sizeof(bool), stream));
+    CUDA_CHECK(cudaMemsetAsync(d_offsets, 0, n_offsets * sizeof(int64_t)));
+    CUDA_CHECK(cudaMemsetAsync(dn_evicted, 0, sizeof(size_type), stream));
+    CUDA_CHECK(cudaMemsetAsync(d_masks, 0, n * sizeof(bool), stream));
 
     size_type block_size = options_.block_size;
     size_type grid_size = SAFE_GET_GRID_SIZE(n, block_size);
-//    CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
-//                               n * sizeof(K), stream));
+    CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
+                               n * sizeof(K), stream));
 
     Selector::execute_kernel(
         load_factor, options_.block_size, options_.max_bucket_size,
         table_->buckets_num, options_.dim, stream, n, c_table_index_, d_table_,
         keys, values, metas, evicted_keys, evicted_values, evicted_metas);
 
-//    keys_not_empty<K>
-//        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
+    keys_not_empty<K>
+        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
     size_type n_evicted = 0;
-//    gpu_boolean_mask<K, V, M, int64_t, TILE_SIZE>(
-//        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
-//        evicted_values, evicted_metas, dim(), stream);
-//    CUDA_CHECK(cudaMemcpyAsync(&n_evicted, dn_evicted, sizeof(size_type),
-//                               cudaMemcpyDeviceToHost, stream));
-//    CUDA_CHECK(cudaStreamSynchronize(stream));
+    gpu_boolean_mask<K, V, M, int64_t, TILE_SIZE>(
+        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
+        evicted_values, evicted_metas, dim(), stream);
+    CUDA_CHECK(cudaMemcpyAsync(&n_evicted, dn_evicted, sizeof(size_type),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
     CudaCheckError();
     return n_evicted;
   }
