@@ -1149,20 +1149,18 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       current_key = bucket->keys(local_min_meta_pos);
       current_meta = bucket->metas(local_min_meta_pos);
       evicted_key = local_min_meta_key;
-      current_key->store(static_cast<K>(LOCKED_KEY),
-                         cuda::std::memory_order_release);
-//      result = current_key->compare_exchange_strong(
-//          local_min_meta_key, static_cast<K>(LOCKED_KEY),
-//          cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
-//      // Need to recover when fail.
-//      if (result && (current_meta->load(cuda::std::memory_order_acquire) >
-//                     global_min_meta_val)) {
-//        expected_key = static_cast<K>(LOCKED_KEY);
-//        current_key->compare_exchange_strong(expected_key, local_min_meta_key,
-//                                             cuda::std::memory_order_acq_rel,
-//                                             cuda::std::memory_order_relaxed);
-//        result = false;
-//      }
+      result = current_key->compare_exchange_strong(
+          local_min_meta_key, static_cast<K>(LOCKED_KEY),
+          cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
+      // Need to recover when fail.
+      if (result && (current_meta->load(cuda::std::memory_order_acquire) >
+                     global_min_meta_val)) {
+        expected_key = static_cast<K>(LOCKED_KEY);
+        current_key->compare_exchange_strong(expected_key, local_min_meta_key,
+                                             cuda::std::memory_order_acq_rel,
+                                             cuda::std::memory_order_relaxed);
+        result = false;
+      }
     }
     result = g.shfl(result, src_lane);
     if (result) {
