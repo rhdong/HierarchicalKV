@@ -1101,7 +1101,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
 
   unsigned vote = false;
   bool result = false;
-//  start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
+  start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
 
 #pragma unroll
   for (uint32_t tile_offset = 0; tile_offset < 128;
