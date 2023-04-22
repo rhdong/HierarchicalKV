@@ -1206,19 +1206,19 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
       occupy_result = g.shfl(occupy_result, src_lane);
     } while (occupy_result == OccupyResult::CONTINUE);
 
-    if (occupy_result == OccupyResult::EVICT) {
-      if (g.thread_rank() == src_lane) {
-        evicted_keys[key_idx] = evicted_key;
-      }
-      if (metas != nullptr) {
-        evicted_metas[key_idx] = metas[key_idx];
-      }
-      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
-                                evicted_values + key_idx * dim, dim);
-    }
+//    if (occupy_result == OccupyResult::EVICT) {
+//      if (g.thread_rank() == src_lane) {
+//        evicted_keys[key_idx] = evicted_key;
+//      }
+//      if (metas != nullptr) {
+//        evicted_metas[key_idx] = metas[key_idx];
+//      }
+//      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+//                                evicted_values + key_idx * dim, dim);
+//    }
 
-    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
-                              dim);
+//    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
+//                              dim);
     if (g.thread_rank() == src_lane) {
       update_meta(bucket, key_pos, metas, key_idx);
       (bucket->keys(key_pos))
