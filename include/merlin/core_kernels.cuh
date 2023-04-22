@@ -1182,19 +1182,32 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
 
   for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
-    int key_pos = -1;
-    size_t key_idx = t / TILE_SIZE;
+    const size_t key_idx = t / TILE_SIZE;
 
     const K insert_key = keys[key_idx];
     const V* insert_value = values + key_idx * dim;
 
+    int key_pos = -1;
     int start_idx = 0;
     int src_lane = -1;
     K evicted_key;
 
-    Bucket<K, V, M>* bucket = get_key_position_new<K>(
-        table->buckets, insert_key, start_idx, buckets_num, bucket_max_size);
-    start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
+    Bucket<K, V, M>* bucket = table->buckets;
+//     get_key_position_new<K>(
+//        table->buckets, insert_key, start_idx, buckets_num, bucket_max_size);
+
+//  const uint32_t hashed_key = Murmur3HashDevice(key);
+//  const int global_idx = hashed_key % (buckets_num * bucket_max_size);
+//  const int bkt_idx = global_idx / bucket_max_size;
+//  start_idx = global_idx % bucket_max_size;
+//  return buckets + bkt_idx;
+
+
+    uint32_t global_idx = Murmur3HashDevice(insert_key);
+    global_idx = (global_idx % (buckets_num * bucket_max_size));
+    bucket += (global_idx / bucket_max_size);
+
+    start_idx = ((global_idx % bucket_max_size) / TILE_SIZE) * TILE_SIZE;
 
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
