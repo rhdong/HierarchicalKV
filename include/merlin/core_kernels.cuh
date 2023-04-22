@@ -783,11 +783,11 @@ __forceinline__ __device__ Bucket<K, V, M>* get_key_position(
 
 template <class K, class V, class M>
 __forceinline__ __device__ Bucket<K, V, M>* get_key_position_new(
-    Bucket<K, V, M>* __restrict buckets, const K key, int& start_idx,
-    const int buckets_num, const int bucket_max_size) {
+    Bucket<K, V, M>* __restrict buckets, const K key, size_t& start_idx,
+    const size_t buckets_num, const size_t bucket_max_size) {
   const uint32_t hashed_key = Murmur3HashDevice(key);
-  const int global_idx = hashed_key % (buckets_num * bucket_max_size);
-  const int bkt_idx = global_idx / bucket_max_size;
+  const size_t global_idx = hashed_key % (buckets_num * bucket_max_size);
+  const size_t bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
   return buckets + bkt_idx;
 }
@@ -1086,8 +1086,8 @@ __forceinline__ __device__ void lock_min_meta_pos(
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* __restrict__ bucket,
-    const K desired_key, K& evicted_key, const int start_idx, int& key_pos,
-    int& src_lane, const int bucket_max_size) {
+    const K desired_key, K& evicted_key, size_t start_idx, int& key_pos,
+    int& src_lane, const size_t bucket_max_size) {
   K expected_key = static_cast<K>(EMPTY_KEY);
 
   AtomicKey<K>* current_key;
@@ -1101,6 +1101,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
 
   unsigned vote = false;
   bool result = false;
+  start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
 
 #pragma unroll
   for (uint32_t tile_offset = 0; tile_offset < 128;
@@ -1173,8 +1174,8 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
 
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
 __global__ void upsert_and_evict_kernel_with_io_core_when_full(
-    const Table<K, V, M>* __restrict table, const int bucket_max_size,
-    const int buckets_num, const int dim, const K* __restrict keys,
+    const Table<K, V, M>* __restrict table, const size_t bucket_max_size,
+    const size_t buckets_num, const size_t dim, const K* __restrict keys,
     const V* __restrict values, const M* __restrict metas,
     K* __restrict evicted_keys, V* __restrict evicted_values,
     M* __restrict evicted_metas, size_t N) {
@@ -1188,7 +1189,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     const K insert_key = keys[key_idx];
     const V* insert_value = values + key_idx * dim;
 
-    int start_idx = 0;
+    size_t start_idx = 0;
     int src_lane = -1;
     K evicted_key;
 
@@ -1548,7 +1549,7 @@ struct SelectUpsertAndEvictKernelWithIO {
 
       upsert_and_evict_kernel_with_io_core_when_full<K, V, M, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
-              table,  static_cast<int>(bucket_max_size), static_cast<int>(buckets_num), static_cast<int>(dim), keys, values, metas,
+              table, bucket_max_size, buckets_num, dim, keys, values, metas,
               evicted_keys, evicted_values, evicted_metas, N);
     } else {
       const unsigned int tile_size = 32;
