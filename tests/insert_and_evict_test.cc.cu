@@ -295,7 +295,7 @@ void test_insert_and_evict_advanced() {
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
   opt.max_hbm_for_vectors = U * dim * sizeof(f32);
-  opt.max_bucket_size = 128;
+  opt.max_bucket_size = 64;
   opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
   opt.dim = dim;
 
@@ -314,7 +314,7 @@ void test_insert_and_evict_advanced() {
 
   size_t offset = 0;
   u64 meta = 0;
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 20; i++) {
     test_util::create_random_keys<i64, u64, f32, dim>(
         data_buffer.keys_ptr(false), data_buffer.metas_ptr(false),
         data_buffer.values_ptr(false), (int)B, B * 16);
