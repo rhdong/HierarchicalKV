@@ -1104,7 +1104,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
 
 #pragma unroll
-  for (uint32_t tile_offset = 0; tile_offset < bucket_max_size;
+  for (uint32_t tile_offset = 0; tile_offset < 128;
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
