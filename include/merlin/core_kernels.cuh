@@ -1197,7 +1197,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
 
     Bucket<K, V, M>* bucket = get_key_position_new<K>(
         table->buckets, insert_key, start_idx, buckets_num, bucket_max_size);
-    size_t start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
+    start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
 
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
