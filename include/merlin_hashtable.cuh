@@ -460,7 +460,7 @@ class HashTable {
 
 //    keys_not_empty<K>
 //        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
-//    size_type n_evicted = 0;
+    size_type n_evicted = 0;
 //    gpu_boolean_mask<K, V, M, int64_t, TILE_SIZE>(
 //        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
 //        evicted_values, evicted_metas, dim(), stream);
