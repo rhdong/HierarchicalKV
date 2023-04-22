@@ -295,7 +295,7 @@ void test_insert_and_evict_advanced() {
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
   opt.max_hbm_for_vectors = U * dim * sizeof(f32);
-  opt.max_bucket_size = 64;
+  opt.max_bucket_size = 1024;
   opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
   opt.dim = dim;
 
