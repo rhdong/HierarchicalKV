@@ -458,15 +458,15 @@ class HashTable {
         table_->buckets_num, options_.dim, stream, n, c_table_index_, d_table_,
         keys, values, metas, evicted_keys, evicted_values, evicted_metas);
 
-    keys_not_empty<K>
-        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
-    size_type n_evicted = 0;
-    gpu_boolean_mask<K, V, M, int64_t, TILE_SIZE>(
-        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
-        evicted_values, evicted_metas, dim(), stream);
-    CUDA_CHECK(cudaMemcpyAsync(&n_evicted, dn_evicted, sizeof(size_type),
-                               cudaMemcpyDeviceToHost, stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+//    keys_not_empty<K>
+//        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
+//    size_type n_evicted = 0;
+//    gpu_boolean_mask<K, V, M, int64_t, TILE_SIZE>(
+//        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
+//        evicted_values, evicted_metas, dim(), stream);
+//    CUDA_CHECK(cudaMemcpyAsync(&n_evicted, dn_evicted, sizeof(size_type),
+//                               cudaMemcpyDeviceToHost, stream));
+//    CUDA_CHECK(cudaStreamSynchronize(stream));
     CudaCheckError();
     return n_evicted;
   }
