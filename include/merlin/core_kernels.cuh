@@ -1216,8 +1216,8 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
       occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
-          g, bucket, insert_key, evicted_key, start_idx, key_pos,
-          src_lane, bucket_max_size);
+          g, bucket, insert_key, evicted_key, start_idx, key_pos, src_lane,
+          bucket_max_size);
 
       occupy_result = g.shfl(occupy_result, src_lane);
     } while (occupy_result == OccupyResult::CONTINUE);
@@ -1237,9 +1237,9 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     //    dim,
     //                              dim);
     if (g.thread_rank() == src_lane) {
+      AtomicKey<K>* current_key = bucket->keys(key_pos);
       update_meta(bucket, key_pos, metas, key_idx);
-      (bucket->keys(key_pos))
-          ->store(insert_key, cuda::std::memory_order_release);
+      current_key->store(insert_key, cuda::std::memory_order_release);
     }
   }
 }
