@@ -1099,12 +1099,15 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   M temp_min_meta_val = MAX_META;
   int local_min_meta_pos = -1;
 
+  cuda::std::size_t rank = g.thread_rank();
+
   unsigned vote = false;
   bool result = false;
 
 #pragma unroll
-  for (uint32_t tile_offset = 0; tile_offset < 128; tile_offset += TILE_SIZE) {
-    key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
+  for (uint32_t tile_offset = 0; tile_offset < bucket_max_size;
+       tile_offset += TILE_SIZE) {
+    key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
 
     current_key = bucket->keys(key_pos);
     current_meta = bucket->metas(key_pos);
@@ -1129,7 +1132,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
     if (temp_min_meta_val < local_min_meta_val &&
         static_cast<K>(LOCKED_KEY) != expected_key) {
-      local_min_meta_key = expected_key;
+      evicted_key = expected_key;
       local_min_meta_val = temp_min_meta_val;
       local_min_meta_pos = key_pos;
     }
@@ -1146,7 +1149,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       // TBD: Here can be compare_exchange_weak. Do benchmark.
       current_key = bucket->keys(local_min_meta_pos);
       current_meta = bucket->metas(local_min_meta_pos);
-      evicted_key = local_min_meta_key;
+      //      evicted_key = local_min_meta_key;
       result = current_key->compare_exchange_strong(
           local_min_meta_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
@@ -1212,7 +1215,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
       occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
-          g, bucket, insert_key, evicted_keys[key_idx], start_idx, key_pos,
+          g, bucket, insert_key, evicted_keys + key_idx, start_idx, key_pos,
           src_lane, bucket_max_size);
 
       occupy_result = g.shfl(occupy_result, src_lane);
