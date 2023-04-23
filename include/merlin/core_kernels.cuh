@@ -1117,7 +1117,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       expected_key = desired_key;
       result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_acq_rel, cuda::std::memory_order_acquire);
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
@@ -1128,8 +1128,8 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     } while (vote != 0);
 
     // Step 2: record min meta location.
-    expected_key = current_key->load(cuda::std::memory_order_relaxed);
-    temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
+    expected_key = current_key->load(cuda::std::memory_order_acquire);
+    temp_min_meta_val = current_meta->load(cuda::std::memory_order_acquire);
     if (temp_min_meta_val < local_min_meta_val &&
         static_cast<K>(LOCKED_KEY) != expected_key) {
       local_min_meta_key = expected_key;
@@ -1152,14 +1152,14 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       current_meta = bucket->metas(local_min_meta_pos);
       result = current_key->compare_exchange_strong(
           local_min_meta_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_acq_rel, cuda::std::memory_order_acquire);
       // Need to recover when fail.
       if (result && (current_meta->load(cuda::std::memory_order_acquire) >
                      global_min_meta_val)) {
         expected_key = static_cast<K>(LOCKED_KEY);
         current_key->compare_exchange_strong(expected_key, local_min_meta_key,
-                                             cuda::std::memory_order_relaxed,
-                                             cuda::std::memory_order_relaxed);
+                                             cuda::std::memory_order_acq_rel,
+                                             cuda::std::memory_order_acquire);
         result = false;
       }
     }
