@@ -1186,7 +1186,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
 
   for (auto t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
-    const size_t key_idx = t / TILE_SIZE;
+    const auto key_idx = t / TILE_SIZE;
 
     const K insert_key = keys[key_idx];
     K evicted_key = static_cast<K>(EMPTY_KEY);
