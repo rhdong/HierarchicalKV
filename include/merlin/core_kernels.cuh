@@ -1086,7 +1086,7 @@ __forceinline__ __device__ void lock_min_meta_pos(
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* __restrict__ bucket,
-    const K desired_key, K* evicted_key, const int start_idx, int& key_pos,
+    const K desired_key, K& evicted_key, const int start_idx, int& key_pos,
     int& src_lane, const int bucket_max_size) {
   K expected_key = static_cast<K>(EMPTY_KEY);
 
@@ -1132,7 +1132,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
     if (temp_min_meta_val < local_min_meta_val &&
         static_cast<K>(LOCKED_KEY) != expected_key) {
-      *evicted_key = expected_key;
+      evicted_key = expected_key;
       local_min_meta_key = expected_key;
       local_min_meta_val = temp_min_meta_val;
       local_min_meta_pos = key_pos;
@@ -1190,6 +1190,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     const size_t key_idx = t / TILE_SIZE;
 
     const K insert_key = keys[key_idx];
+    K evicted_key = static_cast<K>(EMPTY_KEY);
     const V* insert_value = values + key_idx * dim;
 
     int key_pos = -1;
@@ -1216,7 +1217,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
       occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
-          g, bucket, insert_key, evicted_keys + key_idx, start_idx, key_pos,
+          g, bucket, insert_key, evicted_key, start_idx, key_pos,
           src_lane, bucket_max_size);
 
       occupy_result = g.shfl(occupy_result, src_lane);
