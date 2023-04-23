@@ -298,7 +298,6 @@ void test_insert_and_evict_advanced() {
   opt.max_bucket_size = 128;
   opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
   opt.dim = dim;
-  opt.block_size = 1024;
 
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
