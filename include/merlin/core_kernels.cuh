@@ -1175,9 +1175,8 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     const Table<K, V, M>* __restrict table,
     const __grid_constant__ int bucket_max_size,
     const __grid_constant__ int buckets_num, const __grid_constant__ int dim,
-    const __grid_constant__ K* __restrict keys,
-    const __grid_constant__ V* __restrict values,
-    const __grid_constant__ M* __restrict metas, K* __restrict evicted_keys,
+    const K* __restrict keys, const V* __restrict values,
+    const M* __restrict metas, K* __restrict evicted_keys,
     V* __restrict evicted_values, M* __restrict evicted_metas,
     const __grid_constant__ size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
@@ -1213,8 +1212,8 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
       occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
-          g, bucket, insert_key, evicted_keys[key_idx], start_idx, key_pos, src_lane,
-          bucket_max_size);
+          g, bucket, insert_key, evicted_keys[key_idx], start_idx, key_pos,
+          src_lane, bucket_max_size);
 
       occupy_result = g.shfl(occupy_result, src_lane);
     } while (occupy_result == OccupyResult::CONTINUE);
