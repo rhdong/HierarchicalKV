@@ -1562,7 +1562,7 @@ struct SelectUpsertAndEvictKernelWithIO {
     } else if (load_factor == 1.000) {
       const unsigned int tile_size = 32;
       const size_t N = n * tile_size;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N / 4, block_size);
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N / 2, block_size);
 
       upsert_and_evict_kernel_with_io_core_when_full<K, V, M, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
