@@ -1132,7 +1132,8 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     temp_min_meta_val = current_meta->load(cuda::std::memory_order_relaxed);
     if (temp_min_meta_val < local_min_meta_val &&
         static_cast<K>(LOCKED_KEY) != expected_key) {
-      evicted_key = expected_key;
+      *evicted_key = expected_key;
+      local_min_meta_key = expected_key;
       local_min_meta_val = temp_min_meta_val;
       local_min_meta_pos = key_pos;
     }
