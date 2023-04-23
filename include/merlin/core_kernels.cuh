@@ -1184,7 +1184,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     const __grid_constant__ size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
 
-  for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
+  for (auto t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
     const size_t key_idx = t / TILE_SIZE;
 
