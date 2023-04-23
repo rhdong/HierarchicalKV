@@ -1155,7 +1155,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
           cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
       // Need to recover when fail.
       if (result && (current_meta->load(cuda::std::memory_order_acquire) >
-                     global_min_meta_val)) {
+                     temp_min_meta_val)) {
         expected_key = static_cast<K>(LOCKED_KEY);
         current_key->compare_exchange_strong(expected_key, local_min_meta_key,
                                              cuda::std::memory_order_acq_rel,
