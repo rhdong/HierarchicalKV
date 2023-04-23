@@ -1103,8 +1103,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   bool result = false;
 
 #pragma unroll
-  for (uint32_t tile_offset = 0; tile_offset < 128;
-       tile_offset += TILE_SIZE) {
+  for (uint32_t tile_offset = 0; tile_offset < 128; tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
     current_key = bucket->keys(key_pos);
@@ -1173,11 +1172,14 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
 
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
 __global__ void upsert_and_evict_kernel_with_io_core_when_full(
-    const Table<K, V, M>* __restrict table, const __grid_constant__ int bucket_max_size,
-    const __grid_constant__ int buckets_num, const __grid_constant__ int dim, const K* __restrict keys,
-    const V* __restrict values, const M* __restrict metas,
-    K* __restrict evicted_keys, V* __restrict evicted_values,
-    M* __restrict evicted_metas, size_t N) {
+    const Table<K, V, M>* __restrict table,
+    const __grid_constant__ int bucket_max_size,
+    const __grid_constant__ int buckets_num, const __grid_constant__ int dim,
+    const __grid_constant__ K* __restrict keys,
+    const __grid_constant__ V* __restrict values,
+    const __grid_constant__ M* __restrict metas, K* __restrict evicted_keys,
+    V* __restrict evicted_values, M* __restrict evicted_metas,
+    const __grid_constant__ size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
 
   for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
@@ -1190,18 +1192,17 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     int key_pos = -1;
     int start_idx = 0;
     int src_lane = -1;
-    K evicted_key;
 
     Bucket<K, V, M>* bucket = table->buckets;
-//     get_key_position_new<K>(
-//        table->buckets, insert_key, start_idx, buckets_num, bucket_max_size);
+    //     get_key_position_new<K>(
+    //        table->buckets, insert_key, start_idx, buckets_num,
+    //        bucket_max_size);
 
-//  const uint32_t hashed_key = Murmur3HashDevice(key);
-//  const int global_idx = hashed_key % (buckets_num * bucket_max_size);
-//  const int bkt_idx = global_idx / bucket_max_size;
-//  start_idx = global_idx % bucket_max_size;
-//  return buckets + bkt_idx;
-
+    //  const uint32_t hashed_key = Murmur3HashDevice(key);
+    //  const int global_idx = hashed_key % (buckets_num * bucket_max_size);
+    //  const int bkt_idx = global_idx / bucket_max_size;
+    //  start_idx = global_idx % bucket_max_size;
+    //  return buckets + bkt_idx;
 
     uint32_t global_idx = Murmur3HashDevice(insert_key);
     global_idx = (global_idx % (buckets_num * bucket_max_size));
@@ -1212,25 +1213,26 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     OccupyResult occupy_result{OccupyResult::INITIAL};
     do {
       occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
-          g, bucket, insert_key, evicted_key, start_idx, key_pos, src_lane,
+          g, bucket, insert_key, evicted_keys[key_idx], start_idx, key_pos, src_lane,
           bucket_max_size);
 
       occupy_result = g.shfl(occupy_result, src_lane);
     } while (occupy_result == OccupyResult::CONTINUE);
 
-//    if (occupy_result == OccupyResult::EVICT) {
-//      if (g.thread_rank() == src_lane) {
-//        evicted_keys[key_idx] = evicted_key;
-//      }
-//      if (metas != nullptr) {
-//        evicted_metas[key_idx] = metas[key_idx];
-//      }
-//      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
-//                                evicted_values + key_idx * dim, dim);
-//    }
+    //    if (occupy_result == OccupyResult::EVICT) {
+    //      if (g.thread_rank() == src_lane) {
+    //        evicted_keys[key_idx] = evicted_key;
+    //      }
+    //      if (metas != nullptr) {
+    //        evicted_metas[key_idx] = metas[key_idx];
+    //      }
+    //      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+    //                                evicted_values + key_idx * dim, dim);
+    //    }
 
-//    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
-//                              dim);
+    //    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos *
+    //    dim,
+    //                              dim);
     if (g.thread_rank() == src_lane) {
       update_meta(bucket, key_pos, metas, key_idx);
       (bucket->keys(key_pos))
@@ -1561,8 +1563,9 @@ struct SelectUpsertAndEvictKernelWithIO {
 
       upsert_and_evict_kernel_with_io_core_when_full<K, V, M, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
-              table,  static_cast<int>(bucket_max_size), static_cast<int>(buckets_num), static_cast<int>(dim), keys, values, metas,
-              evicted_keys, evicted_values, evicted_metas, N);
+              table, static_cast<int>(bucket_max_size),
+              static_cast<int>(buckets_num), static_cast<int>(dim), keys,
+              values, metas, evicted_keys, evicted_values, evicted_metas, N);
     } else {
       const unsigned int tile_size = 32;
       const size_t N = n * tile_size;
