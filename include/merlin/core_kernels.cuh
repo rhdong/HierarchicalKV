@@ -1147,13 +1147,13 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     result = true;
     if (src_lane == g.thread_rank()) {
       // TBD: Here can be compare_exchange_weak. Do benchmark.
-//      evicted_key = local_min_meta_key;
+      evicted_key = local_min_meta_key;
       current_key = bucket->keys(local_min_meta_pos);
       current_meta = bucket->metas(local_min_meta_pos);
       result = current_key->compare_exchange_strong(
           local_min_meta_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
-       Need to recover when fail.
+      // Need to recover when fail.
       if (result && (current_meta->load(cuda::std::memory_order_acquire) >
                      global_min_meta_val)) {
         expected_key = static_cast<K>(LOCKED_KEY);
