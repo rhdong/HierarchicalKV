@@ -363,7 +363,7 @@ void test_insert_and_evict_with_export_batch() {
   size_t n_evicted = table->insert_and_evict(len, buffer.keys_ptr(),
       buffer.values_ptr(), nullptr, evict_buffer.keys_ptr(),
       evict_buffer.values_ptr(), nullptr, stream);
-  printf("Insert %llu keys and evict %llu\n", len, n_evicted);
+  printf("Insert %zu keys and evict %zu\n", len, n_evicted);
   offset += len;
   total_len += len;
   evict_buffer.SyncData(/*h2d=*/false, stream);
