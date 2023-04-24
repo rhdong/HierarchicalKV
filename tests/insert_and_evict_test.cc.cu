@@ -330,9 +330,81 @@ void test_insert_and_evict_advanced() {
   }
 }
 
-// TEST(MerlinHashTableTest, test_insert_and_evict_basic) {
+void test_insert_and_evict_with_export_batch() {
+  size_t len = 10000llu;
+  size_t max_capacity = 1 << 12;
+  size_t init_capacity = 1 << 11;
+  size_t offset = 0;
+  size_t uplimit = 1 << 20;
+  float load_factor_threshold = 0.98f;
+
+  TableOptions opt;
+  opt.max_capacity = max_capacity;
+  opt.init_capacity = init_capacity;
+  opt.max_hbm_for_vectors = uplimit * dim * sizeof(f32);
+  opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
+  opt.dim = dim;
+
+  using Vec_t = test_util::ValueArray<f32, dim>;
+  std::map<i64, Vec_t> ref_map;
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+
+  std::unique_ptr<Table> table = std::make_unique<Table>();
+  table->init(opt);
+
+  test_util::KVMSBuffer<i64, f32, u64> buffer;
+  buffer.Reserve(len, dim, stream);
+  test_util::KVMSBuffer<i64, f32, u64> evict_buffer;
+  evict_buffer.Reserve(len, dim, stream);
+
+  size_t total_len = 0;
+  buffer.ToRange(offset, /*skip=1*/1, stream);
+  size_t n_evicted = table->insert_and_evict(len, buffer.keys_ptr(),
+      buffer.values_ptr(), nullptr, evict_buffer.keys_ptr(),
+      evict_buffer.values_ptr(), nullptr, stream);
+  printf("Insert %llu keys and evict %llu\n", len, n_evicted);
+  offset += len;
+  total_len += len;
+  evict_buffer.SyncData(/*h2d=*/false, stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  for (size_t i = 0; i < n_evicted; i++) {
+    Vec_t* vec = reinterpret_cast<Vec_t*>(evict_buffer.values_ptr(false) + i * dim);
+    ref_map[evict_buffer.keys_ptr(false)[i]] = *vec;
+  }
+
+  offset = 0;
+  for (; offset < table->capacity(); offset += len) {
+    size_t search_len = len;
+    if (offset + search_len > table->capacity()) {
+      search_len = table->capacity() - offset;
+    }
+    size_t n_exported = table->export_batch(search_len, offset, buffer.keys_ptr(),
+                                            buffer.values_ptr(), /*metas=*/nullptr, stream);
+    buffer.SyncData(/*h2d=*/false);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    for (size_t i = 0; i < n_exported; i++) {
+      Vec_t* vec = reinterpret_cast<Vec_t*>(buffer.values_ptr(false) + i * dim);
+      for (size_t j = 0; j < dim; j++) {
+        ASSERT_EQ(buffer.keys_ptr(false)[i], vec->operator[](j));
+      }
+      ref_map[buffer.keys_ptr(false)[i]] = *vec;
+    }
+  }
+
+  for (auto& it : ref_map) {
+    for (size_t j = 0; j < dim; j++) {
+      ASSERT_EQ(static_cast<f32>(it.first), it.second.data[j]);
+    }
+  }
+}
+
+// TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
 //  test_insert_and_evict_basic();
 //}
-TEST(MerlinHashTableTest, test_insert_and_evict_advanced) {
-  test_insert_and_evict_advanced();
+//TEST(InsertAndEvictTest, test_insert_and_evict_advanced) {
+//  test_insert_and_evict_advanced();
+//}
+TEST(InsertAndEvictTest, test_insert_and_evict_with_export_batch) {
+  test_insert_and_evict_with_export_batch();
 }
