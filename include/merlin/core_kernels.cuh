@@ -1296,6 +1296,7 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
     tile_offset = 0;
     OccupyResult occupy_result{OccupyResult::INITIAL};
 
+    lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
     while (tile_offset < bucket_max_size && local_size < bucket_max_size) {
       key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
 
@@ -1349,10 +1350,8 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
           if (local_size >= bucket_max_size) {
             refresh_bucket_meta<K, V, M, TILE_SIZE>(g, bucket, bucket_max_size);
           }
-          lock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           copy_vector<V, TILE_SIZE>(g, insert_value,
                                     bucket->vectors + key_pos * dim, dim);
-          unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
           break;
         } else if (occupy_result == OccupyResult::DUPLICATE) {
           break;
@@ -1408,6 +1407,7 @@ __forceinline__ __device__ void upsert_and_evict_kernel_with_io_core(
       unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
       break;
     }
+    unlock<Mutex, TILE_SIZE, true>(g, table->locks[bkt_idx]);
   }
 }
 
