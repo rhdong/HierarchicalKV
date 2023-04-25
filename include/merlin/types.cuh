@@ -35,6 +35,7 @@ struct KVM {
 
 constexpr uint64_t EMPTY_KEY = UINT64_C(0xFFFFFFFFFFFFFFFF);
 constexpr uint64_t RECLAIM_KEY = UINT64_C(0xFFFFFFFFFFFFFFFE);
+constexpr uint64_t LOCKED_KEY = UINT64_C(0xFFFFFFFFFFFFFFFD);
 constexpr uint64_t MAX_META = UINT64_C(0xFFFFFFFFFFFFFFFF);
 constexpr uint64_t EMPTY_META = UINT64_C(0);
 
@@ -47,12 +48,16 @@ using AtomicMeta = cuda::atomic<M, cuda::thread_scope_device>;
 template <class T>
 using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 
+template <class K, class M>
+struct AtomicKM {
+  AtomicKey<K> key;
+  AtomicMeta<M> meta;
+};
+
 template <class K, class V, class M>
 struct Bucket {
-  AtomicKey<K>* keys;    // HBM
-  AtomicMeta<M>* metas;  // HBM
-  V* cache;              // HBM(optional)
-  V* vectors;            // Pinned memory or HBM
+  AtomicKM<K, M>* KMs;  // HBM
+  V* vectors;           // Pinned memory or HBM
 
   /* For upsert_kernel without user specified metas
      recording the current meta, the cur_meta will
@@ -64,7 +69,41 @@ struct Bucket {
      meta and its pos in the bucket. */
   AtomicMeta<M> min_meta;
   AtomicPos<int> min_pos;
+
+  __forceinline__ __device__ AtomicKey<K>* keys(int index) const {
+    return &(KMs[index].key);
+  }
+
+  __forceinline__ __device__ AtomicMeta<M>* metas(int index) const {
+    return &(KMs[index].meta);
+  }
 };
+
+// template <class K, class V, class M>
+// struct Bucket {
+//  AtomicKey<K>* keys;
+//  AtomicMeta<M>* metas;
+//  V* vectors;  // Pinned memory or HBM
+//
+//  /* For upsert_kernel without user specified metas
+//     recording the current meta, the cur_meta will
+//     increment by 1 when a new inserting happens. */
+//  AtomicMeta<M> cur_meta;
+//
+//  /* min_meta and min_pos is for or upsert_kernel
+//     with user specified meta. They record the minimum
+//     meta and its pos in the bucket. */
+//  AtomicMeta<M> min_meta;
+//  AtomicPos<int> min_pos;
+//
+//  __forceinline__ __device__ AtomicKey<K>* key(int index) const {
+//    return keys + index;
+//  }
+//
+//  __forceinline__ __device__ AtomicMeta<M>* meta(int index) const {
+//    return metas + index;
+//  }
+//};
 
 template <cuda::thread_scope Scope, class T = int>
 class Lock {
@@ -188,7 +227,10 @@ enum class OccupyResult {
   CONTINUE,        ///< Insert did not succeed, continue trying to insert
   OCCUPIED_EMPTY,  ///< New pair inserted successfully
   OCCUPIED_RECLAIMED,
-  DUPLICATE,  ///< Insert did not succeed, key is already present,
+  DUPLICATE,  ///< Insert did not succeed, key is already present
+  EVICT,      ///< Insert succeeded by evicting one key with minimum meta.
+  LOCKED,     ///< Insert did not succeed, key is under being processed by other
+              ///< threads
 };
 
 enum class OverrideResult {

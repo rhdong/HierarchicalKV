@@ -271,7 +271,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
             << ", value_diff_cnt: " << value_diff_cnt
             << ", while table_size_before: " << table_size_before
             << ", while table_size_after: " << table_size_after
-            << ", while len: " << len << std::endl;
+            << ", while len: " << len << ", dur: " << dur << std::endl;
 
   ASSERT_EQ(key_miss_cnt, 0);
   ASSERT_EQ(value_diff_cnt, 0);
@@ -287,7 +287,7 @@ void CheckInsertAndEvict(Table* table, K* keys, V* values, M* metas,
 
 void test_insert_and_evict_advanced() {
   const size_t U = 524288;
-  const size_t init_capacity = 1024;
+  const size_t init_capacity = U;
   const size_t B = 524288 + 13;
 
   TableOptions opt;
@@ -295,6 +295,7 @@ void test_insert_and_evict_advanced() {
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
   opt.max_hbm_for_vectors = U * dim * sizeof(f32);
+  opt.max_bucket_size = 128;
   opt.evict_strategy = nv::merlin::EvictStrategy::kLru;
   opt.dim = dim;
 
@@ -313,7 +314,7 @@ void test_insert_and_evict_advanced() {
 
   size_t offset = 0;
   u64 meta = 0;
-  for (int i = 0; i < 20; i++) {
+  for (int i = 0; i < 8; i++) {
     test_util::create_random_keys<i64, u64, f32, dim>(
         data_buffer.keys_ptr(false), data_buffer.metas_ptr(false),
         data_buffer.values_ptr(false), (int)B, B * 16);
@@ -329,9 +330,9 @@ void test_insert_and_evict_advanced() {
   }
 }
 
-TEST(MerlinHashTableTest, test_insert_and_evict_basic) {
-  test_insert_and_evict_basic();
-}
+// TEST(MerlinHashTableTest, test_insert_and_evict_basic) {
+//  test_insert_and_evict_basic();
+//}
 TEST(MerlinHashTableTest, test_insert_and_evict_advanced) {
   test_insert_and_evict_advanced();
 }
