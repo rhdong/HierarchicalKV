@@ -798,7 +798,7 @@ __forceinline__ __device__ void update_meta(Bucket<K, V, M>* __restrict bucket,
                                             const M* __restrict metas,
                                             const int key_idx) {
   if (metas == nullptr) {
-    M cur_meta = bucket->cur_meta.fetch_add(1) + 1;
+    M cur_meta = bucket->cur_meta.fetch_add(1, cuda::std::memory_order_relaxed) + 1;
     bucket->metas(key_pos)->store(cur_meta, cuda::std::memory_order_relaxed);
   } else {
     bucket->metas(key_pos)->store(metas[key_idx],
@@ -1228,7 +1228,7 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     if (g.thread_rank() == src_lane) {
       AtomicKey<K>* current_key = bucket->keys(key_pos);
       update_meta(bucket, key_pos, metas, key_idx);
-      current_key->store(insert_key, cuda::std::memory_order_release);
+      current_key->store(insert_key, cuda::std::memory_order_relaxed);
     }
   }
 }
