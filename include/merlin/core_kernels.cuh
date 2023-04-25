@@ -1104,7 +1104,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   unsigned vote = false;
   bool result = false;
 
-#pragma unroll
+//#pragma unroll
   for (uint32_t tile_offset = 0; tile_offset < bucket_max_size;
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
