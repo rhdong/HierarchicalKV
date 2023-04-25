@@ -1117,7 +1117,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       expected_key = desired_key;
       result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
@@ -1151,13 +1151,13 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       current_meta = bucket->metas(local_min_meta_pos);
       result = current_key->compare_exchange_strong(
           local_min_meta_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_acq_rel, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
       // Need to recover when fail.
-      if (result && (current_meta->load(cuda::std::memory_order_acquire) >
+      if (result && (current_meta->load(cuda::std::memory_order_relaxed) >
                      temp_min_meta_val)) {
         expected_key = static_cast<K>(LOCKED_KEY);
         current_key->compare_exchange_strong(expected_key, local_min_meta_key,
-                                             cuda::std::memory_order_acq_rel,
+                                             cuda::std::memory_order_relaxed,
                                              cuda::std::memory_order_relaxed);
         result = false;
       }
