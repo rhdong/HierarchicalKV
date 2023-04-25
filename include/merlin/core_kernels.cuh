@@ -1139,8 +1139,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   }
 
   // Step 3: insert by evicting some one.
-  temp_min_meta_val =
-      cg::reduce(g, local_min_meta_val, cg::less<M>());
+  temp_min_meta_val = cg::reduce(g, local_min_meta_val, cg::less<M>());
   vote = g.ballot(local_min_meta_val <= temp_min_meta_val);
   if (vote) {
     src_lane = __ffs(vote) - 1;
@@ -1197,15 +1196,6 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
     int src_lane = -1;
 
     Bucket<K, V, M>* bucket = table->buckets;
-    //     get_key_position_new<K>(
-    //        table->buckets, insert_key, start_idx, buckets_num,
-    //        bucket_max_size);
-
-    //  const uint32_t hashed_key = Murmur3HashDevice(key);
-    //  const int global_idx = hashed_key % (buckets_num * bucket_max_size);
-    //  const int bkt_idx = global_idx / bucket_max_size;
-    //  start_idx = global_idx % bucket_max_size;
-    //  return buckets + bkt_idx;
 
     uint32_t global_idx = Murmur3HashDevice(insert_key);
     global_idx = (global_idx % (buckets_num * bucket_max_size));
@@ -1222,20 +1212,19 @@ __global__ void upsert_and_evict_kernel_with_io_core_when_full(
       occupy_result = g.shfl(occupy_result, src_lane);
     } while (occupy_result == OccupyResult::CONTINUE);
 
-    //    if (occupy_result == OccupyResult::EVICT) {
-    //      if (g.thread_rank() == src_lane) {
-    //        evicted_keys[key_idx] = evicted_key;
-    //      }
-    //      if (metas != nullptr) {
-    //        evicted_metas[key_idx] = metas[key_idx];
-    //      }
-    //      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
-    //                                evicted_values + key_idx * dim, dim);
-    //    }
+    if (occupy_result == OccupyResult::EVICT) {
+      if (g.thread_rank() == src_lane) {
+        evicted_keys[key_idx] = evicted_key;
+      }
+      if (metas != nullptr) {
+        evicted_metas[key_idx] = metas[key_idx];
+      }
+      copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+                                evicted_values + key_idx * dim, dim);
+    }
 
-    //    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos *
-    //    dim,
-    //                              dim);
+    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
+                              dim);
     if (g.thread_rank() == src_lane) {
       AtomicKey<K>* current_key = bucket->keys(key_pos);
       update_meta(bucket, key_pos, metas, key_idx);
