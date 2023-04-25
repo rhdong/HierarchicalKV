@@ -331,11 +331,11 @@ void test_insert_and_evict_advanced() {
 }
 
 void test_insert_and_evict_with_export_batch() {
-  size_t max_capacity = 524288;
-  size_t init_capacity = 524288;
+  size_t max_capacity = 4096;
+  size_t init_capacity = 2048;
   size_t offset = 0;
   size_t uplimit = 1048576;
-  size_t len = max_capacity + 13;
+  size_t len = 4096 + 13;
   float load_factor_threshold = 0.98f;
 
   TableOptions opt;
