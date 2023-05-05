@@ -532,46 +532,61 @@ class HashTable {
 
     writer_shared_lock lock(mutex_);
 
-    const size_type dev_ws_size{
-        n * (sizeof(value_type*) + sizeof(int) + sizeof(bool))};
-    auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};
-    auto dst{dev_ws.get<value_type**>(0)};
-    auto src_offset{reinterpret_cast<int*>(dst + n)};
-    auto founds{reinterpret_cast<bool*>(src_offset + n)};
+    if (is_fast_mode()) {
+      using Selector =
+          SelectAccumOrInsertKernelWithIO<key_type, value_type, meta_type>;
+      static thread_local int step_counter = 0;
+      static thread_local float load_factor = 0.0;
 
-    CUDA_CHECK(cudaMemsetAsync(dst, 0, dev_ws_size, stream));
+      if (((step_counter++) % kernel_select_interval_) == 0) {
+        load_factor = fast_load_factor(0, stream, false);
+      }
+      Selector::execute_kernel(load_factor, options_.block_size,
+                               options_.max_bucket_size, table_->buckets_num,
+                               options_.dim, stream, n, d_table_, keys,
+                               value_or_deltas, metas, accum_or_assigns);
+    } else {
+      const size_type dev_ws_size{
+          n * (sizeof(value_type*) + sizeof(int) + sizeof(bool))};
+      auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};
+      auto dst{dev_ws.get<value_type**>(0)};
+      auto src_offset{reinterpret_cast<int*>(dst + n)};
+      auto founds{reinterpret_cast<bool*>(src_offset + n)};
 
-    {
-      const size_t block_size = options_.block_size;
-      const size_t N = n * TILE_SIZE;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      CUDA_CHECK(cudaMemsetAsync(dst, 0, dev_ws_size, stream));
 
-      accum_kernel<key_type, value_type, meta_type>
-          <<<grid_size, block_size, 0, stream>>>(
-              table_, keys, dst, metas, accum_or_assigns, table_->buckets,
-              table_->buckets_size, table_->bucket_max_size,
-              table_->buckets_num, src_offset, founds, N);
+      {
+        const size_t block_size = options_.block_size;
+        const size_t N = n * TILE_SIZE;
+        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+        accum_or_assign_kernel<key_type, value_type, meta_type>
+            <<<grid_size, block_size, 0, stream>>>(
+                table_, keys, dst, metas, accum_or_assigns, table_->buckets,
+                table_->buckets_size, table_->bucket_max_size,
+                table_->buckets_num, src_offset, founds, N);
+      }
+
+      {
+        thrust::device_ptr<uintptr_t> dst_ptr(
+            reinterpret_cast<uintptr_t*>(dst));
+        thrust::device_ptr<int> src_offset_ptr(src_offset);
+
+        thrust::sort_by_key(thrust_par.on(stream), dst_ptr, dst_ptr + n,
+                            src_offset_ptr, thrust::less<uintptr_t>());
+      }
+
+      {
+        const size_t block_size = options_.io_block_size;
+        const size_t N = n * dim();
+        const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+
+        write_with_accum_kernel<key_type, value_type, meta_type>
+            <<<grid_size, block_size, 0, stream>>>(value_or_deltas, dst,
+                                                   accum_or_assigns, founds,
+                                                   src_offset, dim(), N);
+      }
     }
-
-    if (!is_fast_mode()) {
-      thrust::device_ptr<uintptr_t> dst_ptr(reinterpret_cast<uintptr_t*>(dst));
-      thrust::device_ptr<int> src_offset_ptr(src_offset);
-
-      thrust::sort_by_key(thrust_par.on(stream), dst_ptr, dst_ptr + n,
-                          src_offset_ptr, thrust::less<uintptr_t>());
-    }
-
-    {
-      const size_t block_size = options_.io_block_size;
-      const size_t N = n * dim();
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-
-      write_with_accum_kernel<key_type, value_type, meta_type>
-          <<<grid_size, block_size, 0, stream>>>(value_or_deltas, dst,
-                                                 accum_or_assigns, founds,
-                                                 src_offset, dim(), N);
-    }
-
     CudaCheckError();
   }
 
@@ -861,16 +876,14 @@ class HashTable {
                 options_.dim, keys, src, metas, founds, dst_offset, N);
       }
 
-      {
+      if(values != nullptr) {
         thrust::device_ptr<uintptr_t> src_ptr(
             reinterpret_cast<uintptr_t*>(src));
         thrust::device_ptr<int> dst_offset_ptr(dst_offset);
 
         thrust::sort_by_key(thrust_par.on(stream), src_ptr, src_ptr + n,
                             dst_offset_ptr, thrust::less<uintptr_t>());
-      }
 
-      {
         const size_t block_size = options_.io_block_size;
         const size_t N = n * dim();
         const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
