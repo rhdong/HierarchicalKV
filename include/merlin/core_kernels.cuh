@@ -105,9 +105,6 @@ __global__ void create_atomic_metas(Bucket<K, V, M>* __restrict buckets,
     }
     new (&(buckets[start + tid].cur_meta))
         AtomicMeta<M>{static_cast<M>(EMPTY_META)};
-    new (&(buckets[start + tid].min_meta))
-        AtomicMeta<M>{static_cast<M>(EMPTY_META)};
-    new (&(buckets[start + tid].min_pos)) AtomicPos<int>{1};
   }
 }
 
@@ -374,32 +371,6 @@ __forceinline__ __device__ void defragmentation_for_rehash(
   }
 }
 
-template <class K, class V, class M, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ void refresh_bucket_meta(
-    cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* bucket,
-    const size_t bucket_max_size) {
-  M min_val = MAX_META;
-  int min_pos = 0;
-
-  for (int i = g.thread_rank(); i < bucket_max_size; i += TILE_SIZE) {
-    const K key = (bucket->keys(i))->load(cuda::std::memory_order_relaxed);
-    if (key == static_cast<K>(EMPTY_KEY) ||
-        key == static_cast<K>(RECLAIM_KEY)) {
-      continue;
-    }
-    const M meta = bucket->metas(i)->load(cuda::std::memory_order_relaxed);
-    if (meta < min_val) {
-      min_pos = i;
-      min_val = meta;
-    }
-  }
-  M global_min_val = cg::reduce(g, min_val, cg::less<M>());
-  if (min_val == global_min_val) {
-    bucket->min_pos.store(min_pos, cuda::std::memory_order_relaxed);
-    bucket->min_meta.store(min_val, cuda::std::memory_order_relaxed);
-  }
-}
-
 template <class V, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void copy_vector(
     cg::thread_block_tile<TILE_SIZE> const& g, const V* src, V* dst,
@@ -494,9 +465,6 @@ __forceinline__ __device__ void move_key_to_new_bucket(
         atomicAdd(&(buckets_size[new_bkt_idx]), 1);
       }
       local_size = g.shfl(local_size, src_lane);
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_meta<K, V, M, TILE_SIZE>(g, new_bucket, bucket_max_size);
-      }
       copy_vector<V, TILE_SIZE>(g, vector, new_bucket->vectors + key_pos * dim,
                                 dim);
       break;
@@ -1589,9 +1557,9 @@ __global__ void lookup_kernel_with_io(const Table<K, V, M>* __restrict table,
         g, bucket, find_key, start_idx, key_pos, src_lane, bucket_max_size);
 
     if (occupy_result == OccupyResult::DUPLICATE) {
-      if(values != nullptr) {
-        copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim, find_value,
-                                  dim);
+      if (values != nullptr) {
+        copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+                                  find_value, dim);
       }
       if (rank == src_lane) {
         if (metas != nullptr) {

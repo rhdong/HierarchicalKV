@@ -69,12 +69,6 @@ struct Bucket {
      increment by 1 when a new inserting happens. */
   AtomicMeta<M> cur_meta;
 
-  /* min_meta and min_pos is for or upsert_kernel
-     with user specified meta. They record the minimum
-     meta and its pos in the bucket. */
-  AtomicMeta<M> min_meta;
-  AtomicPos<int> min_pos;
-
   __forceinline__ __device__ AtomicKey<K>* keys(int index) const {
     return &(KMs[index].key);
   }

@@ -1033,7 +1033,7 @@ void test_evict_strategy_lru_basic(size_t max_hbm_for_vectors) {
                             BASE_KEY_NUM * sizeof(V) * options.dim,
                             cudaMemcpyHostToDevice));
       table->accum_or_assign(BASE_KEY_NUM, d_keys_temp, d_vectors_temp, nullptr,
-                            stream);
+                             stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       size_t total_size = table->size(stream);
@@ -1075,7 +1075,7 @@ void test_evict_strategy_lru_basic(size_t max_hbm_for_vectors) {
                             cudaMemcpyHostToDevice));
       table->assign(TEST_KEY_NUM, d_keys_temp, d_vectors_temp, nullptr, stream);
       table->accum_or_assign(TEST_KEY_NUM, d_keys_temp, d_vectors_temp, nullptr,
-                            stream);
+                             stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       size_t total_size = table->size(stream);
@@ -1213,7 +1213,7 @@ void test_evict_strategy_customized_basic(size_t max_hbm_for_vectors) {
                             BASE_KEY_NUM * sizeof(V) * options.dim,
                             cudaMemcpyHostToDevice));
       table->accum_or_assign(BASE_KEY_NUM, d_keys_temp, d_vectors_temp,
-                            d_metas_temp, stream);
+                             d_metas_temp, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       size_t total_size = table->size(stream);
@@ -1256,7 +1256,7 @@ void test_evict_strategy_customized_basic(size_t max_hbm_for_vectors) {
       table->assign(TEST_KEY_NUM, d_keys_temp, d_vectors_temp, d_metas_temp,
                     stream);
       table->accum_or_assign(TEST_KEY_NUM, d_keys_temp, d_vectors_temp,
-                            d_metas_temp, stream);
+                             d_metas_temp, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       size_t total_size = table->size(stream);
@@ -1398,7 +1398,7 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors) {
                             BASE_KEY_NUM * sizeof(V) * options.dim,
                             cudaMemcpyHostToDevice));
       table->accum_or_assign(BASE_KEY_NUM, d_keys_temp, d_vectors_temp,
-                            d_metas_temp, stream);
+                             d_metas_temp, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       size_t total_size = table->size(stream);
@@ -1441,7 +1441,7 @@ void test_evict_strategy_customized_advanced(size_t max_hbm_for_vectors) {
       table->assign(TEST_KEY_NUM, d_keys_temp, d_vectors_temp, d_metas_temp,
                     stream);
       table->accum_or_assign(TEST_KEY_NUM, d_keys_temp, d_vectors_temp,
-                            d_metas_temp, stream);
+                             d_metas_temp, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
       size_t total_size = table->size(stream);
@@ -1572,7 +1572,7 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors) {
         table->assign(BATCH_SIZE, d_keys_temp, d_vectors_temp, d_metas_temp,
                       stream);
         table->accum_or_assign(BATCH_SIZE, d_keys_temp, d_vectors_temp,
-                              d_metas_temp, stream);
+                               d_metas_temp, stream);
         CUDA_CHECK(cudaStreamSynchronize(stream));
       }
 
@@ -1627,9 +1627,9 @@ void test_evict_strategy_customized_correct_rate(size_t max_hbm_for_vectors) {
 }
 
 void test_accum_or_assign_multi_threads(size_t max_hbm_for_vectors,
-                                       const float BATCH_0_RATIO,
-                                       const float BATCH_1_RATIO,
-                                       bool capacity_silent = true) {
+                                        const float BATCH_0_RATIO,
+                                        const float BATCH_1_RATIO,
+                                        bool capacity_silent = true) {
   constexpr uint64_t THREAD_N = 64UL;
   const uint64_t BATCH_0_SIZE = static_cast<uint64_t>(THREAD_N * BATCH_0_RATIO);
   const uint64_t BATCH_1_SIZE = static_cast<uint64_t>(THREAD_N * BATCH_1_RATIO);
@@ -1950,7 +1950,7 @@ void test_accum_or_assign_multi_threads(size_t max_hbm_for_vectors,
 
 template <typename K, typename V, typename M, size_t dim = 64>
 void CheckAccumOrAssignValues(Table* table, K* keys, V* values, M* metas,
-                             size_t len, cudaStream_t stream) {
+                              size_t len, cudaStream_t stream) {
   std::map<K, test_util::ValueArray<V, dim>> map_before_insert;
   std::map<K, test_util::ValueArray<V, dim>> map_after_insert;
   K* h_tmp_keys = nullptr;
@@ -2088,8 +2088,8 @@ void test_accum_or_assign_values_check(size_t max_hbm_for_vectors) {
     data_buffer.SyncData(true, stream);
 
     CheckAccumOrAssignValues<K, V, M, dim>(table.get(), data_buffer.keys_ptr(),
-                                          data_buffer.values_ptr(),
-                                          data_buffer.metas_ptr(), B, stream);
+                                           data_buffer.values_ptr(),
+                                           data_buffer.metas_ptr(), B, stream);
 
     offset += B;
     meta += 1;

@@ -876,7 +876,7 @@ class HashTable {
                 options_.dim, keys, src, metas, founds, dst_offset, N);
       }
 
-      if(values != nullptr) {
+      if (values != nullptr) {
         thrust::device_ptr<uintptr_t> src_ptr(
             reinterpret_cast<uintptr_t*>(src));
         thrust::device_ptr<int> dst_offset_ptr(dst_offset);
