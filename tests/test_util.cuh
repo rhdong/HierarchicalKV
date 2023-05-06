@@ -403,6 +403,13 @@ struct KVMSBuffer {
     return metas.h_data;
   }
 
+  bool* status_ptr(bool on_device = true) {
+    if (on_device) {
+      return status.d_data;
+    }
+    return status.h_data;
+  }
+
   void SyncData(bool h2d, cudaStream_t stream = 0) {
     keys.SyncData(h2d, stream);
     values.SyncData(h2d, stream);
