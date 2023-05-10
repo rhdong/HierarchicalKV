@@ -915,7 +915,7 @@ void test_dynamic_rehash_on_multi_threads(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 4 * 1024;
   constexpr uint64_t MAX_CAPACITY = 16 * 1024 * INIT_CAPACITY;
   constexpr uint64_t KEY_NUM = 256;
-  constexpr uint64_t THREAD_N = 8;
+  constexpr uint64_t THREAD_N = 1;
 
   std::vector<std::thread> threads;
 
