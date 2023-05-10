@@ -403,7 +403,7 @@ void print_title() {
        //<< "|   find* "
        << "|-------:"
        //<< "| find_or_insert* "
-       << "|-----------------:";
+       << "|----------------:";
   if (Test_Mode::pure_hbm == test_mode) {
     //<< "| insert_and_evict "
     cout << "|-----------------:";
@@ -458,7 +458,7 @@ void test_main(const size_t dim,
         break;
       }
       case API_Select::find_or_insert_ptr: {
-        std::cout << rep(12);
+        std::cout << rep(11);
         break;
       }
       default: {
