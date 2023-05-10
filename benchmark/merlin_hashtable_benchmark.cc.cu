@@ -402,8 +402,8 @@ void print_title() {
        << "|-------:"
        //<< "|   find* "
        << "|-------:"
-       //<< "| find_or_insert "
-       << "|---------------:";
+       //<< "| find_or_insert* "
+       << "|-----------------:";
   if (Test_Mode::pure_hbm == test_mode) {
     //<< "| insert_and_evict "
     cout << "|-----------------:";
