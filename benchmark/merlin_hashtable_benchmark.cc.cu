@@ -335,12 +335,12 @@ float test_one_api(const API_Select api, const size_t dim,
       bool* d_found;
       CUDA_CHECK(cudaMalloc(&d_found, key_num_per_op * sizeof(bool)));
       CUDA_CHECK(cudaMalloc(&d_vectors_ptr, key_num_per_op * sizeof(V*)));
-      test_util::array2ptr(d_vectors_ptr, d_vectors, options.dim,
+      benchmark::array2ptr(d_vectors_ptr, d_vectors, options.dim,
                            key_num_per_op, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       timer.start();
-      table->find_or_insert(key_num_per_op, d_keys, d_vectors, d_found, d_metas,
-                            stream);
+      table->find_or_insert(key_num_per_op, d_keys, d_vectors_ptr, d_found,
+                            d_metas, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       timer.end();
       CUDA_CHECK(cudaFree(d_vectors_ptr));
