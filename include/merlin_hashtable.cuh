@@ -706,6 +706,7 @@ class HashTable {
    * @param keys The keys to search on GPU-accessible memory with shape (n).
    * @param values  The addresses of values to search on GPU-accessible memory
    * with shape (n).
+   * @param founds The status that indicates if the keys are found on
    * @param metas The metas to search on GPU-accessible memory with shape (n).
    * @parblock
    * If @p metas is `nullptr`, the meta for each key will not be returned.
@@ -715,6 +716,7 @@ class HashTable {
    */
   void find_or_insert(const size_type n, const key_type* keys,  // (n)
                       value_type** values,                      // (n)
+                      bool* founds,                             // (n)
                       meta_type* metas = nullptr,               // (n)
                       cudaStream_t stream = 0,
                       bool ignore_evict_strategy = false) {
@@ -743,8 +745,8 @@ class HashTable {
     }
     Selector::execute_kernel(load_factor, options_.block_size,
                              options_.max_bucket_size, table_->buckets_num,
-                             options_.dim, stream, n, d_table_, keys, values,
-                             metas);
+                             options_.dim, stream, n, d_table_, keys,
+                             values metas, founds);
 
     CudaCheckError();
   }

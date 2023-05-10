@@ -2193,7 +2193,8 @@ template <class K, class V, class M, uint32_t TILE_SIZE = 4>
 __global__ void find_ptr_or_insert_kernel(
     const Table<K, V, M>* __restrict table, const size_t bucket_max_size,
     const size_t buckets_num, const size_t dim, const K* __restrict keys,
-    V** __restrict vectors, M* __restrict metas, const size_t N) {
+    V** __restrict vectors, M* __restrict metas, bool* __restrict found,
+    const size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int* buckets_size = table->buckets_size;
 
@@ -2246,7 +2247,7 @@ __global__ void find_ptr_or_insert_kernel(
     if (occupy_result == OccupyResult::DUPLICATE) {
       if (g.thread_rank() == src_lane) {
         *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
-
+        *(found + key_idx) = true;
         if (metas != nullptr) {
           *(metas + key_idx) =
               bucket->metas(key_pos)->load(cuda::std::memory_order_relaxed);
@@ -2255,6 +2256,7 @@ __global__ void find_ptr_or_insert_kernel(
     } else {
       if (g.thread_rank() == src_lane) {
         *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
+        *(found + key_idx) = false;
         update_meta(bucket, key_pos, metas, key_idx);
       }
     }
@@ -2274,28 +2276,31 @@ struct SelectFindOrInsertPtrKernel {
                              cudaStream_t& stream, const size_t& n,
                              const Table<K, V, M>* __restrict table,
                              const K* __restrict keys, V** __restrict values,
-                             M* __restrict metas) {
+                             M* __restrict metas, bool* __restrict found) {
     if (load_factor <= 0.5) {
       const unsigned int tile_size = 4;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
       find_ptr_or_insert_kernel<K, V, M, tile_size>
-          <<<grid_size, block_size, 0, stream>>>(
-              table, bucket_max_size, buckets_num, dim, keys, values, metas, N);
+          <<<grid_size, block_size, 0, stream>>>(table, bucket_max_size,
+                                                 buckets_num, dim, keys, values,
+                                                 metas, found, N);
     } else if (load_factor <= 0.875) {
       const unsigned int tile_size = 8;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
       find_ptr_or_insert_kernel<K, V, M, tile_size>
-          <<<grid_size, block_size, 0, stream>>>(
-              table, bucket_max_size, buckets_num, dim, keys, values, metas, N);
+          <<<grid_size, block_size, 0, stream>>>(table, bucket_max_size,
+                                                 buckets_num, dim, keys, values,
+                                                 metas, found, N);
     } else {
       const unsigned int tile_size = 32;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
       find_ptr_or_insert_kernel<K, V, M, tile_size>
-          <<<grid_size, block_size, 0, stream>>>(
-              table, bucket_max_size, buckets_num, dim, keys, values, metas, N);
+          <<<grid_size, block_size, 0, stream>>>(table, bucket_max_size,
+                                                 buckets_num, dim, keys, values,
+                                                 metas, found, N);
     }
     return;
   }
