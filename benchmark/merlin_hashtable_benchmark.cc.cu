@@ -384,7 +384,7 @@ void print_title() {
        << "| find_or_insert "
        << "| assign "
        << "|  find* "
-       << "|  find_or_insert* ";
+       << "| find_or_insert* ";
   if (Test_Mode::pure_hbm == test_mode) {
     cout << "| insert_and_evict ";
   }
