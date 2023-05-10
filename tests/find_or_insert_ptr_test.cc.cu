@@ -2238,12 +2238,11 @@ void test_find_or_insert_multi_threads(size_t max_hbm_for_vectors,
     {
       V** d_vectors_ptr = nullptr;
       CUDA_CHECK(cudaMalloc(&d_vectors_ptr, KEY_NUM * sizeof(V*)));
-      test_util::array2ptr(d_vectors_ptr, d_vectors_temp, options.dim, KEY_NUM,
+      test_util::array2ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
                            stream);
-      table->find_or_insert(KEY_NUM, d_keys_temp, d_vectors_ptr, nullptr,
-                            stream);
-      test_util::read_from_ptr(d_vectors_ptr, d_vectors_temp, options.dim,
-                               KEY_NUM, stream);
+      table->find_or_insert(KEY_NUM, d_keys, d_vectors_ptr, nullptr, stream);
+      test_util::read_from_ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
+                               stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       CUDA_CHECK(cudaFree(d_vectors_ptr));
     }
@@ -2379,12 +2378,11 @@ void test_find_or_insert_multi_threads(size_t max_hbm_for_vectors,
     {
       V** d_vectors_ptr = nullptr;
       CUDA_CHECK(cudaMalloc(&d_vectors_ptr, KEY_NUM * sizeof(V*)));
-      test_util::array2ptr(d_vectors_ptr, d_vectors_temp, options.dim, KEY_NUM,
+      test_util::array2ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
                            stream);
-      table->find_or_insert(KEY_NUM, d_keys_temp, d_vectors_ptr, nullptr,
-                            stream);
-      test_util::read_from_ptr(d_vectors_ptr, d_vectors_temp, options.dim,
-                               KEY_NUM, stream);
+      table->find_or_insert(KEY_NUM, d_keys, d_vectors_ptr, nullptr, stream);
+      test_util::read_from_ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
+                               stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       CUDA_CHECK(cudaFree(d_vectors_ptr));
     }
@@ -2576,11 +2574,9 @@ void CheckFindOrInsertValues(Table* table, K* keys, V* values, M* metas,
   {
     V** d_vectors_ptr = nullptr;
     CUDA_CHECK(cudaMalloc(&d_vectors_ptr, len * sizeof(V*)));
-    test_util::array2ptr(d_vectors_ptr, d_vectors_temp, options.dim, len,
-                         stream);
-    table->find_or_insert(len, d_keys_temp, d_vectors_ptr, nullptr, stream);
-    test_util::read_from_ptr(d_vectors_ptr, d_vectors_temp, options.dim, len,
-                             stream);
+    test_util::array2ptr(d_vectors_ptr, values, options.dim, len, stream);
+    table->find_or_insert(len, keys, d_vectors_ptr, nullptr, stream);
+    test_util::read_from_ptr(d_vectors_ptr, values, options.dim, len, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CUDA_CHECK(cudaFree(d_vectors_ptr));
   }
