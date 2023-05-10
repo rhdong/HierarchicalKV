@@ -2574,9 +2574,9 @@ void CheckFindOrInsertValues(Table* table, K* keys, V* values, M* metas,
   {
     V** d_vectors_ptr = nullptr;
     CUDA_CHECK(cudaMalloc(&d_vectors_ptr, len * sizeof(V*)));
-    test_util::array2ptr(d_vectors_ptr, values, options.dim, len, stream);
+    test_util::array2ptr(d_vectors_ptr, values, dim, len, stream);
     table->find_or_insert(len, keys, d_vectors_ptr, nullptr, stream);
-    test_util::read_from_ptr(d_vectors_ptr, values, options.dim, len, stream);
+    test_util::read_from_ptr(d_vectors_ptr, values, dim, len, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CUDA_CHECK(cudaFree(d_vectors_ptr));
   }
