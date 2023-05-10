@@ -731,7 +731,7 @@ class HashTable {
       check_evict_strategy(metas);
     }
 
-    writer_shared_lock lock(mutex_);
+    writer_reader_lock lock(mutex_);
 
     using Selector =
         SelectFindOrInsertPtrKernel<key_type, value_type, meta_type>;
