@@ -458,7 +458,7 @@ void test_main(const size_t dim,
         break;
       }
       case API_Select::find_or_insert_ptr: {
-        std::cout << rep(10);
+        std::cout << rep(12);
         break;
       }
       default: {
