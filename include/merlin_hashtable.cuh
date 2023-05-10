@@ -745,8 +745,8 @@ class HashTable {
     }
     Selector::execute_kernel(load_factor, options_.block_size,
                              options_.max_bucket_size, table_->buckets_num,
-                             options_.dim, stream, n, d_table_, keys,
-                             values metas, founds);
+                             options_.dim, stream, n, d_table_, keys, values,
+                             metas, founds);
 
     CudaCheckError();
   }
