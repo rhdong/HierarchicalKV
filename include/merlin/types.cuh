@@ -124,6 +124,8 @@ struct Table {
   size_t max_size =
       std::numeric_limits<uint64_t>::max();  // Up limit of the table capacity.
   size_t buckets_num;                        // Number of the buckets.
+  size_t buckets_num_0;                      // Number of the buckets part 0.
+  size_t buckets_num_1;                      // Number of the buckets part 1.
   size_t bucket_max_size = 128;              // Volume of each buckets.
   size_t max_hbm_for_vectors = 0;            // Max HBM allocated for vectors
   size_t remaining_hbm_for_vectors = 0;  // Remaining HBM allocated for vectors

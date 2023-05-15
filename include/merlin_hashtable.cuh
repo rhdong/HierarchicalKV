@@ -357,6 +357,43 @@ class HashTable {
   }
 
   /**
+   * @brief Move the specific data from HMEM to HBM.
+   *
+   * @param n Number of key-value-meta tuples to insert or assign.
+   * @param keys The keys to insert on GPU-accessible memory with shape
+   * (n).
+   * @param founds The status that indicates if the keys are found.
+   *
+   * @param stream The CUDA stream that is used to execute the operation.
+   */
+  void warmup(const size_type n,
+              const key_type* keys,  // (n)
+              bool* founds,          // (n)
+              cudaStream_t stream = 0) {
+    if (n == 0) {
+      return;
+    }
+
+    writer_shared_lock lock(mutex_);
+
+    if (!is_fast_mode()) {
+      using Selector = SelectWarmupKernel<key_type, value_type, meta_type>;
+      static thread_local int step_counter = 0;
+      static thread_local float load_factor = 0.0;
+
+      if (((step_counter++) % kernel_select_interval_) == 0) {
+        load_factor = fast_load_factor(0, stream, false);
+      }
+
+      Selector::execute_kernel(load_factor, options_.block_size,
+                               options_.max_bucket_size, table_->buckets_num,
+                               options_.dim, stream, n, d_table_, keys, founds);
+    }
+
+    CudaCheckError();
+  }
+
+  /**
    * @brief Insert new key-value-meta tuples into the hash table.
    * If the key already exists, the values and metas are assigned new values.
    *
@@ -371,8 +408,6 @@ class HashTable {
    * (n).
    * @param values The values to insert on GPU-accessible memory with
    * shape (n, DIM).
-   * @param metas The metas to insert on GPU-accessible memory with shape
-   * (n).
    * @param metas The metas to insert on GPU-accessible memory with shape
    * (n).
    * @params evicted_keys The output of keys replaced with minimum meta.

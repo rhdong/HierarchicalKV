@@ -159,7 +159,11 @@ void initialize_buckets(Table<K, V, M>** table, const size_t start,
           (*table)->slices[i] + j * (*table)->bucket_max_size * (*table)->dim;
     }
     num_of_allocated_buckets += num_of_buckets_in_one_slice;
+    if ((*table)->is_pure_hbm) {
+      (*table)->buckets_num_0 = num_of_allocated_buckets;
+    }
   }
+  (*table)->buckets_num_1 = (*table)->buckets_num - (*table)->buckets_num_0;
 
   (*table)->num_of_memory_slices += num_of_memory_slices;
   for (int i = start; i < end; i++) {
@@ -723,32 +727,6 @@ __global__ void read_kernel(const V** __restrict src, V* __restrict dst,
       dst[real_dst_offset * dim + dim_index] = src[vec_index * dim + dim_index];
     }
   }
-}
-
-template <class K, class V, class M, uint32_t TILE_SIZE = 4>
-__device__ __forceinline__ unsigned find_in_bucket(
-    cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, M>* bucket,
-    const K& find_key, uint32_t& tile_offset, const uint32_t& start_idx,
-    const size_t& bucket_max_size) {
-  uint32_t key_pos = 0;
-
-#pragma unroll
-  for (tile_offset = 0; tile_offset < bucket_max_size;
-       tile_offset += TILE_SIZE) {
-    key_pos =
-        (start_idx + tile_offset + g.thread_rank()) & (bucket_max_size - 1);
-    auto const current_key =
-        bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed);
-    auto const found_vote = g.ballot(find_key == current_key);
-    if (found_vote) {
-      return found_vote;
-    }
-
-    if (g.any(current_key == static_cast<K>(EMPTY_KEY))) {
-      return 0;
-    }
-  }
-  return 0;
 }
 
 template <class K, class V, class M, uint32_t TILE_SIZE = 4>
@@ -1332,7 +1310,7 @@ __global__ void upsert_kernel(const Table<K, V, M>* __restrict table,
             src_lane, bucket_max_size);
       } else {
         start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
-        occupy_result = find_and_lock_when_vacant<K, V, M, TILE_SIZE>(
+        occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
             g, bucket, insert_key, insert_meta, evicted_key, start_idx, key_pos,
             src_lane, bucket_max_size);
       }
@@ -2505,6 +2483,53 @@ __global__ void update_kernel(const Table<K, V, M>* __restrict table,
     }
   }
 }
+
+template <class K, class V, class M, uint32_t TILE_SIZE = 4>
+__global__ void warmup_kernel(const Table<K, V, M>* __restrict table,
+                              const size_t bucket_max_size,
+                              const size_t buckets_num, const size_t dim,
+                              const K* __restrict keys, bool* __restrict founds,
+                              size_t N) {
+  auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
+  int* buckets_size = table->buckets_size;
+
+  for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
+       t += blockDim.x * gridDim.x) {
+  }
+}
+
+template <typename K, typename V, typename M>
+struct SelectWarmupKernel {
+  static void execute_kernel(const float& load_factor, const int& block_size,
+                             const size_t bucket_max_size,
+                             const size_t buckets_num, const size_t dim,
+                             cudaStream_t& stream, const size_t& n,
+                             const Table<K, V, M>* __restrict table,
+                             const K* __restrict keys,
+                             bool* __restrict founds) {
+    if (load_factor <= 0.5) {
+      const unsigned int tile_size = 4;
+      const size_t N = n * tile_size;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      warmup_kernel<K, V, M, tile_size><<<grid_size, block_size, 0, stream>>>(
+          table, bucket_max_size, buckets_num, dim, keys, founds, N);
+
+    } else if (load_factor <= 0.875) {
+      const unsigned int tile_size = 8;
+      const size_t N = n * tile_size;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      warmup_kernel<K, V, M, tile_size><<<grid_size, block_size, 0, stream>>>(
+          table, bucket_max_size, buckets_num, dim, keys, founds, N);
+    } else {
+      const unsigned int tile_size = 32;
+      const size_t N = n * tile_size;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      warmup_kernel<K, V, M, tile_size><<<grid_size, block_size, 0, stream>>>(
+          table, bucket_max_size, buckets_num, dim, keys, founds, N);
+    }
+    return;
+  }
+};
 
 }  // namespace merlin
 }  // namespace nv

@@ -12,7 +12,7 @@ The key capability of HierarchicalKV is to store key-value (feature-embedding) o
 
 You can also use the library for generic key-value storage.
 
-## Benefits of HierarchicalKV
+## Benefits
 
 When building large recommender systems, machine learning (ML) engineers face the following challenges:
 
@@ -29,17 +29,38 @@ HierarchicalKV alleviates these challenges and helps the machine learning engine
   The strategies are implemented by CUDA kernels.
 - Operates at a high working-status load factor that is close to 1.0.
 
+
+## Key ideas
+
+- Locally ordered
+- Store all the keys in HBM 
+- Build-in and customizable eviction strategy
+
 HierarchicalKV makes NVIDIA GPUs more suitable for training large and super-large models of ***search, recommendations, and advertising***.
 The library simplifies the common challenges to building, evaluating, and serving sophisticated recommenders models.
 
 ## API Documentation
 
-The main classes and structs are below, and it's recommended to read the comments in the source code directly:
+The main classes and structs are below, but reading the comments in the source code is recommended:
 
-- [`class HashTable`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L101)
-- [`class EvictStrategy`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L106)
-- [`struct HashTableOptions`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L34)
-- [`Struct HashTable::Vector`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L106)
+- [`class HashTable`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L141)
+- [`class EvictStrategy`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L52)
+- [`struct HashTableOptions`](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/include/merlin_hashtable.cuh#L60)
+
+
+#### Main API maturity of `nv::merlin::HashTable`
+
+| Name                 | Description                                                                                                          | Function          | Performance  |
+|:---------------------|:---------------------------------------------------------------------------------------------------------------------|:------------------|:-------------|
+| __insert_or_assign__ | Insert or assign for the specified keys. If the target bucket is full, overwrite the key with minimum meta in it.    | Well-tested       | Optimizing   |
+| __insert_and_evict__ | Insert new keys. If the target bucket is full, the keys with minimum meta will be evicted for placement the new key. | Industry-verified | Optimizing   |
+| __find_or_insert__   | Search for the specified keys. If missing, insert it.                                                                | Well-tested       | Optimizing   |
+| __assign__           | Search and update for each key and ignore the missed one.                                                            | Well-tested       | Optimizing   |
+| __accum_or_assign__  | Search and update for each key. If found, add value as a delta to the old value. If missing, update it directly.     | Well-tested       | No optimized |
+| __find_or_insert*__  | Search for the specified keys and return the pointers of values. If missing, insert it.                              | Well-tested       | Optimizing   |
+| __find__             | Search for the specified keys.                                                                                       | Industry-verified | Optimizing   |
+| __find\*__           | Return the pointers of values, thread-unsafe but high performance.                                                   | Well-tested       | Optimizing   |
+| __warmup__           | Move the hot key-values from HMEM to HBM                                                                             | May 30, 2023      | -            |
 
 For regular API doc, please refer to [API Docs](https://nvidia-merlin.github.io/HierarchicalKV/master/api/index.html)
 
