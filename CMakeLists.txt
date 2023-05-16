@@ -49,7 +49,7 @@ endif()
 
 # Some neat defaults.
 set(CUDA_SEPARABLE_COMPILATION ON)
-
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 # Select target CUDA binary architecture.
 foreach(cuda_arch ${sm})
   list(APPEND cuda_arch_list ${cuda_arch})
