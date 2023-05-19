@@ -34,9 +34,9 @@
 #include "merlin/utils.cuh"
 
 #if THRUST_VERSION >= 101600
-  static constexpr auto thrust_par = thrust::cuda::par_nosync;
+static constexpr auto thrust_par = thrust::cuda::par_nosync;
 #else
-  static constexpr auto thrust_par = thrust::cuda::par;
+static constexpr auto thrust_par = thrust::cuda::par;
 #endif
 
 namespace nv {

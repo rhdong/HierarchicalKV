@@ -29,16 +29,16 @@ void test_export_with_condition() {
   TableOptions opt;
 
   // table setting
-  const size_t init_capacity = 16;
+  const size_t init_capacity = 1024;
 
   // numeric setting
-  const size_t U = init_capacity;  // 2llu << 18;
+  const size_t U = 2llu << 18;
   const size_t M = (U >> 1);
-  const size_t N = (U >> 1) + 1;  // Add a prime to test the non-aligned case.
+  const size_t N = (U >> 1) + 17;  // Add a prime to test the non-aligned case.
 
   opt.max_capacity = U;
   opt.init_capacity = init_capacity;
-  opt.max_hbm_for_vectors = U * dim * sizeof(f32) * 10;
+  opt.max_hbm_for_vectors = U * dim * sizeof(f32);
   opt.evict_strategy = nv::merlin::EvictStrategy::kCustomized;
   opt.dim = dim;
 
