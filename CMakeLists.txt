@@ -41,6 +41,8 @@ if(CLANGFORMAT)
   clangformat_setup("${clangformat_files}")
 endif()
 
+add_compile_definitions(CUDA_ERROR_CHECK)
+
 # Default to release build.
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")

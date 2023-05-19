@@ -1088,6 +1088,11 @@ __global__ void upsert_kernel_with_io_core(
     int src_lane = -1;
     K evicted_key;
 
+    printf("key=%p\n", keys);
+    printf("metas=%p\n", metas);
+    printf("table->buckets=%p\n", table->buckets);
+    printf("table->buckets->keys=%p\n", table->buckets->keys_);
+    printf("table->buckets->metas=%p\n", table->buckets->metas_);
     Bucket<K, V, M>* bucket =
         get_key_position<K>(table->buckets, insert_key, bkt_idx, start_idx,
                             buckets_num, bucket_max_size);
@@ -1095,16 +1100,16 @@ __global__ void upsert_kernel_with_io_core(
     OccupyResult occupy_result{OccupyResult::INITIAL};
     const int bucket_size = buckets_size[bkt_idx];
     do {
-      if (bucket_size < bucket_max_size) {
-        occupy_result = find_and_lock_when_vacant<K, V, M, TILE_SIZE>(
-            g, bucket, insert_key, insert_meta, evicted_key, start_idx, key_pos,
-            src_lane, bucket_max_size);
-      } else {
-        start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
-        occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
-            g, bucket, insert_key, insert_meta, evicted_key, start_idx, key_pos,
-            src_lane, bucket_max_size);
-      }
+      //      if (bucket_size < bucket_max_size) {
+      occupy_result = find_and_lock_when_vacant<K, V, M, TILE_SIZE>(
+          g, bucket, insert_key, insert_meta, evicted_key, start_idx, key_pos,
+          src_lane, bucket_max_size);
+      //      } else {
+      //        start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
+      //        occupy_result = find_and_lock_when_full<K, V, M, TILE_SIZE>(
+      //            g, bucket, insert_key, insert_meta, evicted_key, start_idx,
+      //            key_pos, src_lane, bucket_max_size);
+      //      }
 
       occupy_result = g.shfl(occupy_result, src_lane);
     } while (occupy_result == OccupyResult::CONTINUE);
@@ -1114,13 +1119,14 @@ __global__ void upsert_kernel_with_io_core(
     if ((occupy_result == OccupyResult::OCCUPIED_EMPTY ||
          occupy_result == OccupyResult::OCCUPIED_RECLAIMED) &&
         g.thread_rank() == src_lane) {
-      atomicAdd(&(buckets_size[bkt_idx]), 1);
+      //      atomicAdd(&(buckets_size[bkt_idx]), 1);
     }
 
-    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
-                              dim);
+    //    copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos *
+    //    dim,
+    //                              dim);
     if (g.thread_rank() == src_lane) {
-      update_meta(bucket, key_pos, metas, key_idx);
+      //      update_meta(bucket, key_pos, metas, key_idx);
       (bucket->keys(key_pos))
           ->store(insert_key, cuda::std::memory_order_relaxed);
     }
