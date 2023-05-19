@@ -29,7 +29,7 @@ void test_export_with_condition() {
   TableOptions opt;
 
   // table setting
-  const size_t init_capacity = 32;
+  const size_t init_capacity = 1024;
 
   // numeric setting
   const size_t U = 2llu << 18;
