@@ -1088,11 +1088,11 @@ __global__ void upsert_kernel_with_io_core(
     int src_lane = -1;
     K evicted_key;
 
-    printf("key=%p\n", keys);
-    printf("metas=%p\n", metas);
-    printf("table->buckets=%p\n", table->buckets);
-    printf("table->buckets->keys=%p\n", table->buckets->keys_);
-    printf("table->buckets->metas=%p\n", table->buckets->metas_);
+//    printf("key=%p\n", keys);
+//    printf("metas=%p\n", metas);
+//    printf("table->buckets=%p\n", table->buckets);
+//    printf("table->buckets->keys=%p\n", table->buckets->keys_);
+//    printf("table->buckets->metas=%p\n", table->buckets->metas_);
     Bucket<K, V, M>* bucket =
         get_key_position<K>(table->buckets, insert_key, bkt_idx, start_idx,
                             buckets_num, bucket_max_size);
