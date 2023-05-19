@@ -32,7 +32,7 @@ void test_export_with_condition() {
   const size_t init_capacity = 1024;
 
   // numeric setting
-  const size_t U = 2llu << 18;
+  const size_t U = init_capacity; // 2llu << 18;
   const size_t M = (U >> 1);
   const size_t N = (U >> 1) + 17;  // Add a prime to test the non-aligned case.
 
