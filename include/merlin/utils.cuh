@@ -73,7 +73,6 @@ namespace merlin {
 
 inline void __cudaCheckError(const char* file, const int line) {
 #ifdef CUDA_ERROR_CHECK
-  printf("CUDA_ERROR_CHECK\n");
   cudaError err = cudaGetLastError();
   if (cudaSuccess != err) {
     fprintf(stderr, "cudaCheckError() failed at %s:%i : %s\n", file, line,
