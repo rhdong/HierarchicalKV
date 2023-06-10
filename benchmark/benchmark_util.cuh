@@ -74,10 +74,10 @@ struct KernelTimer {
   }
   ~KernelTimer() {
     CUDA_CHECK(cudaEventDestroy(start_));
-    CUDA_CHECK(cudaEventDestroy(end_));    
+    CUDA_CHECK(cudaEventDestroy(end_));
   }
   void start() { CUDA_CHECK(cudaEventRecord(start_)); }
-  void end() { 
+  void end() {
     CUDA_CHECK(cudaEventRecord(end_));
     CUDA_CHECK(cudaEventSynchronize(end_));
     CUDA_CHECK(cudaEventElapsedTime(&time, start_, end_));
@@ -91,7 +91,7 @@ struct KernelTimer {
 
  private:
   TimeUnit tu_;
-  float time {-1.0f};
+  float time{-1.0f};
   cudaEvent_t start_;
   cudaEvent_t end_;
 };
@@ -107,9 +107,34 @@ void create_continuous_keys(K* h_keys, S* h_scores, const int key_num_per_op,
                             const K start = 0) {
   for (K i = 0; i < key_num_per_op; i++) {
     h_keys[i] = start + static_cast<K>(i);
-    if (h_scores != nullptr) 
-      h_scores[i] = getTimestamp();
+    if (h_scores != nullptr) h_scores[i] = getTimestamp();
   }
+}
+
+template <class K, class S>
+__global__ void create_continuous_keys_device_kernel(K* d_keys, S* d_scores,
+                                                     const int key_num_per_op,
+                                                     const K start = 0) {
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+  if (tid < key_num_per_op) {
+    d_keys[tid] = start + static_cast<K>(tid);
+    if(tid == key_num_per_op - 1){
+    printf("tid = num-1\n");
+    }
+    if (d_scores != nullptr)
+      d_scores[tid] = static_cast<S>(start) + static_cast<S>(tid);
+  }
+}
+
+template <class K, class S>
+void create_continuous_keys_device(K* d_keys, S* d_scores,
+                                   const int key_num_per_op, const K start,
+                                   cudaStream_t stream = 0) {
+  const size_t block_size = 512;
+  const int grid_size = (((key_num_per_op)-1) / block_size + 1);
+  create_continuous_keys_device_kernel<K, S>
+      <<<grid_size, block_size, 0, stream>>>(d_keys, d_scores, key_num_per_op,
+                                             start);
 }
 
 template <class K, class S>
@@ -125,8 +150,7 @@ void create_random_keys(K* h_keys, S* h_scores, const int key_num_per_op) {
   }
   for (const K num : numbers) {
     h_keys[i] = num;
-    if (h_scores != nullptr) 
-      h_scores[i] = getTimestamp();
+    if (h_scores != nullptr) h_scores[i] = getTimestamp();
     i++;
   }
 }
@@ -154,15 +178,13 @@ void create_keys_for_hitrate(K* h_keys, S* h_scores, const int key_num_per_op,
     int i = 0;
     for (auto existed_value : numbers) {
       h_keys[i] = existed_value;
-      if (h_scores != nullptr) 
-        h_scores[i] = getTimestamp();
+      if (h_scores != nullptr) h_scores[i] = getTimestamp();
       i++;
     }
   } else {
     // else keep its original value, but update scores
     for (int i = 0; i < divide; i++) {
-      if (h_scores != nullptr) 
-        h_scores[i] = getTimestamp();
+      if (h_scores != nullptr) h_scores[i] = getTimestamp();
     }
   }
 
@@ -172,8 +194,7 @@ void create_keys_for_hitrate(K* h_keys, S* h_scores, const int key_num_per_op,
   }
   for (int i = divide; i < key_num_per_op; i++) {
     h_keys[i] = new_value--;
-    if (h_scores != nullptr) 
-      h_scores[i] = getTimestamp();
+    if (h_scores != nullptr) h_scores[i] = getTimestamp();
   }
 }
 
@@ -187,7 +208,7 @@ void refresh_scores(S* h_scores, const int key_num_per_op) {
 template <class K, class V>
 void init_value_using_key(K* h_keys, V* h_vectors, const int key_num_per_op,
                           int dim) {
-  for (size_t i = 0; i < key_num_per_op; i++) {          
+  for (size_t i = 0; i < key_num_per_op; i++) {
     for (size_t j = 0; j < dim; j++) {
       h_vectors[i * dim + j] = static_cast<V>(h_keys[i] * 0.00001);
     }

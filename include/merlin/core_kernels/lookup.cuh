@@ -667,7 +667,7 @@ struct SelectLookupKernelWithIOPipeline {
   }
 
   static void select_kernel(LookupKernelParams<K, V, S>& params,
-                             cudaStream_t& stream) {
+                            cudaStream_t& stream) {
     constexpr int BUCKET_SIZE = 128;
     constexpr size_t ValueGranularity = sizeof(float);
     constexpr uint32_t v1_value_dim = ValueDimConfig::pipeline_v1_dim;
