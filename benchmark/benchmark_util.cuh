@@ -112,26 +112,26 @@ void create_continuous_keys(K* h_keys, S* h_scores, const int key_num_per_op,
 }
 
 template <class K, class S>
-__global__ void create_continuous_keys_device_kernel(K* d_keys, S* d_scores,
-                                                     const int key_num_per_op,
-                                                     const K start = 0) {
+__global__ void create_continuous_keys_device_kernel(
+    K* d_keys, S* d_scores, const size_t key_num_per_op, const K start = 0) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (tid < key_num_per_op) {
     d_keys[tid] = start + static_cast<K>(tid);
-    if(tid == key_num_per_op - 1){
-    printf("tid = num-1\n");
+    if (d_scores != nullptr) {
+      S mclk;
+      asm volatile("mov.u64 %0,%%globaltimer;" : "=l"(mclk));
+      d_scores[tid] = mclk + static_cast<S>(tid);
     }
-    if (d_scores != nullptr)
-      d_scores[tid] = static_cast<S>(start) + static_cast<S>(tid);
   }
 }
 
 template <class K, class S>
 void create_continuous_keys_device(K* d_keys, S* d_scores,
-                                   const int key_num_per_op, const K start,
+                                   const size_t key_num_per_op, const K start,
                                    cudaStream_t stream = 0) {
   const size_t block_size = 512;
-  const int grid_size = (((key_num_per_op)-1) / block_size + 1);
+  const size_t grid_size = (((key_num_per_op)-1) / block_size + 1);
+  //  std::cout << grid_size << "  " << block_size << std::endl;
   create_continuous_keys_device_kernel<K, S>
       <<<grid_size, block_size, 0, stream>>>(d_keys, d_scores, key_num_per_op,
                                              start);

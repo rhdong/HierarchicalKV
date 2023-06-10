@@ -115,14 +115,14 @@ float test_one_api(std::shared_ptr<MerlinHashTable>& table,
   for (int i = 0; i < loop_num_init; i++) {
     uint64_t key_num_cur_insert =
         i == loop_num_init - 1 ? key_num_remain : key_num_per_op;
-    create_continuous_keys_device<K, S>(d_keys, d_scores, key_num_cur_insert,
-                                        start, stream);
-    CUDA_CHECK(cudaStreamSynchronize(stream));
+    create_continuous_keys<K, S>(h_keys, h_scores, key_num_cur_insert, start);
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_cur_insert * sizeof(K),
+                          cudaMemcpyHostToDevice));
     table->find_or_insert(key_num_cur_insert, d_keys, d_vectors_ptr, d_found,
                           d_scores, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
+
     start += key_num_cur_insert;
-    std::cout << "p3" << std::endl;
   }
 
   // step 2
@@ -143,13 +143,11 @@ float test_one_api(std::shared_ptr<MerlinHashTable>& table,
     start += key_num_append;
     real_load_factor = table->load_factor(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    std::cout << "p4:" << real_load_factor << std::endl;
   }
 
   // For trigger the kernel selection in advance.
   int key_num_per_op_warmup = 1;
   for (int i = 0; i < 9; i++) {
-    std::cout << "p5:" << std::endl;
     switch (api) {
       case API_Select::find: {
         table->find(key_num_per_op_warmup, d_keys, d_vectors, d_found, d_scores,
@@ -224,7 +222,6 @@ float test_one_api(std::shared_ptr<MerlinHashTable>& table,
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                         cudaMemcpyHostToDevice));
   auto timer = benchmark::Timer<double>();
-    std::cout << "p6:" << std::endl;
   switch (api) {
     case API_Select::find: {
       timer.start();
@@ -304,7 +301,6 @@ float test_one_api(std::shared_ptr<MerlinHashTable>& table,
     }
   }
 
-    std::cout << "p7:" << std::endl;
   CUDA_CHECK(cudaStreamDestroy(stream));
 
   CUDA_CHECK(cudaFreeHost(h_keys));
@@ -368,16 +364,8 @@ void test_main(const size_t dim,
                const size_t init_capacity = 64 * 1024 * 1024UL,
                const size_t key_num_per_op = 1 * 1024 * 1024UL,
                const size_t hbm4values = 16, const float load_factor = 1.0f,
-               const bool io_by_cpu = false) {
-  std::cout << "|" << rep(1) << fixed << setprecision(2) << load_factor << " ";
-  std::vector<API_Select> apis{
-      API_Select::insert_or_assign, API_Select::find,
-      API_Select::find_or_insert,   API_Select::assign,
-      API_Select::find_ptr,         API_Select::find_or_insert_ptr};
-  if (Test_Mode::pure_hbm == test_mode) {
-    apis.push_back(API_Select::insert_and_evict);
-  }
-
+               const bool io_by_cpu = false,
+               const std::vector<float> load_factors = {0.50f, 0.75f, 1.00f}) {
   size_t free, total;
   CUDA_CHECK(cudaSetDevice(0));
   CUDA_CHECK(cudaMemGetInfo(&free, &total));
@@ -399,53 +387,66 @@ void test_main(const size_t dim,
   std::shared_ptr<MerlinHashTable> table = std::make_shared<MerlinHashTable>();
   table->init(options);
 
-  for (auto api : apis) {
-    table->clear();
-    CUDA_CHECK(cudaDeviceSynchronize());
-    // There is a sampling of load_factor after several times call to target
-    // API. Two consecutive calls can avoid the impact of sampling.
-    auto res1 = test_one_api(table, api, dim, init_capacity, key_num_per_op,
-                             load_factor);
-    auto res2 = test_one_api(table, api, dim, init_capacity, key_num_per_op,
-                             load_factor);
-    auto res = std::max(res1, res2);
-    std::cout << "|";
-    switch (api) {
-      case API_Select::find: {
-        std::cout << rep(2);
-        break;
-      }
-      case API_Select::insert_or_assign: {
-        std::cout << rep(12);
-        break;
-      }
-      case API_Select::find_or_insert: {
-        std::cout << rep(10);
-        break;
-      }
-      case API_Select::assign: {
-        std::cout << rep(2);
-        break;
-      }
-      case API_Select::insert_and_evict: {
-        std::cout << rep(12);
-        break;
-      }
-      case API_Select::find_ptr: {
-        std::cout << rep(2);
-        break;
-      }
-      case API_Select::find_or_insert_ptr: {
-        std::cout << rep(11);
-        break;
-      }
-      default: {
-        std::cout << "[Unsupport API]";
-      }
-    }
-    std::cout << fixed << setprecision(3) << res << " ";
+  std::vector<API_Select> apis{
+      API_Select::insert_or_assign, API_Select::find,
+      API_Select::find_or_insert,   API_Select::assign,
+      API_Select::find_ptr,         API_Select::find_or_insert_ptr};
+  if (Test_Mode::pure_hbm == test_mode) {
+    apis.push_back(API_Select::insert_and_evict);
   }
-  std::cout << "|\n";
+
+  for (float load_factor : load_factors) {
+    std::cout << "|" << rep(1) << fixed << setprecision(2) << load_factor
+              << " ";
+
+    for (auto api : apis) {
+      table->clear();
+      CUDA_CHECK(cudaDeviceSynchronize());
+      // There is a sampling of load_factor after several times call to target
+      // API. Two consecutive calls can avoid the impact of sampling.
+      auto res1 = test_one_api(table, api, dim, init_capacity, key_num_per_op,
+                               load_factor);
+      auto res2 = test_one_api(table, api, dim, init_capacity, key_num_per_op,
+                               load_factor);
+      auto res = std::max(res1, res2);
+      std::cout << "|";
+      switch (api) {
+        case API_Select::find: {
+          std::cout << rep(2);
+          break;
+        }
+        case API_Select::insert_or_assign: {
+          std::cout << rep(12);
+          break;
+        }
+        case API_Select::find_or_insert: {
+          std::cout << rep(10);
+          break;
+        }
+        case API_Select::assign: {
+          std::cout << rep(2);
+          break;
+        }
+        case API_Select::insert_and_evict: {
+          std::cout << rep(12);
+          break;
+        }
+        case API_Select::find_ptr: {
+          std::cout << rep(2);
+          break;
+        }
+        case API_Select::find_or_insert_ptr: {
+          std::cout << rep(11);
+          break;
+        }
+        default: {
+          std::cout << "[Unsupport API]";
+        }
+      }
+      std::cout << fixed << setprecision(3) << res << " ";
+    }
+    std::cout << "|\n";
+  }
 }
 
 int main() {
@@ -486,30 +487,22 @@ int main() {
     cout << "### On pure HBM mode: " << endl;
     print_configuration(4, 64 * 1024 * 1024UL, 32);
     print_title();
-    test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32, 0.50f);
-    test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32, 0.75f);
-    test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32, 1.00f);
+//    test_main(4, 64 * 1024 * 1024UL, key_num_per_op, 32);
 
     print_configuration(64, 64 * 1024 * 1024UL, 16);
     print_title();
-    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.50f);
-    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 0.75f);
-    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16, 1.00f);
+//    test_main(64, 64 * 1024 * 1024UL, key_num_per_op, 16);
     cout << endl;
 
     cout << "### On HBM+HMEM hybrid mode: " << endl;
     test_mode = Test_Mode::hybrid;
     print_configuration(64, 128 * 1024 * 1024UL, 16);
     print_title();
-    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 0.50f);
-    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 0.75f);
-    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16, 1.00f);
+//    test_main(64, 128 * 1024 * 1024UL, key_num_per_op, 16);
 
-    print_configuration(64, 1024 * 1024 * 1024UL, 56);
+    print_configuration(64, 512 * 1024 * 1024UL, 32);
     print_title();
-    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 0.50f);
-    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 0.75f);
-    test_main(64, 1024 * 1024 * 1024UL, key_num_per_op, 56, 1.00f);
+    test_main(64, 512 * 1024 * 1024UL, key_num_per_op, 32);
     cout << endl;
 
     CUDA_CHECK(cudaDeviceSynchronize());
