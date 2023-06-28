@@ -303,9 +303,9 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
   // Step 5: insert by evicting some one.
   const S global_min_score_val =
       cg::reduce(g, local_min_score_val, cg::less<S>());
-  if (desired_score < global_min_score_val) {
-    return OccupyResult::REFUSED;
-  }
+//  if (desired_score < global_min_score_val) {
+//    return OccupyResult::REFUSED;
+//  }
   vote = g.ballot(local_min_score_val <= global_min_score_val);
   if (vote) {
     src_lane = __ffs(vote) - 1;
@@ -402,9 +402,9 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   // Step 3: insert by evicting some one.
   const S global_min_score_val =
       cg::reduce(g, local_min_score_val, cg::less<S>());
-  if (desired_score < global_min_score_val) {
-    return OccupyResult::REFUSED;
-  }
+//  if (desired_score < global_min_score_val) {
+//    return OccupyResult::REFUSED;
+//  }
   vote = g.ballot(local_min_score_val <= global_min_score_val);
   if (vote) {
     src_lane = __ffs(vote) - 1;
