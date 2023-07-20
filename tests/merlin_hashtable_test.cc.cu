@@ -604,9 +604,9 @@ void test_erase_if_pred(size_t max_hbm_for_vectors) {
 
 void test_rehash(size_t max_hbm_for_vectors) {
   constexpr uint64_t BUCKET_MAX_SIZE = 128ul;
-  constexpr uint64_t INIT_CAPACITY = BUCKET_MAX_SIZE;
-  constexpr uint64_t MAX_CAPACITY = 4 * INIT_CAPACITY;
-  constexpr uint64_t KEY_NUM = BUCKET_MAX_SIZE * 2;
+  constexpr uint64_t INIT_CAPACITY = 50000;//BUCKET_MAX_SIZE;
+  constexpr uint64_t MAX_CAPACITY = 100000;//4 * INIT_CAPACITY;
+  constexpr uint64_t KEY_NUM = 50000;//BUCKET_MAX_SIZE * 2;
   constexpr uint64_t TEST_TIMES = 100;
   K* h_keys;
   S* h_scores;
