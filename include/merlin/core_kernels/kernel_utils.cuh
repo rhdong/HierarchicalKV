@@ -248,6 +248,12 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
+        if (result && src_lane != g.thread_rank()) {
+          expected_key = static_cast<K>(LOCKED_KEY);
+          current_key->compare_exchange_strong(
+            expected_key, desired_key,
+            cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+        }
         key_pos = g.shfl(key_pos, src_lane);
         return OccupyResult::DUPLICATE;
       }
@@ -373,6 +379,12 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
           cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
       if (vote) {
+        if (result && src_lane != g.thread_rank()) {
+          expected_key = static_cast<K>(LOCKED_KEY);
+          current_key->compare_exchange_strong(
+            expected_key, desired_key,
+            cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+        }
         src_lane = __ffs(vote) - 1;
         key_pos = g.shfl(key_pos, src_lane);
         return OccupyResult::DUPLICATE;
@@ -391,8 +403,8 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     if (temp_min_score_val < local_min_score_val) {
       while ((expected_key = bucket->keys(key_pos)->load(
                   cuda::std::memory_order_relaxed)) ==
-             static_cast<K>(LOCKED_KEY))
-        ;
+             static_cast<K>(LOCKED_KEY)) {
+      };
       local_min_score_key = expected_key;
       local_min_score_val = temp_min_score_val;
       local_min_score_pos = key_pos;
