@@ -25,13 +25,16 @@ namespace merlin {
  * update with IO operation. This kernel is
  * usually used for the pure HBM mode for better performance.
  */
-template <class K, class V, class S, uint32_t TILE_SIZE = 4>
+template <class K, class V, class S, int Strategy, uint32_t TILE_SIZE = 4>
 __global__ void update_kernel_with_io(
     const Table<K, V, S>* __restrict table, const size_t bucket_max_size,
     const size_t buckets_num, const size_t dim, const K* __restrict keys,
-    const V* __restrict values, const S* __restrict scores, const size_t N) {
+    const V* __restrict values, const S* __restrict scores,
+    const S global_epoch, const size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int* buckets_size = table->buckets_size;
+
+  using ScoreFunctor = ScoreFunctor<K, V, S, Strategy>;
 
   for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
@@ -69,7 +72,8 @@ __global__ void update_kernel_with_io(
       copy_vector<V, TILE_SIZE>(g, update_value,
                                 bucket->vectors + key_pos * dim, dim);
       if (src_lane == g.thread_rank()) {
-        update_score(bucket, key_pos, scores, key_idx);
+        ScoreFunctor::update_without_missed(bucket, key_pos, scores, key_idx,
+                                            global_epoch);
       }
     }
 
@@ -80,7 +84,7 @@ __global__ void update_kernel_with_io(
   }
 }
 
-template <typename K, typename V, typename S>
+template <typename K, typename V, typename S, int Strategy>
 struct SelectUpdateKernelWithIO {
   static void execute_kernel(const float& load_factor, const int& block_size,
                              const size_t bucket_max_size,
@@ -89,37 +93,40 @@ struct SelectUpdateKernelWithIO {
                              const Table<K, V, S>* __restrict table,
                              const K* __restrict keys,
                              const V* __restrict values,
-                             const S* __restrict scores) {
+                             const S* __restrict scores, const S global_epoch) {
     if (load_factor <= 0.75) {
       const unsigned int tile_size = 4;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-      update_kernel_with_io<K, V, S, tile_size>
+      update_kernel_with_io<K, V, S, Strategy, tile_size>
           <<<grid_size, block_size, 0, stream>>>(table, bucket_max_size,
                                                  buckets_num, dim, keys, values,
-                                                 scores, N);
+                                                 scores, global_epoch, N);
     } else {
       const unsigned int tile_size = 32;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-      update_kernel_with_io<K, V, S, tile_size>
+      update_kernel_with_io<K, V, S, Strategy, tile_size>
           <<<grid_size, block_size, 0, stream>>>(table, bucket_max_size,
                                                  buckets_num, dim, keys, values,
-                                                 scores, N);
+                                                 scores, global_epoch, N);
     }
     return;
   }
 };
 
-template <class K, class V, class S, uint32_t TILE_SIZE = 4>
+template <class K, class V, class S, int Strategy, uint32_t TILE_SIZE = 4>
 __global__ void update_kernel(const Table<K, V, S>* __restrict table,
                               const size_t bucket_max_size,
                               const size_t buckets_num, const size_t dim,
                               const K* __restrict keys, V** __restrict vectors,
                               const S* __restrict scores,
-                              int* __restrict src_offset, size_t N) {
+                              int* __restrict src_offset, const S global_epoch,
+                              size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int* buckets_size = table->buckets_size;
+
+  using ScoreFunctor = ScoreFunctor<K, V, S, Strategy>;
 
   for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
@@ -155,7 +162,8 @@ __global__ void update_kernel(const Table<K, V, S>* __restrict table,
     if (g.thread_rank() == src_lane) {
       if (occupy_result == OccupyResult::DUPLICATE) {
         *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
-        update_score(bucket, key_pos, scores, key_idx);
+        ScoreFunctor::update_without_missed(bucket, key_pos, scores, key_idx,
+                                            global_epoch);
       } else {
         *(vectors + key_idx) = nullptr;
       }

@@ -142,20 +142,223 @@ struct CopyValueMultipleGroup {
   }
 };
 
+template <class K, class V, class S, int Strategy>
+struct ScoreFunctor;
+
+constexpr int EPOCH_BITS = 32;
+
+constexpr uint64_t EPOCH_BITS_MASK = UINT64_C(0xFFFFFFFF00000000);
+constexpr uint64_t SCORE_BITS_MASK = UINT64_C(0xFFFFFFFF);
+constexpr uint64_t SCORE_32BIT_MAX = UINT64_C(0xFFFFFFFF);
+/* The granularity of timestamp in the lower 32 bits is 1.048576ms. */
+static constexpr int RSHIFT_ON_NANO = 20;
+
+template <class S>
+__forceinline__ __device__ S make_epoch(const S& epoch) {
+  return epoch << EPOCH_BITS;
+}
+
+template <class S>
+__forceinline__ __device__ S make_nano() {
+  return (SCORE_BITS_MASK & (device_nano<S>() >> RSHIFT_ON_NANO));
+}
+
 template <class K, class V, class S>
-__forceinline__ __device__ void update_score(Bucket<K, V, S>* __restrict bucket,
-                                             const int key_pos,
-                                             const S* __restrict scores,
-                                             const int key_idx) {
-  if (scores == nullptr) {
+struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
+  static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+  static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+
+  __forceinline__ __device__ static S desired_when_missed(
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    return device_nano<S>();
+  }
+
+  __forceinline__ __device__ static void update(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& desired_score_when_missed, const bool new_insert) {
+    bucket->scores(key_pos)->store(desired_score_when_missed,
+                                   cuda::std::memory_order_relaxed);
+    return;
+  }
+
+  __forceinline__ __device__ static void update_without_missed(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
     bucket->scores(key_pos)->store(device_nano<S>(),
                                    cuda::std::memory_order_relaxed);
-  } else {
-    bucket->scores(key_pos)->store(scores[key_idx],
-                                   cuda::std::memory_order_relaxed);
+    return;
   }
-  return;
-}
+};
+
+template <class K, class V, class S>
+struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
+  static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
+      cuda::std::memory_order_acquire;
+  static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
+      cuda::std::memory_order_release;
+
+  __forceinline__ __device__ static S desired_when_missed(
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    return static_cast<S>(MAX_SCORE);
+  }
+
+  __forceinline__ __device__ static void update(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& desired_score_when_missed, const bool new_insert) {
+    if (input_scores == nullptr) return;
+    if (new_insert) {
+      bucket->scores(key_pos)->store(input_scores[key_idx],
+                                     cuda::std::memory_order_relaxed);
+    } else {
+      bucket->scores(key_pos)->fetch_add(input_scores[key_idx],
+                                         cuda::std::memory_order_relaxed);
+    }
+    return;
+  }
+
+  __forceinline__ __device__ static void update_without_missed(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    bucket->scores(key_pos)->fetch_add(input_scores[key_idx],
+                                       cuda::std::memory_order_relaxed);
+    return;
+  }
+};
+
+template <class K, class V, class S>
+struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
+  static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+  static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+
+  __forceinline__ __device__ static S desired_when_missed(
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    if (epoch == static_cast<S>(DEFAULT_GLOBAL_EPOCH) &&
+        input_scores != nullptr) {
+      return input_scores[key_idx];
+    }
+    return make_epoch<S>(epoch) | make_nano<S>();
+  }
+
+  __forceinline__ __device__ static void update(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& desired_score_when_missed, const bool new_insert) {
+    bucket->scores(key_pos)->store(desired_score_when_missed,
+                                   cuda::std::memory_order_relaxed);
+    return;
+  }
+
+  __forceinline__ __device__ static void update_without_missed(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    bucket->scores(key_pos)->store(make_epoch<S>(epoch) | make_nano<S>(),
+                                   cuda::std::memory_order_relaxed);
+    return;
+  }
+};
+
+template <class K, class V, class S>
+struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
+  static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+  static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+
+  __forceinline__ __device__ static S desired_when_missed(
+      const S* __restrict const input_scores, const int key_idx,
+      const S epoch) {
+    if (epoch == static_cast<S>(DEFAULT_GLOBAL_EPOCH)) {
+      return input_scores[key_idx];
+    }
+    return make_epoch<S>(epoch) | (input_scores[key_idx] & SCORE_BITS_MASK);
+  }
+
+  __forceinline__ __device__ static void update(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& desired_score_when_missed, const bool new_insert) {
+    S new_score = desired_score_when_missed;
+    if (!new_insert) {
+      new_score =
+          (bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed) &
+           SCORE_BITS_MASK);
+      if (SCORE_32BIT_MAX - new_score >
+          (desired_score_when_missed & SCORE_BITS_MASK)) {
+        new_score += desired_score_when_missed;
+      } else {
+        new_score =
+            (desired_score_when_missed & EPOCH_BITS_MASK) | SCORE_32BIT_MAX;
+      }
+    }
+    bucket->scores(key_pos)->store(new_score, cuda::std::memory_order_relaxed);
+    return;
+  }
+
+  __forceinline__ __device__ static void update_without_missed(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    if (input_scores == nullptr) return;
+    S new_score =
+        (bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed) &
+         SCORE_BITS_MASK);
+    if (SCORE_32BIT_MAX - new_score >
+        (input_scores[key_idx] & SCORE_BITS_MASK)) {
+      new_score +=
+          (make_epoch<S>(epoch) | (input_scores[key_idx] & SCORE_BITS_MASK));
+    } else {
+      new_score = make_epoch<S>(epoch) | SCORE_32BIT_MAX;
+    }
+
+    bucket->scores(key_pos)->store(new_score, cuda::std::memory_order_relaxed);
+    return;
+  }
+};
+
+template <class K, class V, class S>
+struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
+  static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+  static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
+      cuda::std::memory_order_relaxed;
+
+  __forceinline__ __device__ static S desired_when_missed(
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    return input_scores[key_idx];
+  }
+
+  __forceinline__ __device__ static void update(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& desired_score_when_missed, const bool new_insert) {
+    bucket->scores(key_pos)->store(desired_score_when_missed,
+                                   cuda::std::memory_order_relaxed);
+    return;
+  }
+
+  __forceinline__ __device__ static void update_without_missed(
+      Bucket<K, V, S>* __restrict bucket, const int key_pos,
+      const S* __restrict const input_scores, const int key_idx,
+      const S& epoch) {
+    if (input_scores == nullptr) return;
+    bucket->scores(key_pos)->store(input_scores[key_idx],
+                                   cuda::std::memory_order_relaxed);
+    return;
+  }
+};
 
 template <class V, uint32_t TILE_SIZE = 4>
 __device__ __forceinline__ void copy_vector(
@@ -164,12 +367,6 @@ __device__ __forceinline__ void copy_vector(
   for (auto i = g.thread_rank(); i < dim; i += g.size()) {
     dst[i] = src[i];
   }
-
-  //  cuda::barrier<cuda::thread_scope_device> bar;
-  //  init(&bar, 1);
-  //  cuda::memcpy_async(g, dst, src, dim * sizeof(V), bar);
-  //
-  //  bar.arrive_and_wait();
 }
 
 template <class K, class V, class S>
@@ -323,7 +520,7 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
       if (result && (current_score->load(cuda::std::memory_order_relaxed) >
                      global_min_score_val)) {
         current_key->store(local_min_score_key,
-                           cuda::std::memory_order_relaxed);
+                           cuda::std::memory_order_release);
         result = false;
       }
     }
@@ -339,7 +536,9 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
   return OccupyResult::CONTINUE;
 }
 
-template <class K, class V, class S, uint32_t TILE_SIZE = 4>
+template <class K, class V, class S, uint32_t TILE_SIZE,
+          cuda::std::memory_order LOCK_MEM_ORDER,
+          cuda::std::memory_order UNLOCK_MEM_ORDER>
 __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, S>* __restrict__ bucket,
     const K desired_key, const S desired_score, K& evicted_key,
@@ -369,8 +568,8 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     do {
       expected_key = desired_key;
       result = current_key->compare_exchange_strong(
-          expected_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          expected_key, static_cast<K>(LOCKED_KEY), LOCK_MEM_ORDER,
+          cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
@@ -389,10 +588,9 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     temp_min_score_val =
         bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
     if (temp_min_score_val < local_min_score_val) {
-      while ((expected_key = bucket->keys(key_pos)->load(
-                  cuda::std::memory_order_relaxed)) ==
-             static_cast<K>(LOCKED_KEY))
-        ;
+      while ((expected_key = bucket->keys(key_pos)->load(LOCK_MEM_ORDER)) ==
+             static_cast<K>(LOCKED_KEY)) {
+      };
       local_min_score_key = expected_key;
       local_min_score_val = temp_min_score_val;
       local_min_score_pos = key_pos;
@@ -415,14 +613,13 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       current_score = bucket->scores(local_min_score_pos);
       evicted_key = local_min_score_key;
       result = current_key->compare_exchange_strong(
-          local_min_score_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          local_min_score_key, static_cast<K>(LOCKED_KEY), LOCK_MEM_ORDER,
+          cuda::std::memory_order_relaxed);
 
       // Need to recover when fail.
       if (result && (current_score->load(cuda::std::memory_order_relaxed) >
                      global_min_score_val)) {
-        current_key->store(local_min_score_key,
-                           cuda::std::memory_order_relaxed);
+        current_key->store(local_min_score_key, UNLOCK_MEM_ORDER);
         result = false;
       }
     }
@@ -438,7 +635,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
   return OccupyResult::CONTINUE;
 }
 
-template <class K, class V, class S, uint32_t TILE_SIZE = 4>
+template <class K, class V, class S, uint32_t TILE_SIZE>
 __device__ __forceinline__ OccupyResult find_and_lock_for_update(
     cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, S>* __restrict__ bucket,
     const K desired_key, const size_t start_idx, int& key_pos, int& src_lane,

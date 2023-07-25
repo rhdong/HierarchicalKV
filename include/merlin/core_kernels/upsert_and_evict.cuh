@@ -21,15 +21,17 @@
 namespace nv {
 namespace merlin {
 
-template <class K, class V, class S, uint32_t TILE_SIZE = 4>
+template <class K, class V, class S, int Strategy, uint32_t TILE_SIZE = 4>
 __global__ void upsert_and_evict_kernel_with_io_core(
     const Table<K, V, S>* __restrict table, const size_t bucket_max_size,
     const size_t buckets_num, const size_t dim, const K* __restrict keys,
     const V* __restrict values, const S* __restrict scores,
     K* __restrict evicted_keys, V* __restrict evicted_values,
-    S* __restrict evicted_scores, size_t N) {
+    S* __restrict evicted_scores, const S global_epoch, size_t N) {
   auto g = cg::tiled_partition<TILE_SIZE>(cg::this_thread_block());
   int* buckets_size = table->buckets_size;
+
+  using ScoreFunctor = ScoreFunctor<K, V, S, Strategy>;
 
   for (size_t t = (blockIdx.x * blockDim.x) + threadIdx.x; t < N;
        t += blockDim.x * gridDim.x) {
@@ -41,7 +43,7 @@ __global__ void upsert_and_evict_kernel_with_io_core(
     if (IS_RESERVED_KEY(insert_key)) continue;
 
     const S insert_score =
-        scores != nullptr ? scores[key_idx] : static_cast<S>(MAX_SCORE);
+        ScoreFunctor::desired_when_missed(scores, key_idx, global_epoch);
     const V* insert_value = values + key_idx * dim;
 
     size_t bkt_idx = 0;
@@ -62,7 +64,9 @@ __global__ void upsert_and_evict_kernel_with_io_core(
             key_pos, src_lane, bucket_max_size);
       } else {
         start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
-        occupy_result = find_and_lock_when_full<K, V, S, TILE_SIZE>(
+        occupy_result = find_and_lock_when_full<K, V, S, TILE_SIZE,
+                                                ScoreFunctor::LOCK_MEM_ORDER,
+                                                ScoreFunctor::UNLOCK_MEM_ORDER>(
             g, bucket, insert_key, insert_score, evicted_key, start_idx,
             key_pos, src_lane, bucket_max_size);
       }
@@ -70,8 +74,10 @@ __global__ void upsert_and_evict_kernel_with_io_core(
     } while (occupy_result == OccupyResult::CONTINUE);
 
     if (occupy_result == OccupyResult::REFUSED) {
-      evicted_keys[key_idx] = insert_key;
-      evicted_scores[key_idx] = insert_score;
+      if (g.thread_rank() == 0) {
+        evicted_keys[key_idx] = insert_key;
+        evicted_scores[key_idx] = insert_score;
+      }
       copy_vector<V, TILE_SIZE>(g, insert_value, evicted_values + key_idx * dim,
                                 dim);
       continue;
@@ -86,9 +92,9 @@ __global__ void upsert_and_evict_kernel_with_io_core(
     if (occupy_result == OccupyResult::EVICT) {
       if (g.thread_rank() == src_lane) {
         evicted_keys[key_idx] = evicted_key;
-      }
-      if (scores != nullptr) {
-        evicted_scores[key_idx] = scores[key_idx];
+        if (scores != nullptr) {
+          evicted_scores[key_idx] = scores[key_idx];
+        }
       }
       copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
                                 evicted_values + key_idx * dim, dim);
@@ -97,15 +103,16 @@ __global__ void upsert_and_evict_kernel_with_io_core(
     copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
                               dim);
     if (g.thread_rank() == src_lane) {
-      update_score(bucket, key_pos, scores, key_idx);
+      ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
+                           (occupy_result != OccupyResult::DUPLICATE));
       bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
       (bucket->keys(key_pos))
-          ->store(insert_key, cuda::std::memory_order_relaxed);
+          ->store(insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }
 }
 
-template <typename K, typename V, typename S>
+template <typename K, typename V, typename S, int Strategy>
 struct SelectUpsertAndEvictKernelWithIO {
   static void execute_kernel(
       const float& load_factor, const int& block_size,
@@ -114,34 +121,33 @@ struct SelectUpsertAndEvictKernelWithIO {
       const Table<K, V, S>* __restrict table, const K* __restrict keys,
       const V* __restrict values, const S* __restrict scores,
       K* __restrict evicted_keys, V* __restrict evicted_values,
-      S* __restrict evicted_scores) {
+      S* __restrict evicted_scores, const S global_epoch) {
     if (load_factor <= 0.5) {
       const unsigned int tile_size = 4;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-      upsert_and_evict_kernel_with_io_core<K, V, S, tile_size>
+      upsert_and_evict_kernel_with_io_core<K, V, S, Strategy, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
               table, bucket_max_size, buckets_num, dim, keys, values, scores,
-              evicted_keys, evicted_values, evicted_scores, N);
+              evicted_keys, evicted_values, evicted_scores, global_epoch, N);
 
     } else if (load_factor <= 0.875) {
       const unsigned int tile_size = 8;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-      upsert_and_evict_kernel_with_io_core<K, V, S, tile_size>
+      upsert_and_evict_kernel_with_io_core<K, V, S, Strategy, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
               table, bucket_max_size, buckets_num, dim, keys, values, scores,
-              evicted_keys, evicted_values, evicted_scores, N);
-
+              evicted_keys, evicted_values, evicted_scores, global_epoch, N);
     } else {
       const unsigned int tile_size = 32;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
-      upsert_and_evict_kernel_with_io_core<K, V, S, tile_size>
+      upsert_and_evict_kernel_with_io_core<K, V, S, Strategy, tile_size>
           <<<grid_size, block_size, 0, stream>>>(
               table, bucket_max_size, buckets_num, dim, keys, values, scores,
-              evicted_keys, evicted_values, evicted_scores, N);
+              evicted_keys, evicted_values, evicted_scores, global_epoch, N);
     }
     return;
   }
