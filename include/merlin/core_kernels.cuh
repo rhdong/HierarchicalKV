@@ -123,6 +123,29 @@ void realloc(P* ptr, size_t old_size, size_t new_size,
   return;
 }
 
+template <class P>
+void realloc_host(P* ptr, size_t old_size, size_t new_size,
+                  BaseAllocator* allocator) {
+  // Truncate old_size to limit dowstream copy ops.
+  old_size = std::min(old_size, new_size);
+
+  // Alloc new buffer and copy at old data.
+  char* new_ptr = nullptr;
+  allocator->alloc(MemoryType::Host, (void**)&new_ptr, new_size);
+
+  if (*ptr != nullptr) {
+    std::memcpy(new_ptr, *ptr, old_size);
+    allocator->free(MemoryType::Host, *ptr);
+  }
+
+  // Zero-fill remainder.
+  std::memset(new_ptr + old_size, 0, new_size - old_size);
+
+  // Switch to new pointer.
+  *ptr = reinterpret_cast<P>(new_ptr);
+  return;
+}
+
 /* Initialize the buckets with index from start to end. */
 template <class K, class V, class S>
 void initialize_buckets(Table<K, V, S>** table, BaseAllocator* allocator,
@@ -145,7 +168,7 @@ void initialize_buckets(Table<K, V, S>** table, BaseAllocator* allocator,
       ((*table)->bucket_max_size * sizeof(V) * (*table)->dim);
   size_t num_of_allocated_buckets = 0;
 
-  realloc<V**>(
+  realloc_host<V**>(
       &((*table)->slices), (*table)->num_of_memory_slices * sizeof(V*),
       ((*table)->num_of_memory_slices + num_of_memory_slices) * sizeof(V*),
       allocator);
