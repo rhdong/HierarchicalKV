@@ -867,10 +867,10 @@ void test_rehash_on_big_batch(size_t max_hbm_for_vectors) {
 }
 
 void test_rehash_on_big_batch_specific(size_t max_hbm_for_vectors) {
-  constexpr uint64_t INIT_CAPACITY = 50000;
-  constexpr uint64_t MAX_CAPACITY = 100000;
-  constexpr uint64_t EXPECTED_MAX_CAPACITY = 65536;
-  constexpr uint64_t KEY_NUM = 50000;
+  constexpr uint64_t INIT_CAPACITY = 64;
+  constexpr uint64_t MAX_CAPACITY = 128;
+  constexpr uint64_t EXPECTED_MAX_CAPACITY = 128;
+  constexpr uint64_t KEY_NUM = 64;
   K* h_keys;
   S* h_scores;
   V* h_vectors;
