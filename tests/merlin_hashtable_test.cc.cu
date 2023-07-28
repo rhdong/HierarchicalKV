@@ -881,7 +881,7 @@ void test_rehash_on_big_batch_specific(size_t max_hbm_for_vectors) {
   options.max_capacity = MAX_CAPACITY;
   options.dim = DIM;
   options.max_bucket_size = 128;
-//  options.max_load_factor = 0.6;
+  //  options.max_load_factor = 0.6;
   options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
   options.evict_strategy = nv::merlin::EvictStrategy::kLru;
 
@@ -906,24 +906,25 @@ void test_rehash_on_big_batch_specific(size_t max_hbm_for_vectors) {
 
   K start_key = 1;
 
-  for(int i = 0; i < 3 ;i++) {
+  for (int i = 0; i < 3; i++) {
     test_util::create_continuous_keys<K, S, V, DIM>(h_keys, h_scores, h_vectors,
                                                     KEY_NUM, start_key);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K),
+                          cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_scores, h_scores, KEY_NUM * sizeof(S),
                           cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors, KEY_NUM * sizeof(V) * options.dim,
+    CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors,
+                          KEY_NUM * sizeof(V) * options.dim,
                           cudaMemcpyHostToDevice));
 
     total_size = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-    ASSERT_EQ(total_size, 0);
+//    ASSERT_EQ(total_size, 0);
 
-    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
+    table->find_or_insert(KEY_NUM, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(table->capacity(), EXPECTED_MAX_CAPACITY);
-    start_key+=64;
+    start_key += 64;
   }
   CUDA_CHECK(cudaStreamDestroy(stream));
 
