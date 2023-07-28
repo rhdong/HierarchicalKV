@@ -920,7 +920,7 @@ void test_rehash_on_big_batch_specific(size_t max_hbm_for_vectors) {
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(total_size, 0);
 
-    table->find_or_insert(KEY_NUM, d_keys, d_vectors, nullptr, stream);
+    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(table->capacity(), EXPECTED_MAX_CAPACITY);
     start_key+=64;
