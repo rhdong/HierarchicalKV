@@ -200,7 +200,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
       cuda::std::memory_order_relaxed;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_release;
 
   __forceinline__ __device__ static S desired_when_missed(
       const S* __restrict const input_scores, const int key_idx,
