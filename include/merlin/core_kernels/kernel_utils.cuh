@@ -198,7 +198,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
 template <class K, class V, class S>
 struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_acquire;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
       cuda::std::memory_order_release;
 
