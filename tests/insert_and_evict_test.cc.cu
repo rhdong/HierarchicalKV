@@ -1587,6 +1587,26 @@ void test_insert_and_evict_run_with_batch_find() {
   CUDA_CHECK(cudaStreamDestroy(find_stream));
 }
 
+void test_table_mem() {
+
+  TableOptions opt;
+
+  opt.init_capacity = 800000000;
+  opt.max_capacity = 800000000;
+  opt.max_load_factor=0.8;
+  opt.max_hbm_for_vectors = nv::merlin::MB(512);
+  opt.dim = 32;
+
+  using Table = nv::merlin::HashTable<i64, f32, u64, EvictStrategy::kLru>;
+
+  std::unique_ptr<Table> table = std::make_unique<Table>();
+  table->init(opt);
+  size_t free, total;
+  CUDA_CHECK(cudaSetDevice(0));
+  CUDA_CHECK(cudaMemGetInfo(&free, &total));
+  std::cout << "free:" << free << "total:" << total << std::endl;
+}
+
 TEST(InsertAndEvictTest, test_insert_and_evict_basic) {
   test_insert_and_evict_basic();
 }
@@ -1617,4 +1637,7 @@ TEST(InsertAndEvictTest, test_insert_and_evict_with_export_batch) {
 
 TEST(InsertAndEvictTest, test_insert_and_evict_run_with_batch_find) {
   test_insert_and_evict_run_with_batch_find();
+}
+TEST(InsertAndEvictTest, test_table_mem) {
+  test_table_mem();
 }
