@@ -2715,7 +2715,7 @@ void test_rehash_on_irregular_batch(size_t max_hbm_for_vectors) {
   options.max_bucket_size = 128;
   options.max_load_factor = 0.5;
   options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
-  using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kLru>;
+  options.evict_strategy = EvictStrategy::kLru;
 
   CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
   CUDA_CHECK(cudaMallocHost(&h_scores, KEY_NUM * sizeof(S)));
