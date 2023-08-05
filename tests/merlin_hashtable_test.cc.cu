@@ -2755,22 +2755,13 @@ void test_rehash_on_irregular_batch(size_t max_hbm_for_vectors) {
   CUDA_CHECK(cudaStreamSynchronize(stream));
   ASSERT_EQ(total_size, 0);
 
-//  table->insert_or_assign(INIT_KEY_NUM, d_keys, d_vectors, d_scores, stream);
-//  CUDA_CHECK(cudaStreamSynchronize(stream));
-//  expected_size = INIT_KEY_NUM;
-//
-//  total_size = table->size(stream);
-//  CUDA_CHECK(cudaDeviceSynchronize());
-//  ASSERT_EQ(total_size, expected_size);
-//  ASSERT_EQ(table->capacity(), (INIT_CAPACITY * 2));
-
   table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   expected_size = KEY_NUM;
 
   total_size = table->size(stream);
   CUDA_CHECK(cudaDeviceSynchronize());
-  ASSERT_EQ(table->capacity(), KEY_NUM * 2);
+  ASSERT_EQ(table->capacity(), MAX_CAPACITY);
   ASSERT_EQ(total_size, expected_size);
 
   dump_counter = table->export_batch(table->capacity(), 0, d_keys, d_vectors,
