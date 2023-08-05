@@ -2700,7 +2700,7 @@ void test_bucket_size(bool load_scores = true) {
 void test_rehash_on_irregular_batch(size_t max_hbm_for_vectors) {
   constexpr uint64_t KEY_NUM = 1023 * 2;
   constexpr uint64_t INIT_CAPACITY = KEY_NUM;
-  constexpr uint64_t MAX_CAPACITY = 2 * INIT_CAPACITY;
+  constexpr uint64_t MAX_CAPACITY = 4096;
   K* h_keys;
   S* h_scores;
   V* h_vectors;
