@@ -505,14 +505,15 @@ class HashTable {
       size_type block_size = options_.block_size;
       size_type grid_size = SAFE_GET_GRID_SIZE(n, block_size);
       CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
-                                n * sizeof(K), stream));
+                                 n * sizeof(K), stream));
       using Selector =
-            SelectUpsertAndEvictKernelWithIO<key_type, value_type, score_type>;
+          SelectUpsertAndEvictKernelWithIO<key_type, value_type, score_type>;
 
-      Selector::execute_kernel(
-          load_factor, options_.block_size, options_.max_bucket_size,
-          table_->buckets_num, options_.dim, stream, n, d_table_, table_->buckets,
-          keys, values, scores, evicted_keys, evicted_values, evicted_scores);
+      Selector::execute_kernel(load_factor, options_.block_size,
+                               options_.max_bucket_size, table_->buckets_num,
+                               options_.dim, stream, n, d_table_,
+                               table_->buckets, keys, values, scores,
+                               evicted_keys, evicted_values, evicted_scores);
 
       keys_not_empty<K>
           <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);

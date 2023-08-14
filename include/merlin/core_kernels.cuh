@@ -71,9 +71,6 @@ __global__ void create_atomic_scores(Bucket<K, V, S>* __restrict buckets,
       new (buckets[start + tid].scores(i))
           AtomicScore<S>{static_cast<S>(EMPTY_SCORE)};
     }
-    new (&(buckets[start + tid].min_score))
-        AtomicScore<S>{static_cast<S>(EMPTY_SCORE)};
-    new (&(buckets[start + tid].min_pos)) AtomicPos<int>{1};
   }
 }
 
@@ -450,32 +447,6 @@ __forceinline__ __device__ void defragmentation_for_rehash(
 }
 
 template <class K, class V, class S, uint32_t TILE_SIZE = 4>
-__forceinline__ __device__ void refresh_bucket_score(
-    cg::thread_block_tile<TILE_SIZE> g, Bucket<K, V, S>* bucket,
-    const size_t bucket_max_size) {
-  S min_val = MAX_SCORE;
-  int min_pos = 0;
-
-  for (int i = g.thread_rank(); i < bucket_max_size; i += TILE_SIZE) {
-    const K key = (bucket->keys(i))->load(cuda::std::memory_order_relaxed);
-    if (key == static_cast<K>(EMPTY_KEY) ||
-        key == static_cast<K>(RECLAIM_KEY)) {
-      continue;
-    }
-    const S score = bucket->scores(i)->load(cuda::std::memory_order_relaxed);
-    if (score < min_val) {
-      min_pos = i;
-      min_val = score;
-    }
-  }
-  S global_min_val = cg::reduce(g, min_val, cg::less<S>());
-  if (min_val == global_min_val) {
-    bucket->min_pos.store(min_pos, cuda::std::memory_order_relaxed);
-    bucket->min_score.store(min_val, cuda::std::memory_order_relaxed);
-  }
-}
-
-template <class K, class V, class S, uint32_t TILE_SIZE = 4>
 __forceinline__ __device__ void move_key_to_new_bucket(
     cg::thread_block_tile<TILE_SIZE> g, int rank, const K& key, const S& score,
     const V* __restrict vector, Bucket<K, V, S>* __restrict new_bucket,
@@ -484,7 +455,6 @@ __forceinline__ __device__ void move_key_to_new_bucket(
     const size_t buckets_num, const size_t dim) {
   uint32_t key_pos;
   unsigned empty_vote;
-  int local_size;
   int src_lane;
 
   for (uint32_t tile_offset = 0; tile_offset < bucket_max_size;
@@ -498,18 +468,12 @@ __forceinline__ __device__ void move_key_to_new_bucket(
       src_lane = __ffs(empty_vote) - 1;
       key_pos =
           (new_start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-      local_size = buckets_size[new_bkt_idx];
       if (rank == src_lane) {
         new_bucket->digests(key_pos)[0] = get_digest<K>(key);
         new_bucket->keys(key_pos)->store(key, cuda::std::memory_order_relaxed);
         new_bucket->scores(key_pos)->store(score,
                                            cuda::std::memory_order_relaxed);
         atomicAdd(&(buckets_size[new_bkt_idx]), 1);
-      }
-      local_size = g.shfl(local_size, src_lane);
-      if (local_size >= bucket_max_size) {
-        refresh_bucket_score<K, V, S, TILE_SIZE>(g, new_bucket,
-                                                 bucket_max_size);
       }
       copy_vector<V, TILE_SIZE>(g, vector, new_bucket->vectors + key_pos * dim,
                                 dim);
@@ -726,7 +690,6 @@ __global__ void accum_kernel(
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
     int key_pos = -1;
-    int local_size = 0;
     bool local_found = false;
     unsigned found_or_empty_vote = 0;
 
@@ -759,7 +722,6 @@ __global__ void accum_kernel(
       if (found_or_empty_vote) {
         src_lane = __ffs(found_or_empty_vote) - 1;
         key_pos = (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-        local_size = buckets_size[bkt_idx];
         if (rank == src_lane) {
           if (current_key == insert_key) {
             local_found = true;
@@ -771,15 +733,10 @@ __global__ void accum_kernel(
                 ->store(insert_key, cuda::std::memory_order_relaxed);
             if (!local_found) {
               buckets_size[bkt_idx]++;
-              local_size++;
             }
             *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
             update_score(bucket, key_pos, scores, key_idx);
           }
-        }
-        local_size = g.shfl(local_size, src_lane);
-        if (local_size >= bucket_max_size) {
-          refresh_bucket_score<K, V, S, TILE_SIZE>(g, bucket, bucket_max_size);
         }
         break;
       }
@@ -793,7 +750,6 @@ __global__ void accum_kernel(
         *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
         update_score(bucket, key_pos, scores, key_idx);
       }
-      refresh_bucket_score<K, V, S, TILE_SIZE>(g, bucket, bucket_max_size);
     }
     unlock<Mutex, TILE_SIZE>(g, table->locks[bkt_idx]);
   }
