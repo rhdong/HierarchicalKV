@@ -967,10 +967,10 @@ void CheckInsertAndEvictOnEpochLfu(
           ? nullptr
           : scores,
       evicted_keys, evicted_values, evicted_scores, stream, global_epoch);
-  evict_buffer->SyncData(false, stream);
-  CUDA_CHECK(cudaStreamSynchronize(stream));
   auto end = std::chrono::steady_clock::now();
   auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+  evict_buffer->SyncData(false, stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
 
   {
     table->find(len, pre_data_buffer->keys_ptr(), values, d_tmp_founds,
