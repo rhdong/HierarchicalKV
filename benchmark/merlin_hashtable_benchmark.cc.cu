@@ -186,7 +186,7 @@ float test_one_api(std::shared_ptr<Table>& table, const API_Select api,
         break;
       }
       case API_Select::assign: {
-        table->assign(key_num_per_op_warmup, d_keys, d_def_val, d_scores,
+        table->assign(key_num_per_op_warmup, d_keys, d_scores,
                       stream);
         CUDA_CHECK(cudaStreamSynchronize(stream));
         break;
@@ -293,7 +293,7 @@ float test_one_api(std::shared_ptr<Table>& table, const API_Select api,
     }
     case API_Select::assign: {
       timer.start();
-      table->assign(key_num_per_op, d_keys, d_def_val, d_scores, stream);
+      table->assign(key_num_per_op, d_keys, d_scores, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       timer.end();
       break;
