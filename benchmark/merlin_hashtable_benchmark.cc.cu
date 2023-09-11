@@ -53,7 +53,7 @@ std::string rep(int n) { return std::string(n, ' '); }
 using K = uint64_t;
 using S = uint64_t;
 using V = float;
-using MerlinHashTable = nv::merlin::HashTable<K, V, S>;
+using MerlinHashTable = nv::merlin::HashTable<K, V, S, Sm70>;
 using TableOptions = nv::merlin::HashTableOptions;
 
 float test_one_api(std::shared_ptr<MerlinHashTable>& table,
