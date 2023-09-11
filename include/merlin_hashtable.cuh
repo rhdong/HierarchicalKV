@@ -150,7 +150,7 @@ static constexpr auto& thrust_par = thrust::cuda::par;
  *
  */
 template <typename K, typename V, typename S = uint64_t,
-          typename ArchTag = Sm80>
+          typename ArchTag = Sm70>
 class HashTable {
  public:
   using size_type = size_t;
