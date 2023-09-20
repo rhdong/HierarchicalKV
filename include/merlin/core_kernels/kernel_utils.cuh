@@ -250,8 +250,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
       BUCKET* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& desired_score_when_missed, const bool new_insert) {
-    bucket->scores(key_pos)->store(desired_score_when_missed,
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(desired_score_when_missed, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -260,9 +260,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
       const S* __restrict const input_scores, const uint32_t& key_idx,
       const S& desired_score_when_missed, const uint32_t& bucket_capacity,
       const D& digest, const bool new_insert) {
-    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos);
-    D* dst_digest_ptr =
-        BUCKET::digests(bucket_key_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
+    D* dst_digest_ptr = BUCKET::digests(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_digest_ptr, digest);
     __stcg(dst_score_ptr, device_nano<S>());
@@ -273,8 +272,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
       BUCKET* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& epoch) {
-    bucket->scores(key_pos)->store(device_nano<S>(),
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(device_nano<S>(), cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -282,8 +281,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
       K* bucket_keys_ptr, const uint32_t bucket_capacity,
       const uint32_t key_pos, const S* __restrict const input_scores,
       const int key_idx, const S& epoch) {
-    S* dst_score_ptr =
-        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, device_nano<S>());
   }
@@ -309,11 +307,11 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
       const S& desired_score_when_missed, const bool new_insert) {
     if (input_scores == nullptr) return;
     if (new_insert) {
-      bucket->scores(key_pos)->store(input_scores[key_idx],
-                                     cuda::std::memory_order_relaxed);
+      bucket->scores(key_pos, bucket_max_size)
+          ->store(input_scores[key_idx], cuda::std::memory_order_relaxed);
     } else {
-      bucket->scores(key_pos)->fetch_add(input_scores[key_idx],
-                                         cuda::std::memory_order_relaxed);
+      bucket->scores(key_pos, bucket_max_size)
+          ->fetch_add(input_scores[key_idx], cuda::std::memory_order_relaxed);
     }
     return;
   }
@@ -325,9 +323,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
       const D& digest, const bool new_insert) {
     if (input_scores == nullptr) return;
 
-    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos);
-    D* dst_digest_ptr =
-        BUCKET::digests(bucket_key_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
+    D* dst_digest_ptr = BUCKET::digests(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_digest_ptr, digest);
     if (new_insert) {
@@ -343,8 +340,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
       const S* __restrict const input_scores, const int key_idx,
       const S& epoch) {
     if (input_scores == nullptr) return;
-    bucket->scores(key_pos)->fetch_add(input_scores[key_idx],
-                                       cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->fetch_add(input_scores[key_idx], cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -353,8 +350,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
       const uint32_t key_pos, const S* __restrict const input_scores,
       const int key_idx, const S& epoch) {
     if (input_scores == nullptr) return;
-    S* dst_score_ptr =
-        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, input_scores[key_idx] + *dst_score_ptr);
   }
@@ -382,8 +378,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
       BUCKET* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& desired_score_when_missed, const bool new_insert) {
-    bucket->scores(key_pos)->store(desired_score_when_missed,
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(desired_score_when_missed, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -392,9 +388,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
       const S* __restrict const input_scores, const uint32_t& key_idx,
       const S& desired_score_when_missed, const uint32_t& bucket_capacity,
       const D& digest, const bool new_insert) {
-    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos);
-    D* dst_digest_ptr =
-        BUCKET::digests(bucket_key_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
+    D* dst_digest_ptr = BUCKET::digests(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_digest_ptr, digest);
     __stcg(dst_score_ptr, desired_score_when_missed);
@@ -405,8 +400,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
       BUCKET* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& epoch) {
-    bucket->scores(key_pos)->store(make_epoch<S>(epoch) | make_nano<S>(),
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(make_epoch<S>(epoch) | make_nano<S>(),
+                cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -414,8 +410,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
       K* bucket_keys_ptr, const uint32_t bucket_capacity,
       const uint32_t key_pos, const S* __restrict const input_scores,
       const int key_idx, const S& epoch) {
-    S* dst_score_ptr =
-        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, make_epoch<S>(epoch) | make_nano<S>());
   }
@@ -444,9 +439,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       const S& desired_score_when_missed, const bool new_insert) {
     S new_score = desired_score_when_missed;
     if (!new_insert) {
-      new_score =
-          (bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed) &
-           SCORE_BITS_MASK);
+      new_score = (bucket->scores(key_pos, bucket_max_size)
+                       ->load(cuda::std::memory_order_relaxed) &
+                   SCORE_BITS_MASK);
       if (SCORE_32BIT_MAX - new_score >
           (desired_score_when_missed & SCORE_BITS_MASK)) {
         new_score += desired_score_when_missed;
@@ -455,7 +450,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
             (desired_score_when_missed & EPOCH_BITS_MASK) | SCORE_32BIT_MAX;
       }
     }
-    bucket->scores(key_pos)->store(new_score, cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(new_score, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -465,9 +461,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       const S& desired_score_when_missed, const uint32_t& bucket_capacity,
       const D& digest, const bool new_insert) {
     S new_score = desired_score_when_missed;
-    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos);
-    D* dst_digest_ptr =
-        BUCKET::digests(bucket_key_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
+    D* dst_digest_ptr = BUCKET::digests(key_pos, bucket_capacity);
     if (!new_insert) {
       new_score = (*dst_score_ptr & SCORE_BITS_MASK);
       if (SCORE_32BIT_MAX - new_score >
@@ -489,9 +484,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       const S* __restrict const input_scores, const int key_idx,
       const S& epoch) {
     if (input_scores == nullptr) return;
-    S new_score =
-        (bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed) &
-         SCORE_BITS_MASK);
+    S new_score = (bucket->scores(key_pos, bucket_max_size)
+                       ->load(cuda::std::memory_order_relaxed) &
+                   SCORE_BITS_MASK);
     if (SCORE_32BIT_MAX - new_score >
         (input_scores[key_idx] & SCORE_BITS_MASK)) {
       new_score +=
@@ -500,7 +495,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       new_score = make_epoch<S>(epoch) | SCORE_32BIT_MAX;
     }
 
-    bucket->scores(key_pos)->store(new_score, cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(new_score, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -509,8 +505,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       const uint32_t key_pos, const S* __restrict const input_scores,
       const int key_idx, const S& epoch) {
     if (input_scores == nullptr) return;
-    S* dst_score_ptr =
-        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
     S new_score = *dst_score_ptr & SCORE_BITS_MASK;
     if (SCORE_32BIT_MAX - new_score >
         (input_scores[key_idx] & SCORE_BITS_MASK)) {
@@ -542,8 +537,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
       BUCKET* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& desired_score_when_missed, const bool new_insert) {
-    bucket->scores(key_pos)->store(desired_score_when_missed,
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(desired_score_when_missed, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -552,9 +547,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
       const S* __restrict const input_scores, const uint32_t& key_idx,
       const S& desired_score_when_missed, const uint32_t& bucket_capacity,
       const D& digest, const bool new_insert) {
-    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos);
-    D* dst_digest_ptr =
-        BUCKET::digests(bucket_key_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
+    D* dst_digest_ptr = BUCKET::digests(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_digest_ptr, digest);
     __stcg(dst_score_ptr, desired_score_when_missed);
@@ -565,8 +559,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
       const S* __restrict const input_scores, const int key_idx,
       const S& epoch) {
     if (input_scores == nullptr) return;
-    bucket->scores(key_pos)->store(input_scores[key_idx],
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos, bucket_max_size)
+        ->store(input_scores[key_idx], cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -575,8 +569,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
       const uint32_t key_pos, const S* __restrict const input_scores,
       const int key_idx, const S& epoch) {
     if (input_scores == nullptr) return;
-    S* dst_score_ptr =
-        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    S* dst_score_ptr = BUCKET::scores(key_pos, bucket_capacity);
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, input_scores[key_idx]);
   }
@@ -617,7 +610,7 @@ __device__ __forceinline__ OccupyResult find_without_lock(
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
-    current_key = bucket->keys(key_pos);
+    current_key = bucket->keys(key_pos, bucket_max_size);
 
     expected_key = current_key->load(cuda::std::memory_order_relaxed);
     vote = g.ballot(desired_key == expected_key);
@@ -656,7 +649,7 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
-    current_key = bucket->keys(key_pos);
+    current_key = bucket->keys(key_pos, bucket_max_size);
 
     // Step 1: try find and lock the desired_key.
     do {
@@ -704,13 +697,13 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
-    current_score = bucket->scores(key_pos);
+    current_score = bucket->scores(bucket_max_size, key_pos);
 
     // Step 4: record min score location.
     temp_min_score_val = current_score->load(cuda::std::memory_order_relaxed);
     if (temp_min_score_val < local_min_score_val) {
       expected_key =
-          bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed);
+          bucket->keys(key_pos, bucket_max_size)->load(cuda::std::memory_order_relaxed);
       if (expected_key != static_cast<K>(LOCKED_KEY) &&
           expected_key != static_cast<K>(EMPTY_KEY)) {
         local_min_score_key = expected_key;
@@ -731,8 +724,8 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
     result = false;
     if (src_lane == g.thread_rank()) {
       // TBD: Here can be compare_exchange_weak. Do benchmark.
-      current_key = bucket->keys(local_min_score_pos);
-      current_score = bucket->scores(local_min_score_pos);
+      current_key = bucket->keys(local_min_score_pos, bucket_max_size);
+      current_score = bucket->scores(local_min_score_pos, bucket_max_size);
       evicted_key = local_min_score_key;
       result = current_key->compare_exchange_strong(
           local_min_score_key, static_cast<K>(LOCKED_KEY),
@@ -784,7 +777,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
-    current_key = bucket->keys(key_pos);
+    current_key = bucket->keys(key_pos, bucket_max_size);
 
     // Step 1: try find and lock the desired_key.
     do {
@@ -807,11 +800,13 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
     // Step 2: record min score location.
-    temp_min_score_val =
-        bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
+    temp_min_score_val = bucket->scores(bucket_max_size, key_pos)
+                             ->load(cuda::std::memory_order_relaxed);
     if (temp_min_score_val < local_min_score_val) {
-      while ((expected_key = bucket->keys(key_pos)->load(LOCK_MEM_ORDER)) ==
-             static_cast<K>(LOCKED_KEY)) {
+      while (
+          (expected_key =
+               bucket->keys(key_pos, bucket_max_size)->load(LOCK_MEM_ORDER)) ==
+          static_cast<K>(LOCKED_KEY)) {
       };
       local_min_score_key = expected_key;
       local_min_score_val = temp_min_score_val;
@@ -831,8 +826,8 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     result = false;
     if (src_lane == g.thread_rank()) {
       // TBD: Here can be compare_exchange_weak. Do benchmark.
-      current_key = bucket->keys(local_min_score_pos);
-      current_score = bucket->scores(local_min_score_pos);
+      current_key = bucket->keys(local_min_score_pos, bucket_max_size);
+      current_score = bucket->scores(local_min_score_pos, bucket_max_size);
       evicted_key = local_min_score_key;
       result = current_key->compare_exchange_strong(
           local_min_score_key, static_cast<K>(LOCKED_KEY), LOCK_MEM_ORDER,
@@ -873,7 +868,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_for_update(
        tile_offset += TILE_SIZE) {
     key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
 
-    current_key = bucket->keys(key_pos);
+    current_key = bucket->keys(key_pos, bucket_max_size);
 
     // Step 1: try find and lock the desired_key.
     do {

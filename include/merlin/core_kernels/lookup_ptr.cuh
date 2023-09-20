@@ -65,8 +65,8 @@ __global__ void lookup_ptr_kernel(const Table<K, V, S>* __restrict table,
       if (rank == src_lane) {
         values[key_idx] = bucket->vectors + key_pos * dim;
         if (scores != nullptr) {
-          *(scores + key_idx) =
-              bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
+          *(scores + key_idx) = bucket->scores(key_pos, bucket_max_size)
+                                    ->load(cuda::std::memory_order_relaxed);
         }
         if (found != nullptr) {
           *(found + key_idx) = true;

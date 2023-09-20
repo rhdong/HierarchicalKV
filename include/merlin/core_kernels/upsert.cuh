@@ -85,8 +85,8 @@ __global__ void upsert_kernel_with_io_core(
     if (g.thread_rank() == src_lane) {
       ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
                            (occupy_result != OccupyResult::DUPLICATE));
-      bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
-      (bucket->keys(key_pos))
+      bucket->digests(key_pos, bucket_max_size)[0] = get_digest<K>(insert_key);
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }
@@ -200,8 +200,8 @@ __global__ void upsert_kernel(const Table<K, V, S>* __restrict table,
       *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
       ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
                            (occupy_result != OccupyResult::DUPLICATE));
-      bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
-      (bucket->keys(key_pos))
+      bucket->digests(key_pos, bucket_max_size)[0] = get_digest<K>(insert_key);
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(insert_key, cuda::std::memory_order_relaxed);
     }
   }

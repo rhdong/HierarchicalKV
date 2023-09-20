@@ -89,8 +89,8 @@ __global__ void find_or_insert_kernel_with_io(
       copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
                                 find_or_insert_value, dim);
       if (scores != nullptr && g.thread_rank() == src_lane) {
-        *(scores + key_idx) =
-            bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
+        *(scores + key_idx) = bucket->scores(key_pos, bucket_max_size)
+                                  ->load(cuda::std::memory_order_relaxed);
       }
     } else {
       copy_vector<V, TILE_SIZE>(g, find_or_insert_value,
@@ -103,8 +103,9 @@ __global__ void find_or_insert_kernel_with_io(
     }
 
     if (g.thread_rank() == src_lane) {
-      bucket->digests(key_pos)[0] = get_digest<K>(find_or_insert_key);
-      (bucket->keys(key_pos))
+      bucket->digests(key_pos, bucket_max_size)[0] =
+          get_digest<K>(find_or_insert_key);
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(find_or_insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }
@@ -216,8 +217,8 @@ __global__ void find_or_insert_kernel(
         }
 
         if (scores != nullptr) {
-          *(scores + key_idx) =
-              bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
+          *(scores + key_idx) = bucket->scores(key_pos, bucket_max_size)
+                                    ->load(cuda::std::memory_order_relaxed);
         }
       }
     } else {
@@ -229,8 +230,9 @@ __global__ void find_or_insert_kernel(
     }
 
     if (g.thread_rank() == src_lane) {
-      bucket->digests(key_pos)[0] = get_digest<K>(find_or_insert_key);
-      (bucket->keys(key_pos))
+      bucket->digests(key_pos, bucket_max_size)[0] =
+          get_digest<K>(find_or_insert_key);
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(find_or_insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }

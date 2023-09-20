@@ -66,45 +66,67 @@ using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 
 template <class K, class V, class S>
 struct Bucket {
-  AtomicKey<K>* keys_;
+  //  AtomicKey<K>* keys_;
   /// TODO: compute the pointer of scores and digests using bucket_max_size
-  AtomicScore<S>* scores_;
+  //  AtomicScore<S>* scores_;
   /// @brief not visible to users
-  D* digests_;
+  //  D* digests_;
+
+  Byte* data_;  // digests, keys, scores
+
   V* vectors;  // Pinned memory or HBM
 
-  __forceinline__ __device__ D* digests(int index) const {
-    return digests_ + index;
+  //  __forceinline__ __device__ D* digests(int index) const {
+  //    return digests_ + index;
+  //  }
+  //
+  //  __forceinline__ __device__ AtomicKey<K>* keys(int index) const {
+  //    return keys_ + index;
+  //  }
+  //
+  //  __forceinline__ __device__ AtomicScore<S>* scores(int index) const {
+  //    return scores_ + index;
+  //  }
+  //
+  //  __forceinline__ __device__ K** keys_addr() {
+  //    return reinterpret_cast<K**>(&keys_);
+  //  }
+  //
+  //  static __forceinline__ __device__ AtomicKey<K>* keys(K* keys,
+  //                                                       uint32_t offset) {
+  //    return reinterpret_cast<AtomicKey<K>*>(keys) + offset;
+  //  }
+  //
+  //  static __forceinline__ __device__ D* digests(K* keys,
+  //                                               uint32_t bucket_capacity,
+  //                                               uint32_t offset) {
+  //    bucket_capacity = umax(bucket_capacity, 128);
+  //    return reinterpret_cast<D*>(keys) - bucket_capacity + offset;
+  //  }
+  //
+  //  static __forceinline__ __device__ S* scores(K* keys, uint32_t
+  //  bucket_capacity,
+  //                                              uint32_t offset) {
+  //    bucket_capacity = umax(bucket_capacity, 128);
+  //    return reinterpret_cast<S*>(keys + bucket_capacity) + offset;
+  //  }
+  static __forceinline__ __device__ D* digests(const uint32_t& offset,
+                                               const size_t& bucket_capacity) {
+    return reinterpret_cast<D*>(data_) + offset;
   }
 
-  __forceinline__ __device__ AtomicKey<K>* keys(int index) const {
-    return keys_ + index;
+  static __forceinline__ __device__ AtomicKey<K>* keys(
+      const uint32_t& offset, const size_t& bucket_capacity) {
+    return reinterpret_cast<AtomicKey<K>*>(data_ + umax(bucket_capacity, 128)) +
+           offset;
   }
 
-  __forceinline__ __device__ AtomicScore<S>* scores(int index) const {
-    return scores_ + index;
-  }
-
-  __forceinline__ __device__ K** keys_addr() {
-    return reinterpret_cast<K**>(&keys_);
-  }
-
-  static __forceinline__ __device__ AtomicKey<K>* keys(K* keys,
-                                                       uint32_t offset) {
-    return reinterpret_cast<AtomicKey<K>*>(keys) + offset;
-  }
-
-  static __forceinline__ __device__ D* digests(K* keys,
-                                               uint32_t bucket_capacity,
-                                               uint32_t offset) {
-    bucket_capacity = umax(bucket_capacity, 128);
-    return reinterpret_cast<D*>(keys) - bucket_capacity + offset;
-  }
-
-  static __forceinline__ __device__ S* scores(K* keys, uint32_t bucket_capacity,
-                                              uint32_t offset) {
-    bucket_capacity = umax(bucket_capacity, 128);
-    return reinterpret_cast<S*>(keys + bucket_capacity) + offset;
+  static __forceinline__ __device__ AtomicScore<S>* scores(
+      const uint32_t& offset, const size_t& bucket_capacity) {
+    return reinterpret_cast<AtomicScore<S>*>(
+               data_ + umax(bucket_capacity, 128) *
+                           (sizeof(D) + sizeof(AtomicKey<K>))) +
+           offset;
   }
 };
 

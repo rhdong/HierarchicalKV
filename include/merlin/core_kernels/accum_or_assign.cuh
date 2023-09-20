@@ -148,7 +148,7 @@ __global__ void accum_or_assign_kernel_with_io(
         if (occupy_result == OccupyResult::DUPLICATE) {
           evicted_key = insert_key;
         }
-        (bucket->keys(key_pos))
+        (bucket->keys(key_pos, bucket_max_size))
             ->store(evicted_key, ScoreFunctor::UNLOCK_MEM_ORDER);
       }
       g.sync();
@@ -166,8 +166,8 @@ __global__ void accum_or_assign_kernel_with_io(
     if (g.thread_rank() == src_lane) {
       ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
                            (occupy_result != OccupyResult::DUPLICATE));
-      bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
-      (bucket->keys(key_pos))
+      bucket->digests(key_pos, bucket_max_size)[0] = get_digest<K>(insert_key);
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }
@@ -276,7 +276,7 @@ __global__ void accum_or_assign_kernel(
           evicted_key = insert_key;
         }
 
-        (bucket->keys(key_pos))
+        (bucket->keys(key_pos, bucket_max_size))
             ->store(evicted_key, ScoreFunctor::UNLOCK_MEM_ORDER);
       }
       g.sync();
@@ -292,10 +292,10 @@ __global__ void accum_or_assign_kernel(
     if (g.thread_rank() == src_lane) {
       *(value_or_deltas + key_idx) = (bucket->vectors + key_pos * dim);
       *(founds + key_idx) = is_accum;
-      bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
+      bucket->digests(key_pos, bucket_max_size)[0] = get_digest<K>(insert_key);
       ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
                            (occupy_result != OccupyResult::DUPLICATE));
-      (bucket->keys(key_pos))
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }

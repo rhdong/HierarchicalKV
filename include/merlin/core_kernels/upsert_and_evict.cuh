@@ -66,7 +66,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
       bucket_size_ptr = buckets_size + bkt_idx;
       BUCKET* bucket = buckets + bkt_idx;
       bucket_size = *bucket_size_ptr;
-      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0));
+      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0, bucket_capacity));
       bucket_values_ptr = reinterpret_cast<VecV*>(bucket->vectors);
     } else {
       return;
@@ -84,7 +84,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
     uint32_t pos_cur = align_to<STRIDE>(key_pos);
     pos_cur = (pos_cur + offset) & (bucket_capacity - 1);
 
-    D* digests_ptr = BUCKET::digests(bucket_keys_ptr, bucket_capacity, pos_cur);
+    D* digests_ptr = BUCKET::digests(pos_cur, bucket_capacity);
     VecD_Load digests_vec = *(reinterpret_cast<VecD_Load*>(digests_ptr));
     VecD_Comp digests_arr[4] = {digests_vec.x, digests_vec.y, digests_vec.z,
                                 digests_vec.w};
@@ -105,7 +105,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
         uint32_t index = (__ffs(cmp_result) - 1) >> 3;
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
-        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, bucket_capacity);
         K expected_key = key;
         // Modifications to the bucket will not before this instruction.
         result = current_key->compare_exchange_strong(
@@ -131,7 +131,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
         if (offset == 0 && possible_pos < key_pos) continue;
-        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, bucket_capacity);
         K expected_key = static_cast<K>(EMPTY_KEY);
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
@@ -152,7 +152,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
     evict_idx = atomicAdd(evicted_counter, 1);
   }
   while (occupy_result == OccupyResult::INITIAL) {
-    S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
+    S* bucket_scores_ptr = BUCKET::scores(0, bucket_capacity);
     S min_score = MAX_SCORE;
     int min_pos = -1;
 #pragma unroll
@@ -195,7 +195,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
                             score);
       break;
     }
-    auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos);
+    auto min_score_key = BUCKET::keys(min_pos, bucket_capacity);
     auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
     if (expected_key != static_cast<K>(LOCKED_KEY) &&
         expected_key != static_cast<K>(EMPTY_KEY)) {
@@ -203,8 +203,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
           expected_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
       if (result) {
-        S* min_score_ptr =
-            BUCKET::scores(bucket_keys_ptr, bucket_capacity, min_pos);
+        S* min_score_ptr = BUCKET::scores(min_pos, bucket_capacity);
         auto verify_score_ptr =
             reinterpret_cast<AtomicScore<S>*>(min_score_ptr);
         auto verify_score =
@@ -238,7 +237,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
       CopyValue::ldg_stg(0, evicted_value_ptr, bucket_value_ptr, dim);
     }
     CopyValue::ldg_stg(0, bucket_value_ptr, param_value_ptr, dim);
-    auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+    auto key_address = BUCKET::keys(key_pos, bucket_capacity);
     // memory_order_release:
     // Modifications to the bucket will not after this instruction.
     key_address->store(key, cuda::std::memory_order_release);
@@ -295,7 +294,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
       bucket_size_ptr = buckets_size + bkt_idx;
       BUCKET* bucket = buckets + bkt_idx;
       bucket_size = *bucket_size_ptr;
-      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0));
+      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0, bucket_capacity));
       bucket_values_ptr = reinterpret_cast<VecV*>(bucket->vectors);
     } else {
       occupy_result = OccupyResult::ILLEGAL;
@@ -313,7 +312,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
     uint32_t pos_cur = align_to<STRIDE>(key_pos);
     pos_cur = (pos_cur + offset) & (bucket_capacity - 1);
 
-    D* digests_ptr = BUCKET::digests(bucket_keys_ptr, bucket_capacity, pos_cur);
+    D* digests_ptr = BUCKET::digests(pos_cur, bucket_capacity);
     VecD_Load digests_vec = *(reinterpret_cast<VecD_Load*>(digests_ptr));
     VecD_Comp digests_arr[4] = {digests_vec.x, digests_vec.y, digests_vec.z,
                                 digests_vec.w};
@@ -334,7 +333,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
         uint32_t index = (__ffs(cmp_result) - 1) >> 3;
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
-        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, bucket_capacity);
         K expected_key = key;
         // Modifications to the bucket will not before this instruction.
         result = current_key->compare_exchange_strong(
@@ -360,7 +359,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
         if (offset == 0 && possible_pos < key_pos) continue;
-        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, bucket_capacity);
         K expected_key = static_cast<K>(EMPTY_KEY);
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
@@ -381,7 +380,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
     evict_idx = atomicAdd(evicted_counter, 1);
   }
   while (occupy_result == OccupyResult::INITIAL) {
-    S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
+    S* bucket_scores_ptr = BUCKET::scores(0, bucket_capacity);
     S min_score = static_cast<S>(MAX_SCORE);
     int min_pos = -1;
 #pragma unroll
@@ -411,7 +410,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
         for (int j = 0; j < Load_LEN_S; j += 1) {
           S temp_score = temp_scores[j];
           if (temp_score < min_score) {
-            auto verify_key_ptr = BUCKET::keys(bucket_keys_ptr, i + k + j);
+            auto verify_key_ptr = BUCKET::keys(i + k + j, bucket_capacity);
             auto verify_key =
                 verify_key_ptr->load(cuda::std::memory_order_relaxed);
             if (verify_key != static_cast<K>(LOCKED_KEY) &&
@@ -430,7 +429,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
                             score);
       break;
     }
-    auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos);
+    auto min_score_key = BUCKET::keys(min_pos, bucket_capacity);
     auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
     if (expected_key != static_cast<K>(LOCKED_KEY) &&
         expected_key != static_cast<K>(EMPTY_KEY)) {
@@ -438,8 +437,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
           expected_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
       if (result) {
-        S* min_score_ptr =
-            BUCKET::scores(bucket_keys_ptr, bucket_capacity, min_pos);
+        S* min_score_ptr = BUCKET::scores(min_pos, bucket_capacity);
         auto verify_score_ptr =
             reinterpret_cast<AtomicScore<S>*>(min_score_ptr);
         auto verify_score =
@@ -522,7 +520,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
         __pipeline_wait_prior(1);
         CopyValue::lds_stg(rank, dst, src, dim);
         if (rank == i) {
-          auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+          auto key_address = BUCKET::keys(key_pos, bucket_capacity);
           // memory_order_release:
           // Modifications to the bucket will not after this instruction.
           key_address->store(key, cuda::std::memory_order_release);
@@ -649,7 +647,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
       int** sm_buckets_size_ptr = SMM::buckets_size_ptr(smem);
       sm_buckets_size_ptr[tx] = buckets_size + bkt_idx;
       BUCKET* bucket = buckets + bkt_idx;
-      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0));
+      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0, BUCKET_SIZE));
       VecV** sm_bucket_values_ptr = SMM::bucket_values_ptr(smem);
       __pipeline_memcpy_async(sm_bucket_values_ptr + tx, &(bucket->vectors),
                               sizeof(VecV*));
@@ -669,7 +667,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
   if (occupy_result_next == OccupyResult::INITIAL) {
     D* sm_bucket_digests = SMM::bucket_digests(smem, groupID, 0);
     D* dst = sm_bucket_digests + rank * Load_LEN;
-    D* src = BUCKET::digests(keys_ptr_next, BUCKET_SIZE, rank * Load_LEN);
+    D* src = BUCKET::digests(rank * Load_LEN, BUCKET_SIZE);
     if (rank * Load_LEN < BUCKET_SIZE) {
       __pipeline_memcpy_async(dst, src, sizeof(VecD_Load));
     }
@@ -721,7 +719,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
         int32_t index = (__ffs(cmp_result) - 1) >> 3;
         cmp_result &= (cmp_result - 1);
         possible_pos = probe_offset + index;
-        auto current_key = BUCKET::keys(keys_ptr_cur, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, BUCKET_SIZE);
         K expected_key = key_cur;
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
@@ -754,7 +752,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
               cmp_result &= (cmp_result - 1);
               possible_pos = probe_offset + index;
               if (offset == 0 && possible_pos < start_pos_cur) continue;
-              auto current_key = BUCKET::keys(keys_ptr_cur, possible_pos);
+              auto current_key = BUCKET::keys(possible_pos, BUCKET_SIZE);
               K expected_key = static_cast<K>(EMPTY_KEY);
               result = current_key->compare_exchange_strong(
                   expected_key, static_cast<K>(LOCKED_KEY),
@@ -790,7 +788,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
         }
         S* sm_bucket_scores = SMM::bucket_scores(smem, groupID, same_buf(i));
         S* dst = sm_bucket_scores + rank * Load_LEN_S;
-        S* src = BUCKET::scores(keys_ptr_cur, BUCKET_SIZE, rank * Load_LEN_S);
+        S* src = BUCKET::scores(rank * Load_LEN_S, BUCKET_SIZE);
 #pragma unroll
         for (int32_t k = 0; k < BUCKET_SIZE; k += GROUP_SIZE * Load_LEN_S) {
           __pipeline_memcpy_async(dst + k, src + k, sizeof(S) * Load_LEN_S);
@@ -843,7 +841,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
           int min_pos_global = g.shfl(min_pos_local, src_lane);
           if (rank == i - 1) {
             src[min_pos_global] = static_cast<S>(MAX_SCORE);  // Mark visited.
-            auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos_global);
+            auto min_score_key = BUCKET::keys(min_pos_global, BUCKET_SIZE);
             auto expected_key =
                 min_score_key->load(cuda::std::memory_order_relaxed);
             if (expected_key != static_cast<K>(LOCKED_KEY) &&
@@ -853,8 +851,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
                   cuda::std::memory_order_acquire,
                   cuda::std::memory_order_relaxed);
               if (result) {
-                S* score_ptr = BUCKET::scores(bucket_keys_ptr, BUCKET_SIZE,
-                                              min_pos_global);
+                S* score_ptr = BUCKET::scores(min_pos_global, BUCKET_SIZE);
                 auto verify_score_ptr =
                     reinterpret_cast<AtomicScore<S>*>(score_ptr);
                 auto verify_score =
@@ -924,7 +921,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
           __pipeline_wait_prior(3);
           CopyValue::lds_stg(rank, dst, src, dim);
           if (rank == i - 2) {
-            auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+            auto key_address = BUCKET::keys(key_pos, BUCKET_SIZE);
             key_address->store(key, cuda::std::memory_order_release);
           }
           if (occupy_result_cur == OccupyResult::EVICT) {
@@ -984,14 +981,12 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
             min_score_key->load(cuda::std::memory_order_acquire);
         if (expected_key != static_cast<K>(LOCKED_KEY) &&
             expected_key != static_cast<K>(EMPTY_KEY)) {
-          auto min_score_ptr =
-              BUCKET::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos_global);
+          auto min_score_ptr = BUCKET::scores(min_pos_global, BUCKET_SIZE);
           bool result = min_score_key->compare_exchange_strong(
               expected_key, static_cast<K>(LOCKED_KEY),
               cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
           if (result) {
-            S* score_ptr =
-                BUCKET::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos_global);
+            S* score_ptr = BUCKET::scores(min_pos_global, BUCKET_SIZE);
             auto verify_score_ptr =
                 reinterpret_cast<AtomicScore<S>*>(score_ptr);
             auto verify_score =
@@ -1056,7 +1051,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
       __pipeline_wait_prior(1);
       CopyValue::lds_stg(rank, dst, src, dim);
       if (rank == GROUP_SIZE - 2) {
-        auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+        auto key_address = BUCKET::keys(key_pos, BUCKET_SIZE);
         key_address->store(key, cuda::std::memory_order_release);
       }
       if (occupy_result_cur == OccupyResult::EVICT) {
@@ -1087,7 +1082,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
       __pipeline_wait_prior(0);
       CopyValue::lds_stg(rank, dst, src, dim);
       if (rank == GROUP_SIZE - 1) {
-        auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+        auto key_address = BUCKET::keys(key_pos, BUCKET_SIZE);
         key_address->store(key, cuda::std::memory_order_release);
       }
       if (occupy_result_cur == OccupyResult::EVICT) {
@@ -1461,7 +1456,7 @@ __global__ void upsert_and_evict_kernel_with_io_core(
       ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
                            (occupy_result != OccupyResult::DUPLICATE));
       bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
-      (bucket->keys(key_pos))
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }
   }

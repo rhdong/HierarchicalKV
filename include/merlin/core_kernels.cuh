@@ -56,9 +56,9 @@ __global__ void create_atomic_keys(Bucket<K, V, S>* __restrict buckets,
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
     for (size_t i = 0; i < bucket_max_size; i++)
-      buckets[start + tid].digests(i)[0] = empty_digest<K>();
+      buckets[start + tid].digests(i, bucket_max_size)[0] = empty_digest<K>();
     for (size_t i = 0; i < bucket_max_size; i++)
-      new (buckets[start + tid].keys(i))
+      new (buckets[start + tid].keys(i, bucket_max_size))
           AtomicKey<K>{static_cast<K>(EMPTY_KEY)};
   }
 }
@@ -70,7 +70,7 @@ __global__ void create_atomic_scores(Bucket<K, V, S>* __restrict buckets,
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
     for (size_t i = 0; i < bucket_max_size; i++) {
-      new (buckets[start + tid].scores(i))
+      new (buckets[start + tid].scores(i, bucket_max_size))
           AtomicScore<S>{static_cast<S>(EMPTY_SCORE)};
     }
   }
@@ -87,11 +87,13 @@ __global__ void allocate_bucket_others(Bucket<K, V, S>* __restrict buckets,
                                        const int index, uint8_t* address,
                                        const uint32_t reserve_size,
                                        const size_t bucket_max_size) {
-  buckets[index].digests_ = address;
-  buckets[index].keys_ =
-      reinterpret_cast<AtomicKey<K>*>(buckets[index].digests_ + reserve_size);
-  buckets[index].scores_ =
-      reinterpret_cast<AtomicScore<S>*>(buckets[index].keys_ + bucket_max_size);
+  buckets[index].data_ = address;
+  //  buckets[index].keys_ =
+  //      reinterpret_cast<AtomicKey<K>*>(buckets[index].digests_ +
+  //      reserve_size);
+  //  buckets[index].scores_ =
+  //      reinterpret_cast<AtomicScore<S>*>(buckets[index].keys_ +
+  //      bucket_max_size);
 }
 
 template <class K, class V, class S>
@@ -413,7 +415,7 @@ __forceinline__ __device__ void defragmentation_for_rehash(
   int i = 1;
   while (i < bucket_max_size) {
     key_idx = (remove_pos + i) & (bucket_max_size - 1);
-    find_key = (bucket->keys(key_idx))->load(cuda::std::memory_order_relaxed);
+    find_key = (bucket->keys(key_idx, bucket_max_size))->load(cuda::std::memory_order_relaxed);
     if (find_key == static_cast<K>(EMPTY_KEY)) {
       break;
     }
@@ -425,19 +427,20 @@ __forceinline__ __device__ void defragmentation_for_rehash(
         (key_idx < start_idx && start_idx <= empty_pos) ||
         (empty_pos <= key_idx && key_idx < start_idx)) {
       const K key =
-          (*(bucket->keys(key_idx))).load(cuda::std::memory_order_relaxed);
-      bucket->digests(empty_pos)[0] = get_digest<K>(key);
-      (*(bucket->keys(empty_pos))).store(key, cuda::std::memory_order_relaxed);
-      const S score =
-          (*(bucket->scores(key_idx))).load(cuda::std::memory_order_relaxed);
-      (*(bucket->scores(empty_pos)))
+          (*(bucket->keys(key_idx, bucket_max_size))).load(cuda::std::memory_order_relaxed);
+      bucket->digests(empty_pos, bucket_max_size)[0] = get_digest<K>(key);
+      (*(bucket->keys(empty_pos, bucket_max_size)))
+          .store(key, cuda::std::memory_order_relaxed);
+      const S score = (*(bucket->scores(key_idx, bucket_max_size)))
+                          .load(cuda::std::memory_order_relaxed);
+      (*(bucket->scores(empty_pos, bucket_max_size)))
           .store(score, cuda::std::memory_order_relaxed);
       for (int j = 0; j < dim; j++) {
         bucket->vectors[empty_pos * dim + j] =
             bucket->vectors[key_idx * dim + j];
       }
-      bucket->digests(key_idx)[0] = empty_digest<K>();
-      (*(bucket->keys(key_idx)))
+      bucket->digests(key_idx, bucket_max_size)[0] = empty_digest<K>();
+      (*(bucket->keys(key_idx, bucket_max_size)))
           .store(static_cast<K>(EMPTY_KEY), cuda::std::memory_order_relaxed);
       empty_pos = key_idx;
       remove_pos = key_idx;
@@ -464,17 +467,18 @@ __forceinline__ __device__ void move_key_to_new_bucket(
     size_t key_offset =
         (new_start_idx + tile_offset + rank) & (bucket_max_size - 1);
     const K current_key =
-        (*(new_bucket->keys(key_offset))).load(cuda::std::memory_order_relaxed);
+        (*(new_bucket->keys(key_offset, bucket_max_size))).load(cuda::std::memory_order_relaxed);
     empty_vote = g.ballot(current_key == static_cast<K>(EMPTY_KEY));
     if (empty_vote) {
       src_lane = __ffs(empty_vote) - 1;
       key_pos =
           (new_start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       if (rank == src_lane) {
-        new_bucket->digests(key_pos)[0] = get_digest<K>(key);
-        new_bucket->keys(key_pos)->store(key, cuda::std::memory_order_relaxed);
-        new_bucket->scores(key_pos)->store(score,
-                                           cuda::std::memory_order_relaxed);
+        new_bucket->digests(key_pos, bucket_max_size)[0] = get_digest<K>(key);
+        new_bucket->keys(key_pos, bucket_max_size)
+            ->store(key, cuda::std::memory_order_relaxed);
+        new_bucket->scores(key_pos, bucket_max_size)
+            ->store(score, cuda::std::memory_order_relaxed);
         atomicAdd(&(buckets_size[new_bkt_idx]), 1);
       }
       copy_vector<V, TILE_SIZE>(g, vector, new_bucket->vectors + key_pos * dim,
@@ -509,10 +513,10 @@ __global__ void rehash_kernel_for_fast_mode(
     uint32_t key_idx = 0;
     while (key_idx < bucket_max_size) {
       key_idx = g.shfl(key_idx, 0);
-      target_key =
-          (bucket->keys(key_idx))->load(cuda::std::memory_order_relaxed);
-      target_score =
-          bucket->scores(key_idx)->load(cuda::std::memory_order_relaxed);
+      target_key = (bucket->keys(key_idx, bucket_max_size))
+                       ->load(cuda::std::memory_order_relaxed);
+      target_score = bucket->scores(key_idx, bucket_max_size)
+                         ->load(cuda::std::memory_order_relaxed);
       if (target_key != static_cast<K>(EMPTY_KEY) &&
           target_key != static_cast<K>(RECLAIM_KEY)) {
         const K hashed_key = Murmur3HashDevice(target_key);
@@ -526,8 +530,8 @@ __global__ void rehash_kernel_for_fast_mode(
               new_bkt_idx, start_idx, buckets_size, bucket_max_size,
               buckets_num, table->dim);
           if (rank == 0) {
-            bucket->digests(key_idx)[0] = empty_digest<K>();
-            (bucket->keys(key_idx))
+            bucket->digests(key_idx, bucket_max_size)[0] = empty_digest<K>();
+            (bucket->keys(key_idx, bucket_max_size))
                 ->store(static_cast<K>(EMPTY_KEY),
                         cuda::std::memory_order_relaxed);
             atomicSub(&(buckets_size[bkt_idx]), 1);
@@ -619,8 +623,8 @@ __global__ void clear_kernel(Table<K, V, S>* __restrict table,
     int bkt_idx = t / bucket_max_size;
     Bucket<K, V, S>* bucket = &(buckets[bkt_idx]);
 
-    bucket->digests(key_idx)[0] = empty_digest<K>();
-    (bucket->keys(key_idx))
+    bucket->digests(key_idx, bucket_max_size)[0] = empty_digest<K>();
+    (bucket->keys(key_idx, bucket_max_size))
         ->store(static_cast<K>(EMPTY_KEY), cuda::std::memory_order_relaxed);
     if (key_idx == 0) {
       table->buckets_size[bkt_idx] = 0;
@@ -661,7 +665,7 @@ __global__ void remove_kernel(const Table<K, V, S>* __restrict table,
       key_pos = (start_idx + tile_offset + rank) & (bucket_max_size - 1);
 
       const K current_key =
-          (bucket->keys(key_pos))->load(cuda::std::memory_order_relaxed);
+          (bucket->keys(key_pos, bucket_max_size))->load(cuda::std::memory_order_relaxed);
 
       found_vote = g.ballot(find_key == current_key);
       if (found_vote) {
@@ -679,11 +683,11 @@ __global__ void remove_kernel(const Table<K, V, S>* __restrict table,
       if (g.thread_rank() == src_lane) {
         const int key_pos =
             (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
-        bucket->digests(key_pos)[0] = empty_digest<K>();
-        (bucket->keys(key_pos))
+        bucket->digests(key_pos, bucket_max_size)[0] = empty_digest<K>();
+        (bucket->keys(key_pos, bucket_max_size))
             ->store(static_cast<K>(RECLAIM_KEY),
                     cuda::std::memory_order_relaxed);
-        (bucket->scores(key_pos))
+        (bucket->scores(key_pos, bucket_max_size))
             ->store(static_cast<S>(EMPTY_SCORE),
                     cuda::std::memory_order_relaxed);
         atomicSub(&buckets_size[bkt_idx], 1);
@@ -718,19 +722,19 @@ __global__ void remove_kernel(const Table<K, V, S>* __restrict table,
     S current_score = 0;
     uint32_t key_offset = 0;
     while (key_offset < bucket_max_size) {
-      current_key =
-          bucket->keys(key_offset)->load(cuda::std::memory_order_relaxed);
-      current_score =
-          bucket->scores(key_offset)->load(cuda::std::memory_order_relaxed);
+      current_key = bucket->keys(key_offset, bucket_max_size)
+                        ->load(cuda::std::memory_order_relaxed);
+      current_score = bucket->scores(key_offset, bucket_max_size)
+                          ->load(cuda::std::memory_order_relaxed);
       if (!IS_RESERVED_KEY(current_key)) {
         if (pred(current_key, current_score, pattern, threshold)) {
           atomicAdd(count, 1);
           key_pos = key_offset;
-          bucket->digests(key_pos)[0] = empty_digest<K>();
-          (bucket->keys(key_pos))
+          bucket->digests(key_pos, bucket_max_size)[0] = empty_digest<K>();
+          (bucket->keys(key_pos, bucket_max_size))
               ->store(static_cast<K>(RECLAIM_KEY),
                       cuda::std::memory_order_relaxed);
-          (bucket->scores(key_pos))
+          (bucket->scores(key_pos, bucket_max_size))
               ->store(static_cast<S>(EMPTY_SCORE),
                       cuda::std::memory_order_relaxed);
           atomicSub(&buckets_size[bkt_idx], 1);
@@ -783,13 +787,13 @@ __global__ void dump_kernel(const Table<K, V, S>* __restrict table,
     Bucket<K, V, S>* const bucket{&buckets[(tid + offset) / bucket_max_size]};
 
     const int key_idx{static_cast<int>((tid + offset) % bucket_max_size)};
-    const K key{(bucket->keys(key_idx))->load(cuda::std::memory_order_relaxed)};
+    const K key{(bucket->keys(key_idx, bucket_max_size))->load(cuda::std::memory_order_relaxed)};
 
     if (!IS_RESERVED_KEY(key)) {
       size_t local_index{atomicAdd(&block_acc, 1)};
-      block_tuples[local_index] = {
-          key, &bucket->vectors[key_idx * dim],
-          bucket->scores(key_idx)->load(cuda::std::memory_order_relaxed)};
+      block_tuples[local_index] = {key, &bucket->vectors[key_idx * dim],
+                                   bucket->scores(key_idx, bucket_max_size)
+                                       ->load(cuda::std::memory_order_relaxed)};
     }
   }
   __syncthreads();
@@ -846,8 +850,9 @@ __global__ void dump_kernel(const Table<K, V, S>* __restrict table,
     Bucket<K, V, S>* bucket = &(buckets[bkt_idx]);
 
     const K key =
-        (bucket->keys(key_idx))->load(cuda::std::memory_order_relaxed);
-    S score = bucket->scores(key_idx)->load(cuda::std::memory_order_relaxed);
+        (bucket->keys(key_idx, bucket_max_size))->load(cuda::std::memory_order_relaxed);
+    S score = bucket->scores(key_idx, bucket_max_size)
+                  ->load(cuda::std::memory_order_relaxed);
 
     if (!IS_RESERVED_KEY(key) && pred(key, score, pattern, threshold)) {
       size_t local_index = atomicAdd(&block_acc, 1);

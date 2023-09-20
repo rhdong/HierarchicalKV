@@ -54,7 +54,7 @@ __global__ void tlp_update_kernel_with_io(
       key_pos = global_idx & (bucket_capacity - 1);
       uint64_t bkt_idx = global_idx / bucket_capacity;
       BUCKET* bucket = buckets + bkt_idx;
-      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0));
+      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0, bucket_capacity));
       bucket_values_ptr = reinterpret_cast<VecV*>(bucket->vectors);
     } else {
       return;
@@ -72,7 +72,7 @@ __global__ void tlp_update_kernel_with_io(
     uint32_t pos_cur = align_to<STRIDE>(key_pos);
     pos_cur = (pos_cur + offset) & (bucket_capacity - 1);
 
-    D* digests_ptr = BUCKET::digests(bucket_keys_ptr, bucket_capacity, pos_cur);
+    D* digests_ptr = BUCKET::digests(pos_cur, bucket_capacity);
     VecD_Load digests_vec = *(reinterpret_cast<VecD_Load*>(digests_ptr));
     VecD_Comp digests_arr[4] = {digests_vec.x, digests_vec.y, digests_vec.z,
                                 digests_vec.w};
@@ -93,7 +93,7 @@ __global__ void tlp_update_kernel_with_io(
         uint32_t index = (__ffs(cmp_result) - 1) >> 3;
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
-        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, bucket_capacity);
         K expected_key = key;
         // Modifications to the bucket will not before this instruction.
         result = current_key->compare_exchange_strong(
@@ -109,7 +109,7 @@ __global__ void tlp_update_kernel_with_io(
         VecV* bucket_value_ptr = bucket_values_ptr + key_pos * dim;
         const VecV* param_value_ptr = values + kv_idx * dim;
         CopyValue::ldg_stg(0, bucket_value_ptr, param_value_ptr, dim);
-        auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+        auto key_address = BUCKET::keys(key_pos, bucket_capacity);
         // memory_order_release:
         // Modifications to the bucket will not after this instruction.
         key_address->store(key, cuda::std::memory_order_release);
@@ -124,7 +124,7 @@ __global__ void tlp_update_kernel_with_io(
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
         if (offset == 0 && possible_pos < key_pos) continue;
-        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        auto current_key = BUCKET::keys(possible_pos, bucket_capacity);
         auto probe_key = current_key->load(cuda::std::memory_order_relaxed);
         if (probe_key == static_cast<K>(EMPTY_KEY)) {
           return;
@@ -200,7 +200,7 @@ __global__ void pipeline_update_kernel_with_io(
 
   // Pipeline loading
   K* keys_ptr = sm_keys_ptr[groupID * GROUP_SIZE];
-  D* digests_ptr = BUCKET::digests(keys_ptr, BUCKET_SIZE, rank * Load_LEN);
+  D* digests_ptr = BUCKET::digests(rank * Load_LEN, BUCKET_SIZE);
   __pipeline_memcpy_async(sm_digests[groupID] + rank * Load_LEN, digests_ptr,
                           sizeof(VecD_Load));
   __pipeline_commit();
@@ -215,7 +215,7 @@ __global__ void pipeline_update_kernel_with_io(
     /* Step1: prefetch all digests in one bucket */
     if ((i + 1) < loop_num) {
       K* keys_ptr = sm_keys_ptr[key_idx_block + 1];
-      D* digests_ptr = BUCKET::digests(keys_ptr, BUCKET_SIZE, rank * Load_LEN);
+      D* digests_ptr = BUCKET::digests(rank * Load_LEN, BUCKET_SIZE);
       __pipeline_memcpy_async(
           sm_digests[groupID] + diff_buf(i) * BUCKET_SIZE + rank * Load_LEN,
           digests_ptr, sizeof(VecD_Load));
@@ -318,7 +318,7 @@ __global__ void pipeline_update_kernel_with_io(
             const S* score_ptr = scores + key_idx_grid;
             CopyScore::ldg_sts(sm_scores[groupID] + diff_buf(i), score_ptr);
           }
-          auto key_ptr = BUCKET::keys(keys_ptr, key_pos);
+          auto key_ptr = BUCKET::keys(key_pos, bucket_capacity);
           sm_ranks[groupID][diff_buf(i)] = rank;
           if (diff_buf(i) == 0) {
             CAS_res[0] = key_ptr->compare_exchange_strong(
@@ -371,7 +371,7 @@ __global__ void pipeline_update_kernel_with_io(
                                             sm_scores[groupID] + same_buf(i), 0,
                                             global_epoch);
         if (rank == 0) {
-          auto key_address = BUCKET::keys(keys_ptr, target_pos);
+          auto key_address = BUCKET::keys(target_pos, BUCKET_SIZE);
           key_address->store(target_key, cuda::std::memory_order_release);
         }
       }
@@ -400,7 +400,7 @@ __global__ void pipeline_update_kernel_with_io(
           CopyScore::ldg_sts(sm_scores[groupID] + diff_buf(loop_num),
                              score_ptr);
         }
-        auto key_ptr = BUCKET::keys(keys_ptr, key_pos);
+        auto key_ptr = BUCKET::keys(key_pos, BUCKET_SIZE);
         sm_ranks[groupID][diff_buf(loop_num)] = rank;
         if (diff_buf(loop_num) == 0) {
           CAS_res[0] = key_ptr->compare_exchange_strong(
@@ -451,9 +451,9 @@ __global__ void pipeline_update_kernel_with_io(
           keys_ptr, BUCKET_SIZE, target_pos,
           sm_scores[groupID] + same_buf(loop_num), 0, global_epoch);
 
-      auto key_ptr = BUCKET::keys(keys_ptr, target_pos);
+      auto key_ptr = BUCKET::keys(target_pos, BUCKET_SIZE);
       if (rank == 0) {
-        auto key_address = BUCKET::keys(keys_ptr, target_pos);
+        auto key_address = BUCKET::keys(target_pos, BUCKET_SIZE);
         key_address->store(target_key, cuda::std::memory_order_release);
       }
     }
@@ -483,7 +483,7 @@ __global__ void pipeline_update_kernel_with_io(
           keys_ptr, BUCKET_SIZE, target_pos,
           sm_scores[groupID] + same_buf(loop_num + 1), 0, global_epoch);
       if (rank == 0) {
-        auto key_address = BUCKET::keys(keys_ptr, target_pos);
+        auto key_address = BUCKET::keys(target_pos, BUCKET_SIZE);
         key_address->store(target_key, cuda::std::memory_order_release);
       }
     }
@@ -716,7 +716,7 @@ __global__ void update_kernel_with_io(
     }
 
     if (g.thread_rank() == src_lane) {
-      (bucket->keys(key_pos))
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(update_key, cuda::std::memory_order_relaxed);
     }
   }
@@ -808,7 +808,7 @@ __global__ void update_kernel(const Table<K, V, S>* __restrict table,
     }
 
     if (g.thread_rank() == src_lane) {
-      (bucket->keys(key_pos))
+      (bucket->keys(key_pos, bucket_max_size))
           ->store(update_key, cuda::std::memory_order_relaxed);
     }
   }
