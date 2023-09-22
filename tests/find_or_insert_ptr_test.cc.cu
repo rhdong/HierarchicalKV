@@ -2850,8 +2850,8 @@ void test_duplicated_keys(size_t max_hbm_for_vectors) {
 
       test_util::array2ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
                            stream);
-      table->insert_or_assign(KEY_NUM, d_keys, d_vectors_ptr, d_scores,
-                            stream);
+      table->insert_or_assign(KEY_NUM, d_keys, d_vectors, d_scores,
+                              stream);
       test_util::read_or_write_ptr(d_vectors_ptr, d_vectors, d_found,
                                    options.dim, KEY_NUM, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
