@@ -2786,8 +2786,8 @@ void test_find_or_insert_values_check(size_t max_hbm_for_vectors) {
 void test_duplicated_keys(size_t max_hbm_for_vectors) {
   constexpr uint64_t INIT_CAPACITY = 64 * 1024 * 1024UL;
   constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
-  constexpr uint64_t KEY_NUM = 1024UL;
-  constexpr uint64_t TEST_TIMES = 3;
+  constexpr uint64_t KEY_NUM = 1024 * 1024UL;
+  constexpr uint64_t TEST_TIMES = 30;
 
   K* h_keys;
   S* h_scores;
