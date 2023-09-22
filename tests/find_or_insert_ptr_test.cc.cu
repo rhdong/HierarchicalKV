@@ -2836,6 +2836,7 @@ void test_duplicated_keys(size_t max_hbm_for_vectors) {
 
   uint64_t total_size = 0;
   for (int i = 0; i < TEST_TIMES; i++) {
+    printf("tm %d\n", i);
     std::unique_ptr<Table> table = std::make_unique<Table>();
     table->init(options);
     total_size = table->size(stream);
