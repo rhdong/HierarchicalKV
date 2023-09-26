@@ -455,6 +455,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
             (desired_score_when_missed & EPOCH_BITS_MASK) | SCORE_32BIT_MAX;
       }
     }
+    if(new_score & SCORE_BITS_MASK == 0)
+       printf("kEpochLfu count = 0;\n");
     bucket->scores(key_pos)->store(new_score, cuda::std::memory_order_relaxed);
     return;
   }
