@@ -3287,7 +3287,7 @@ void test_duplicated_keys(size_t max_hbm_for_vectors) {
   options.max_capacity = MAX_CAPACITY;
   options.dim = DIM;
   options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
-  using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kCustomized>;
+  using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kLru>;
 
   CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
   CUDA_CHECK(cudaMallocHost(&h_scores, KEY_NUM * sizeof(S)));
@@ -3329,7 +3329,7 @@ void test_duplicated_keys(size_t max_hbm_for_vectors) {
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(total_size, 0);
 
-    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, d_scores, stream);
+    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
     total_size = table->size(stream);
