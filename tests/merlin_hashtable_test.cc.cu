@@ -3329,7 +3329,7 @@ void test_duplicated_keys(size_t max_hbm_for_vectors) {
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(total_size, 0);
 
-    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream);
+    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, nullptr, stream, false);
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
     total_size = table->size(stream);
