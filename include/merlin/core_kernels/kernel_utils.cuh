@@ -691,6 +691,14 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
       if (vote) {
         src_lane = __ffs(vote) - 1;
         key_pos = g.shfl(key_pos, src_lane);
+        vote -= ((unsigned(0x1)) << src_lane);
+        while (vote) {
+          int l_src_lane = __ffs(vote) - 1;
+          if (l_src_lane == g.thread_rank()) {
+            current_key->store(desired_key, cuda::std::memory_order_relaxed);
+          }
+          vote -= ((unsigned(0x1)) << l_src_lane);
+        }
         return OccupyResult::DUPLICATE;
       }
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
@@ -819,6 +827,14 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       if (vote) {
         src_lane = __ffs(vote) - 1;
         key_pos = g.shfl(key_pos, src_lane);
+        vote -= ((unsigned(0x1)) << src_lane);
+        while (vote) {
+          int l_src_lane = __ffs(vote) - 1;
+          if (l_src_lane == g.thread_rank()) {
+            current_key->store(desired_key, cuda::std::memory_order_relaxed);
+          }
+          vote -= ((unsigned(0x1)) << l_src_lane);
+        }
         return OccupyResult::DUPLICATE;
       }
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
@@ -908,6 +924,14 @@ __device__ __forceinline__ OccupyResult find_and_lock_for_update(
       if (vote) {
         src_lane = __ffs(vote) - 1;
         key_pos = g.shfl(key_pos, src_lane);
+        vote -= ((unsigned(0x1)) << src_lane);
+        while (vote) {
+          int l_src_lane = __ffs(vote) - 1;
+          if (l_src_lane == g.thread_rank()) {
+            current_key->store(desired_key, cuda::std::memory_order_relaxed);
+          }
+          vote -= ((unsigned(0x1)) << l_src_lane);
+        }
         return OccupyResult::DUPLICATE;
       }
       vote = g.ballot(expected_key == static_cast<K>(EMPTY_KEY));
