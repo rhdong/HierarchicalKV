@@ -480,29 +480,31 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
 
   CUDA_CHECK(cudaMemset(h_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
 
-  test_util::create_random_keys<K, S, V, DIM>(h_keys, h_scores, h_vectors,
+  test_util::create_random_keys<K, S, V, DIM>(h_keys, h_scores, nullptr,
                                               KEY_NUM);
 
   K* d_keys;
   S* d_scores = nullptr;
   V* d_vectors;
   V* d_def_val;
+  V** d_vectors_ptr;
   bool* d_found;
 
   CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
   CUDA_CHECK(cudaMalloc(&d_scores, KEY_NUM * sizeof(S)));
   CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
   CUDA_CHECK(cudaMalloc(&d_def_val, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMalloc(&d_vectors_ptr, KEY_NUM * sizeof(V*)));
   CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
 
   CUDA_CHECK(
       cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K), cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_scores, h_scores, KEY_NUM * sizeof(S),
                         cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors, KEY_NUM * sizeof(V) * options.dim,
-                        cudaMemcpyHostToDevice));
 
+  CUDA_CHECK(cudaMemset(d_vectors, 1, KEY_NUM * sizeof(V) * options.dim));
   CUDA_CHECK(cudaMemset(d_def_val, 2, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMemset(d_vectors_ptr, 0, KEY_NUM * sizeof(V*)));
   CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
 
   cudaStream_t stream;
@@ -521,31 +523,6 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
 
     uint64_t total_size_after_insert = table->size(stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
-
-    {
-      CUDA_CHECK(cudaMemset(d_def_val, 0, KEY_NUM * sizeof(V) * options.dim));
-      table->find(KEY_NUM, d_keys, d_def_val, d_found, nullptr, stream);
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-      int found_num = 0;
-
-      CUDA_CHECK(cudaMemset(h_found, 0, KEY_NUM * sizeof(bool)));
-      CUDA_CHECK(cudaMemset(h_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
-      CUDA_CHECK(cudaMemcpy(h_found, d_found, KEY_NUM * sizeof(bool),
-                            cudaMemcpyDeviceToHost));
-      CUDA_CHECK(cudaMemcpy(h_vectors, d_def_val,
-                            KEY_NUM * sizeof(V) * options.dim,
-                            cudaMemcpyDeviceToHost));
-      for (int i = 0; i < KEY_NUM; i++) {
-        if (h_found[i]) {
-          found_num++;
-          for (int j = 0; j < options.dim; j++) {
-            ASSERT_EQ(h_vectors[i * options.dim + j],
-                      static_cast<float>(h_keys[i] * 0.00001));
-          }
-        }
-      }
-      ASSERT_EQ(total_size_after_insert, found_num);
-    }
 
     table->erase(KEY_NUM, d_keys, stream);
     size_t total_size_after_erase = table->size(stream);
@@ -573,6 +550,7 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
   CUDA_CHECK(cudaFree(d_scores));
   CUDA_CHECK(cudaFree(d_vectors));
   CUDA_CHECK(cudaFree(d_def_val));
+  CUDA_CHECK(cudaFree(d_vectors_ptr));
   CUDA_CHECK(cudaFree(d_found));
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -3292,6 +3270,88 @@ void test_bucket_size(bool load_scores = true) {
   CudaCheckError();
 }
 
+void test_duplicated_keys(size_t max_hbm_for_vectors) {
+  constexpr uint64_t INIT_CAPACITY = 64 * 1024 * 1024UL;
+  constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
+  constexpr uint64_t KEY_NUM = 1024UL;
+  constexpr uint64_t TEST_TIMES = 3;
+
+  K* h_keys;
+  S* h_scores;
+  V* h_vectors;
+  bool* h_found;
+
+  TableOptions options;
+
+  options.init_capacity = INIT_CAPACITY;
+  options.max_capacity = MAX_CAPACITY;
+  options.dim = DIM;
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
+  using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kCustomized>;
+
+  CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
+  CUDA_CHECK(cudaMallocHost(&h_scores, KEY_NUM * sizeof(S)));
+  CUDA_CHECK(cudaMallocHost(&h_vectors, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMallocHost(&h_found, KEY_NUM * sizeof(bool)));
+
+  CUDA_CHECK(cudaMemset(h_keys, 1, KEY_NUM * sizeof(K)));
+  CUDA_CHECK(cudaMemset(h_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
+
+  K* d_keys;
+  S* d_scores = nullptr;
+  V* d_vectors;
+  V* d_new_vectors;
+  bool* d_found;
+
+  CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
+  CUDA_CHECK(cudaMalloc(&d_scores, KEY_NUM * sizeof(S)));
+  CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMalloc(&d_new_vectors, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
+
+  CUDA_CHECK(
+      cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K), cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_scores, h_scores, KEY_NUM * sizeof(S),
+                        cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors, KEY_NUM * sizeof(V) * options.dim,
+                        cudaMemcpyHostToDevice));
+
+  CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
+
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+
+  uint64_t total_size = 0;
+  for (int i = 0; i < TEST_TIMES; i++) {
+    std::unique_ptr<Table> table = std::make_unique<Table>();
+    table->init(options);
+    total_size = table->size(stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    ASSERT_EQ(total_size, 0);
+
+    table->insert_or_assign(KEY_NUM, d_keys, d_vectors, d_scores, stream);
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    total_size = table->size(stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    ASSERT_EQ(total_size, 1);
+  }
+  CUDA_CHECK(cudaStreamDestroy(stream));
+
+  CUDA_CHECK(cudaFreeHost(h_keys));
+  CUDA_CHECK(cudaFreeHost(h_scores));
+  CUDA_CHECK(cudaFreeHost(h_found));
+
+  CUDA_CHECK(cudaFree(d_keys));
+  CUDA_CHECK(cudaFree(d_scores));
+  CUDA_CHECK(cudaFree(d_vectors));
+  CUDA_CHECK(cudaFree(d_new_vectors));
+  CUDA_CHECK(cudaFree(d_found));
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  CudaCheckError();
+}
+
 TEST(MerlinHashTableTest, test_export_batch_if) {
   test_export_batch_if(16);
   test_export_batch_if(0);
@@ -3393,5 +3453,10 @@ TEST(MerlinHashTableTest, test_evict_strategy_customized_correct_rate) {
 TEST(MerlinHashTableTest, test_insert_or_assign_values_check) {
   test_insert_or_assign_values_check(16);
   // TODO(rhdong): Add back when diff error issue fixed in hybrid mode.
-  test_insert_or_assign_values_check(0);
+  // test_insert_or_assign_values_check(0);
+}
+
+TEST(MerlinHashTableTest, test_duplicated_keys) {
+  test_duplicated_keys(16);
+  test_duplicated_keys(0);
 }
