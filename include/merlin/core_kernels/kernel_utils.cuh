@@ -480,11 +480,15 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       const S& desired_score_when_missed, const uint32_t& bucket_capacity,
       const D& digest, const bool new_insert) {
     S new_score = desired_score_when_missed;
-    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos);
+    //    S* dst_score_ptr = BUCKET::scores(bucket_key_ptr, bucket_capacity,
+    //    key_pos);
+    AtomicScore<S>* dst_score_ptr = reinterpret_cast<AtomicScore<S>*>(
+        BUCKET::scores(bucket_key_ptr, bucket_capacity, key_pos));
     D* dst_digest_ptr =
         BUCKET::digests(bucket_key_ptr, bucket_capacity, key_pos);
     if (!new_insert) {
-      new_score = (*dst_score_ptr & SCORE_BITS_MASK);
+      new_score = (dst_score_ptr->load(cuda::std::memory_order_relaxed) &
+                   SCORE_BITS_MASK);
       if (SCORE_32BIT_MAX - new_score >
           (desired_score_when_missed & SCORE_BITS_MASK)) {
         new_score += desired_score_when_missed;
@@ -495,7 +499,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
     }
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_digest_ptr, digest);
-    __stcg(dst_score_ptr, new_score);
+    //    __stcg(dst_score_ptr, new_score);
+    dst_score_ptr->store(new_score, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -524,9 +529,12 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       const uint32_t key_pos, const S* __restrict const input_scores,
       const int key_idx, const S& epoch) {
     if (input_scores == nullptr) return;
-    S* dst_score_ptr =
-        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
-    S new_score = *dst_score_ptr & SCORE_BITS_MASK;
+    //    S* dst_score_ptr =
+    //        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    AtomicScore<S>* dst_score_ptr = reinterpret_cast<AtomicScore<S>*>(
+        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos));
+    S new_score =
+        dst_score_ptr->load(cuda::std::memory_order_relaxed) & SCORE_BITS_MASK;
     if (SCORE_32BIT_MAX - new_score >
         (input_scores[key_idx] & SCORE_BITS_MASK)) {
       new_score +=
@@ -535,7 +543,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
       new_score = make_epoch<S>(epoch) | SCORE_32BIT_MAX;
     }
     // Cache in L2 cache, bypass L1 Cache.
-    __stcg(dst_score_ptr, new_score);
+    //    __stcg(dst_score_ptr, new_score);
+    dst_score_ptr->store(new_score, cuda::std::memory_order_relaxed);
   }
 };
 
