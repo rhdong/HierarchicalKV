@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <string>
 #include "cuda_fp16.h"
 #include "debug.hpp"

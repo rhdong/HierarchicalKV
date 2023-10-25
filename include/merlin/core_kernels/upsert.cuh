@@ -1267,7 +1267,6 @@ __global__ void upsert_kernel_with_io_core(
             g, bucket, insert_key, insert_score, evicted_key, start_idx,
             key_pos, src_lane, bucket_max_size);
       } else {
-        start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
         occupy_result = find_and_lock_when_full<K, V, S, TILE_SIZE,
                                                 ScoreFunctor::LOCK_MEM_ORDER,
                                                 ScoreFunctor::UNLOCK_MEM_ORDER>(
@@ -1292,6 +1291,17 @@ __global__ void upsert_kernel_with_io_core(
       ScoreFunctor::update(bucket, key_pos, scores, key_idx, insert_score,
                            (occupy_result != OccupyResult::DUPLICATE));
       bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
+      for (int i = 0; i < 128; i++) {
+        K k = bucket->keys(i)->load(cuda::std::memory_order_relaxed);
+        S s = bucket->scores(i)->load(cuda::std::memory_order_relaxed);
+        if (k == insert_key) {
+          printf(
+              "i = "
+              "%d\tkey=0x%llx\tscore=0x%llx\tkey_pos=%d\tcur_epoch=%"
+              "llx\tbucket_size=%d\tstart_idx=%llu\n",
+              i, k, s, key_pos, global_epoch, bucket_size, start_idx);
+        }
+      }
       (bucket->keys(key_pos))
           ->store(insert_key, ScoreFunctor::UNLOCK_MEM_ORDER);
     }

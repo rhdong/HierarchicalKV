@@ -250,9 +250,9 @@ __forceinline__ __device__ S make_nano() {
 template <class K, class V, class S>
 struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_acquire;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_release;
   using BUCKET = Bucket<K, V, S>;
 
   __forceinline__ __device__ static S desired_when_missed(
@@ -378,9 +378,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
 template <class K, class V, class S>
 struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_acquire;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_release;
   using BUCKET = Bucket<K, V, S>;
 
   __forceinline__ __device__ static S desired_when_missed(
@@ -819,6 +819,18 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       if (vote) {
         src_lane = __ffs(vote) - 1;
         key_pos = g.shfl(key_pos, src_lane);
+        if (__popc(vote) > 1 && g.thread_rank() == 0) {
+          for (int k = 0; k < 128; k++) {
+            printf("k=%d\tkey=0x%llx\tscore=0x%llx", k, bucket->keys(k)->load(),
+                   bucket->scores(k)->load());
+            if (bucket->keys(k)->load() == desired_key ||
+                bucket->keys(k)->load() == static_cast<K>(LOCKED_KEY)) {
+              printf(" * key=0x%llx\tstart_idx=%d\n", desired_key, start_idx);
+            } else {
+              printf("\n");
+            }
+          }
+        }
         return OccupyResult::DUPLICATE;
       }
       vote = g.ballot(expected_key == static_cast<K>(LOCKED_KEY));
@@ -841,7 +853,6 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       local_min_score_pos = key_pos;
     }
   }
-
   // Step 3: insert by evicting some one.
   const S global_min_score_val =
       cg::reduce(g, local_min_score_val, cg::less<S>());
@@ -868,6 +879,25 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
         result = false;
       }
     }
+
+    bool found = false;
+    for (uint32_t tile_offset = 0; tile_offset < bucket_max_size && result;
+         tile_offset += TILE_SIZE) {
+      key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
+      if (bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed) ==
+          desired_key) {
+        found = true;
+        break;
+      }
+    }
+    found = g.any(found);
+    if (found) {
+      if (src_lane == g.thread_rank()) {
+        current_key->store(local_min_score_key, UNLOCK_MEM_ORDER);
+      }
+      return OccupyResult::REFUSED;
+    }
+
     result = g.shfl(result, src_lane);
     if (result) {
       // Not every `evicted_key` is correct expect the `src_lane` thread.
