@@ -790,6 +790,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     const size_t start_idx, int& key_pos, int& src_lane,
     const size_t bucket_max_size) {
   K expected_key = static_cast<K>(EMPTY_KEY);
+  K un_key = static_cast<K>(EMPTY_KEY);
 
   AtomicKey<K>* current_key;
   AtomicScore<S>* current_score;
@@ -810,11 +811,29 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
     current_key = bucket->keys(key_pos);
 
     // Step 1: try find and lock the desired_key.
-    do {
-      expected_key = desired_key;
-      result = current_key->compare_exchange_strong(
+    while(g.thread_rank() == 0 && tile_offset == 0) {
+      while ((expected_key = bucket->keys(key_pos)->load(LOCK_MEM_ORDER)) ==
+             static_cast<K>(LOCKED_KEY)) {
+      };
+      if(current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY), LOCK_MEM_ORDER,
-          cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_relaxed)) {
+        break;
+      };
+    }
+    do {
+      if((g.thread_rank() == 0 && tile_offset == 0)) {
+        expected_key = desired_key;
+        result = current_key->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY), LOCK_MEM_ORDER,
+            cuda::std::memory_order_relaxed);
+      } else {
+        expected_key = desired_key;
+        result = current_key->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY), LOCK_MEM_ORDER,
+            cuda::std::memory_order_relaxed);
+      }
+
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
@@ -880,23 +899,23 @@ __device__ __forceinline__ OccupyResult find_and_lock_when_full(
       }
     }
 
-    bool found = false;
-    for (uint32_t tile_offset = 0; tile_offset < bucket_max_size && result;
-         tile_offset += TILE_SIZE) {
-      key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
-      if (bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed) ==
-          desired_key) {
-        found = true;
-        break;
-      }
-    }
-    found = g.any(found);
-    if (found) {
-      if (src_lane == g.thread_rank()) {
-        current_key->store(local_min_score_key, UNLOCK_MEM_ORDER);
-      }
-      return OccupyResult::REFUSED;
-    }
+//    bool found = false;
+//    for (uint32_t tile_offset = 0; tile_offset < bucket_max_size && result;
+//         tile_offset += TILE_SIZE) {
+//      key_pos = (start_idx + tile_offset + g.thread_rank()) % bucket_max_size;
+//      if (bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed) ==
+//          desired_key) {
+//        found = true;
+//        break;
+//      }
+//    }
+//    found = g.any(found);
+//    if (found) {
+//      if (src_lane == g.thread_rank()) {
+//        current_key->store(local_min_score_key, UNLOCK_MEM_ORDER);
+//      }
+//      return OccupyResult::REFUSED;
+//    }
 
     result = g.shfl(result, src_lane);
     if (result) {
