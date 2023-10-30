@@ -1203,14 +1203,12 @@ class HashTable {
   }
 
   /**
-   * @brief Assign new key-value-score tuples into the hash table.
+   * @brief Assign new scores for keys.
    * If the key doesn't exist, the operation on the key will be ignored.
    *
-   * @param n Number of key-value-score tuples to insert or assign.
+   * @param n Number of key-score tuples to assign.
    * @param keys The keys to insert on GPU-accessible memory with shape
    * (n).
-   * @param values The values to insert on GPU-accessible memory with
-   * shape (n, DIM).
    * @parblock
    * The scores should be a `uint64_t` value. You can specify a value that
    * such as the timestamp of the key insertion, number of the key
@@ -1224,10 +1222,10 @@ class HashTable {
    *
    * @param unique_key If all keys in the same batch are unique.
    */
-  void assign(const size_type n,
-              const key_type* keys,                // (n)
-              const score_type* scores = nullptr,  // (n)
-              cudaStream_t stream = 0, bool unique_key = true) {
+  void assign_scores(const size_type n,
+                     const key_type* keys,                // (n)
+                     const score_type* scores = nullptr,  // (n)
+                     cudaStream_t stream = 0, bool unique_key = true) {
     if (n == 0) {
       return;
     }
@@ -1262,6 +1260,16 @@ class HashTable {
     }
 
     CudaCheckError();
+  }
+
+  /**
+   * @brief Alias of `assign_scores`.
+   */
+  void assign(const size_type n,
+              const key_type* keys,                // (n)
+              const score_type* scores = nullptr,  // (n)
+              cudaStream_t stream = 0, bool unique_key = true) {
+    assign_scores(n, keys, scores, stream, unique_key);
   }
 
   /**
