@@ -160,7 +160,7 @@ __global__ void gather_scores_values_kernel(const size_t n, const size_t dim,
 
 template <typename K, typename V>
 void unique_kv(
-    const thrust::detail::execution_policy_base<DerivedPolicy>& policy,
+    const thrust::device_execution_policy& policy,
     size_t n, size_t dim,
     const K* keys,     // (n)
     const V* values,   // (n * dim)
@@ -196,7 +196,7 @@ void unique_kv(
 
 template <typename K, typename V, typename S>
 void unique_kvs(
-    const thrust::detail::execution_policy_base<DerivedPolicy>& policy,
+    const thrust::device_execution_policy& policy,
     size_t n, size_t dim,
     const K* keys,     // (n)
     const V* values,   // (n * dim)
