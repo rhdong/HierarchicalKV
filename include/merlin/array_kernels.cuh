@@ -121,12 +121,12 @@ void gpu_boolean_mask(size_t grid_size, size_t block_size, const bool* masks,
                                              scores, dim);
 }
 
-template <typename T>
-__global__ void mapping_kv_kernel(const size_t n, const size_t dim,
-                                  const size_t* __restrict order1,
-                                  const size_t* __restrict order2,
-                                  const T* __restrict values,
-                                  T* __restrict unique_values) {
+template <typename V>
+__global__ void gather_values_kernel(const size_t n, const size_t dim,
+                                     const size_t* __restrict order1,
+                                     const size_t* __restrict order2,
+                                     const V* __restrict values,
+                                     V* __restrict unique_values) {
   size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid > n) {
     return;
@@ -139,13 +139,13 @@ __global__ void mapping_kv_kernel(const size_t n, const size_t dim,
 }
 
 template <typename V, typename S>
-__global__ void mapping_kvs_kernel(const size_t n, const size_t dim,
-                                   const size_t* __restrict order1,
-                                   const size_t* __restrict order2,
-                                   const V* __restrict values,
-                                   const S* __restrict scores,
-                                   T* __restrict unique_values,
-                                   T* __restrict unique_scores) {
+__global__ void gather_scores_values_kernel(const size_t n, const size_t dim,
+                                            const size_t* __restrict order1,
+                                            const size_t* __restrict order2,
+                                            const S* __restrict scores,
+                                            S* __restrict unique_scores,
+                                            const V* __restrict values,
+                                            V* __restrict unique_values) {
   size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid > n) {
     return;
@@ -167,8 +167,8 @@ void unique_kv(
     K* unique_keys,    // (n)
     V* unique_values,  //(n * dim),
     size_t* unique_size, cudaStream_t stream) {
-  CUDA_CHECK(cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n,
-                             cudaMemcpyDeviceToDevice, stream));
+  cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n, cudaMemcpyDeviceToDevice,
+                  stream);
 
   size_t* order1;
   size_t* order2;
@@ -205,8 +205,8 @@ void unique_kvs(
     V* unique_values,  // (n * dim)
     S* unique_scores,  // (n)
     size_t* unique_size, cudaStream_t stream) {
-  CUDA_CHECK(cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n,
-                             cudaMemcpyDeviceToDevice, stream));
+  cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n, cudaMemcpyDeviceToDevice,
+                  stream);
 
   size_t* order1;
   size_t* order2;
@@ -225,7 +225,7 @@ void unique_kvs(
   // Mapping from `order2` to `order1`
   static constexpr size_t BLOCK_SIZE = 1024;
   size_t grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  mapping_kvs_kernel<V><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+  gather_values_kernel<V><<<grid_size, BLOCK_SIZE, 0, stream>>>(
       *unique_size, dim, order1, order2, values, scores, unique_values,
       unique_scores);
 
