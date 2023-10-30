@@ -159,52 +159,13 @@ __global__ void gather_scores_values_kernel(const size_t n, const size_t dim,
 }
 
 template <typename K, typename V>
-void unique_kv(
-    const thrust::device_execution_policy& policy,
-    size_t n, size_t dim,
-    const K* keys,     // (n)
-    const V* values,   // (n * dim)
-    K* unique_keys,    // (n)
-    V* unique_values,  //(n * dim),
-    size_t* unique_size, cudaStream_t stream) {
-  cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n, cudaMemcpyDeviceToDevice,
-                  stream);
-
-  size_t* order1;
-  size_t* order2;
-  cudaMallocAsync(&order1, sizeof(size_t) * n, stream);
-  cudaMallocAsync(&order2, sizeof(size_t) * n, stream);
-
-  thrust::sequence(policy, order1, order1 + n);
-  thrust::sequence(policy, order2, order2 + n);
-
-  thrust::sort_by_key(policy, unique_keys, unique_keys + n, order1);
-
-  thrust::pair<K*, size_t*> end =
-      thrust::unique_by_key(policy, unique_keys, unique_keys + n, order2);
-  *unique_size = end.first - unique_keys;
-
-  // Mapping from `order2` to `order1`
-  static constexpr size_t BLOCK_SIZE = 1024;
-  size_t grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  MappingKernel<V><<<grid_size, BLOCK_SIZE, 0, stream>>>(
-      *unique_size, dim, order1, order2, values, unique_values);
-
-  cudaFreeAsync(order1, stream);
-  cudaFreeAsync(order2, stream);
-}
-
-template <typename K, typename V, typename S>
-void unique_kvs(
-    const thrust::device_execution_policy& policy,
-    size_t n, size_t dim,
-    const K* keys,     // (n)
-    const V* values,   // (n * dim)
-    const S* scores,   // (n)
-    K* unique_keys,    // (n)
-    V* unique_values,  // (n * dim)
-    S* unique_scores,  // (n)
-    size_t* unique_size, cudaStream_t stream) {
+void unique_kv(const thrust::device_execution_policy& policy, size_t n,
+               size_t dim,
+               const K* keys,     // (n)
+               const V* values,   // (n * dim)
+               K* unique_keys,    // (n)
+               V* unique_values,  // (n * dim),
+               size_t* unique_size, cudaStream_t stream) {
   cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n, cudaMemcpyDeviceToDevice,
                   stream);
 
@@ -226,8 +187,45 @@ void unique_kvs(
   static constexpr size_t BLOCK_SIZE = 1024;
   size_t grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
   gather_values_kernel<V><<<grid_size, BLOCK_SIZE, 0, stream>>>(
-      *unique_size, dim, order1, order2, values, scores, unique_values,
-      unique_scores);
+      *unique_size, dim, order1, order2, values, unique_values);
+
+  cudaFreeAsync(order1, stream);
+  cudaFreeAsync(order2, stream);
+}
+
+template <typename K, typename V, typename S>
+void unique_kvs(const thrust::device_execution_policy& policy, size_t n,
+                size_t dim,
+                const K* keys,     // (n)
+                const V* values,   // (n * dim)
+                const S* scores,   // (n)
+                K* unique_keys,    // (n)
+                V* unique_values,  // (n * dim)
+                S* unique_scores,  // (n)
+                size_t* unique_size, cudaStream_t stream) {
+  cudaMemcpyAsync(unique_keys, keys, sizeof(K) * n, cudaMemcpyDeviceToDevice,
+                  stream);
+
+  size_t* order1;
+  size_t* order2;
+  cudaMallocAsync(&order1, sizeof(size_t) * n, stream);
+  cudaMallocAsync(&order2, sizeof(size_t) * n, stream);
+
+  thrust::sequence(policy, order1, order1 + n);
+  thrust::sequence(policy, order2, order2 + n);
+
+  thrust::sort_by_key(policy, unique_keys, unique_keys + n, order1);
+
+  thrust::pair<K*, size_t*> end =
+      thrust::unique_by_key(policy, unique_keys, unique_keys + n, order2);
+  *unique_size = end.first - unique_keys;
+
+  // Mapping from `order2` to `order1`
+  static constexpr size_t BLOCK_SIZE = 1024;
+  size_t grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  gather_scores_values_kernel<V><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+      *unique_size, dim, order1, order2, scores, unique_scores, values,
+      unique_values);
 
   cudaFreeAsync(order1, stream);
   cudaFreeAsync(order2, stream);
