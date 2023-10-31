@@ -302,7 +302,6 @@ We are very grateful to external initial contributors [@Zhangyafei](https://gith
 ### License
 Apache License 2.0
 
-```mermaid
 ```plantuml
 @startuml
 !define class1 class Person : Class 1 {
