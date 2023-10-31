@@ -303,7 +303,18 @@ We are very grateful to external initial contributors [@Zhangyafei](https://gith
 Apache License 2.0
 
 ```plantuml
+!include  https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+```
+
+If you don't need the up-to-date version, PlantUML includes the last released `C4_...` files as [standard library C4](https://plantuml.com/stdlib#062f75176513a666) \(no additional files or Internet is required). You can use it with following:
+
+```plantuml
+!include <C4/C4_Container>
+```
+
+```plantuml
 @startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 !define class1 class Person : Class 1 {
   + SharedAPI()
   - UniqueAPI1()
