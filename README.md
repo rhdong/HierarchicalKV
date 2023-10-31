@@ -303,7 +303,18 @@ We are very grateful to external initial contributors [@Zhangyafei](https://gith
 Apache License 2.0
 
 ```mermaid
-graph TD
-  A((Circle 1)) --> B((Circle 2))
-  C((Circle 2)) --> A
+```plantuml
+@startuml
+!define class1 class Person : Class 1 {
+  + SharedAPI()
+  - UniqueAPI1()
+}
+!define class2 class Person : Class 2 {
+  + SharedAPI()
+  - UniqueAPI2()
+}
+actor User as U
+U -->[Uses] class1 : Uses
+U -->[Uses] class2 : Uses
+@enduml
 ```
