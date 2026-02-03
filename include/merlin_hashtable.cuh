@@ -180,6 +180,7 @@ class HashTableBase {
   using value_type = V;
   using score_type = S;
   using allocator_type = BaseAllocator;
+  using bucket_type = nv::merlin::Bucket<K, V, S>;
 
  public:
   virtual ~HashTableBase() {}
@@ -887,6 +888,10 @@ class HashTableBase {
  * @tparam S The data type for `score`.
  *           The currently supported data type is only `uint64_t`.
  *
+ * @note ArchTag controls internal tuning (SM-specific pipeline config), not
+ *       the actual compiled GPU binary architecture. We keep the default at
+ *       Sm80 so that all kernels reuse the existing specializations, while
+ *       nvcc still generates sm_100 code via -gencode flags.
  */
 template <typename K, typename V, typename S = uint64_t,
           int Strategy = EvictStrategy::kLru, typename ArchTag = Sm80>
@@ -1158,7 +1163,7 @@ class HashTable : public HashTableBase<K, V, S> {
         constexpr uint32_t BLOCK_SIZE = 128;
 
         upsert_kernel_lock_key_hybrid<key_type, value_type, score_type,
-                                      BLOCK_SIZE, evict_strategy_>
+                                      BLOCK_SIZE, evict_strategy>
             <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
                 table_->buckets, table_->buckets_size, table_->buckets_num,
                 options_.max_bucket_size, options_.dim, keys, d_dst, scores,
@@ -1169,7 +1174,7 @@ class HashTable : public HashTableBase<K, V, S> {
         const size_t N = n * TILE_SIZE;
         const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-        upsert_kernel<key_type, value_type, score_type, evict_strategy_,
+        upsert_kernel<key_type, value_type, score_type, evict_strategy,
                       TILE_SIZE><<<grid_size, block_size, 0, stream>>>(
             d_table_, table_->buckets, options_.max_bucket_size,
             table_->buckets_num, options_.dim, keys, d_dst, scores,
@@ -3712,6 +3717,18 @@ class HashTable : public HashTableBase<K, V, S> {
   inline void sync_table_configuration() {
     CUDA_CHECK(
         cudaMemcpy(d_table_, table_, sizeof(TableCore), cudaMemcpyDefault));
+  }
+
+ public:
+  // Expose device buckets and layout for read-only lookup kernels
+  inline nv::merlin::Bucket<K, V, S>* device_buckets() const {
+    return table_ ? table_->buckets : nullptr;
+  }
+  inline size_t device_bucket_count() const {
+    return table_ ? table_->buckets_num : 0;
+  }
+  inline size_t device_bucket_max_size() const {
+    return table_ ? table_->bucket_max_size : 0;
   }
 
  private:
