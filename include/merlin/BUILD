@@ -27,6 +27,7 @@ cuda_cc_library(
         "debug.hpp",
         "flexible_buffer.cuh",
         "group_lock.cuh",
+        "hashtable_device_api.cuh",
         "memory_pool.cuh",
         "optimizers.cuh",
     ],
