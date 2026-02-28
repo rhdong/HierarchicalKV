@@ -203,17 +203,25 @@ static void bench_find(float target_lf, cudaStream_t stream) {
 
 /* ─── Main ─── */
 
-int main() {
+int main(int argc, char** argv) {
   cudaDeviceProp props;
   CUDA_CHECK(cudaGetDeviceProperties(&props, 0));
   std::cerr << "GPU: " << props.name << std::endl;
-  std::cerr << "E8: HKV Baseline Comparison" << std::endl;
+  std::cerr << "E16: HKV LF Degradation (kThroughput, eviction-enabled)" << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << INIT_CAPACITY
-            << ", HBM=" << HBM_GB << "GB, kCustomized" << std::endl;
+            << ", HBM=" << HBM_GB << "GB, kCustomized"
+            << std::endl;
 
   std::cout << "library,operation,load_factor,run,throughput_bkvs" << std::endl;
 
-  std::vector<float> load_factors = {0.10f, 0.25f, 0.50f, 0.75f, 0.80f, 0.90f};
+  std::vector<float> load_factors;
+  if (argc > 1) {
+    // Single LF mode: ./e8_hkv_baseline 0.85
+    load_factors.push_back(std::stof(argv[1]));
+  } else {
+    // E16 default: full sweep (no 0.10)
+    load_factors = {0.25f, 0.50f, 0.75f, 0.80f, 0.85f, 0.90f, 0.95f, 1.00f};
+  }
   for (float lf : load_factors) {
     std::cerr << "--- LF=" << std::fixed << std::setprecision(2) << lf
               << " ---" << std::endl;

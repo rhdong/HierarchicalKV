@@ -271,18 +271,23 @@ void run_cuco(float target_lf) {
 
 /* ─── Main ─── */
 
-int main() {
+int main(int argc, char** argv) {
   cudaDeviceProp props;
   CUDA_CHECK(cudaGetDeviceProperties(&props, 0));
   std::cerr << "GPU: " << props.name << std::endl;
-  std::cerr << "E8: cuCollections Baseline (indirection, key->index)"
+  std::cerr << "E16: cuCollections Baseline (indirection, key->index)"
             << std::endl;
   std::cerr << "DIM=" << DIM << " CAPACITY=" << CAPACITY
             << " BATCH=" << BATCH_SIZE << std::endl;
 
   std::cout << "library,operation,load_factor,run,throughput_bkvs" << std::endl;
 
-  std::vector<float> load_factors = {0.10f, 0.25f, 0.50f, 0.75f, 0.80f, 0.90f};
+  std::vector<float> load_factors;
+  if (argc > 1) {
+    load_factors.push_back(std::stof(argv[1]));
+  } else {
+    load_factors = {0.25f, 0.50f, 0.75f, 0.80f, 0.85f, 0.90f, 0.95f, 1.00f};
+  }
   for (float lf : load_factors) {
     run_cuco(lf);
   }

@@ -206,10 +206,11 @@ void run_latency_test(std::shared_ptr<HKVTable>& table, API_Select api,
   float p50 = latencies[n / 2];
   float p95 = latencies[static_cast<int>(n * 0.95)];
   float p99 = latencies[static_cast<int>(n * 0.99)];
+  float p999 = latencies[std::min(static_cast<int>(n * 0.999), n - 1)];
   std::cerr << "  " << api_name << " LF=" << std::fixed
             << std::setprecision(2) << load_factor << ": P50="
             << std::setprecision(3) << p50 << "ms P95=" << p95
-            << "ms P99=" << p99 << "ms" << std::endl;
+            << "ms P99=" << p99 << "ms P99.9=" << p999 << "ms" << std::endl;
 
   CUDA_CHECK(cudaEventDestroy(ev_start));
   CUDA_CHECK(cudaEventDestroy(ev_stop));
