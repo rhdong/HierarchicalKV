@@ -165,6 +165,21 @@ void run_p2bht(float target_lf) {
                          BATCH_SIZE * sizeof(key_type),
                          cudaMemcpyHostToDevice));
 
+  // Device array for batch keys (for find-back verification)
+  key_type* d_batch_keys = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_batch_keys, BATCH_SIZE * sizeof(key_type)));
+  {
+    std::vector<key_type> h_batch_keys(h_all_keys.begin() + prefill_n,
+                                       h_all_keys.end());
+    CUDA_CHECK(cudaMemcpy(d_batch_keys, h_batch_keys.data(),
+                           BATCH_SIZE * sizeof(key_type),
+                           cudaMemcpyHostToDevice));
+  }
+
+  // Device array for find-back verification results
+  index_type* d_verify_indices = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_verify_indices, BATCH_SIZE * sizeof(index_type)));
+
   /* --- INSERT Benchmark --- */
   for (int run = 0; run < WARMUP + RUNS; run++) {
     bght::p2bht<key_type, index_type> table(table_capacity, SENTINEL_KEY,
@@ -191,12 +206,19 @@ void run_p2bht(float target_lf) {
     timer.stop();
 
     if (run >= WARMUP) {
-      double tp = throughput_bkvs(BATCH_SIZE, timer.elapsed_seconds());
+      // Verify: find-back to count actually successful inserts
+      table.find(d_batch_keys, d_batch_keys + BATCH_SIZE, d_verify_indices);
+      CUDA_CHECK(cudaDeviceSynchronize());
+      size_t success = count_successful_indices(
+          reinterpret_cast<uint64_t*>(d_verify_indices), BATCH_SIZE);
+
+      double tp = throughput_bkvs(success, timer.elapsed_seconds());
       std::cout << "P2BHT,insert," << std::fixed << std::setprecision(2)
                 << target_lf << "," << (run - WARMUP + 1) << ","
                 << std::setprecision(6) << tp << std::endl;
       std::cerr << "  insert run " << (run - WARMUP + 1) << ": " << tp
-                << " B-KV/s" << std::endl;
+                << " B-KV/s (" << success << "/" << BATCH_SIZE << " ok)"
+                << std::endl;
     }
   }
 
@@ -253,6 +275,8 @@ void run_p2bht(float target_lf) {
   CUDA_CHECK(cudaFree(d_batch_pairs));
   CUDA_CHECK(cudaFree(d_batch_floats));
   CUDA_CHECK(cudaFree(d_batch_indices));
+  CUDA_CHECK(cudaFree(d_batch_keys));
+  CUDA_CHECK(cudaFree(d_verify_indices));
   CUDA_CHECK(cudaFree(d_query_keys));
   CUDA_CHECK(cudaFree(d_result_indices));
   CUDA_CHECK(cudaFree(d_out));

@@ -12,6 +12,7 @@
 #include <warpcore/single_value_hash_table.cuh>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -110,6 +111,10 @@ void run_warpcore(float target_lf) {
                          BATCH_SIZE * sizeof(Value128),
                          cudaMemcpyHostToDevice));
 
+  // Device array for retrieve-back verification
+  Value128* d_verify = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_verify, BATCH_SIZE * sizeof(Value128)));
+
   /* ─── INSERT Benchmark ─── */
   for (int run = 0; run < WARMUP + RUNS; run++) {
     // Create a fresh table each run
@@ -126,12 +131,28 @@ void run_warpcore(float target_lf) {
     timer.stop();
 
     if (run >= WARMUP) {
-      double tp = throughput_bkvs(BATCH_SIZE, timer.elapsed_seconds());
+      // Verify: retrieve-back to count actually successful inserts
+      // Fill with NaN sentinel before retrieval
+      CUDA_CHECK(cudaMemset(d_verify, 0xFF, BATCH_SIZE * sizeof(Value128)));
+      table.retrieve(d_keys, BATCH_SIZE, d_verify, 0);
+      CUDA_CHECK(cudaDeviceSynchronize());
+
+      std::vector<Value128> h_verify(BATCH_SIZE);
+      CUDA_CHECK(cudaMemcpy(h_verify.data(), d_verify,
+                             BATCH_SIZE * sizeof(Value128),
+                             cudaMemcpyDeviceToHost));
+      size_t success = 0;
+      for (size_t i = 0; i < BATCH_SIZE; i++) {
+        if (!std::isnan(h_verify[i].data[0])) success++;
+      }
+
+      double tp = throughput_bkvs(success, timer.elapsed_seconds());
       std::cout << "WarpCore,insert," << std::fixed << std::setprecision(2)
                 << target_lf << "," << (run - WARMUP + 1) << ","
                 << std::setprecision(6) << tp << std::endl;
       std::cerr << "  insert run " << (run - WARMUP + 1) << ": " << tp
-                << " B-KV/s" << std::endl;
+                << " B-KV/s (" << success << "/" << BATCH_SIZE << " ok)"
+                << std::endl;
     }
   }
 
@@ -195,6 +216,7 @@ void run_warpcore(float target_lf) {
   CUDA_CHECK(cudaFree(d_keys));
   CUDA_CHECK(cudaFree(d_vals));
   CUDA_CHECK(cudaFree(d_out));
+  CUDA_CHECK(cudaFree(d_verify));
   CUDA_CHECK(cudaFree(d_prefill_keys));
   CUDA_CHECK(cudaFree(d_prefill_vals));
 }

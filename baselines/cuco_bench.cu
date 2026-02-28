@@ -182,13 +182,29 @@ void run_cuco(float target_lf) {
     timer.stop();
 
     if (run >= WARMUP) {
-      double tp = throughput_bkvs(BATCH_SIZE, timer.elapsed_seconds());
+      // Verify: find-back to count actually successful inserts
+      thrust::device_vector<key_type> d_verify_keys(
+          h_all_keys.begin() + prefill_n, h_all_keys.end());
+      thrust::device_vector<index_type> d_verify_vals(BATCH_SIZE);
+      map.find(d_verify_keys.begin(), d_verify_keys.end(),
+               d_verify_vals.begin());
+      CUDA_CHECK(cudaDeviceSynchronize());
+      std::vector<index_type> h_verify(BATCH_SIZE);
+      thrust::copy(d_verify_vals.begin(), d_verify_vals.end(),
+                   h_verify.begin());
+      size_t success = 0;
+      for (size_t i = 0; i < BATCH_SIZE; i++) {
+        if (h_verify[i] != EMPTY_VAL) success++;
+      }
+
+      double tp = throughput_bkvs(success, timer.elapsed_seconds());
       std::cout << "cuCollections,insert," << std::fixed
                 << std::setprecision(2) << target_lf << ","
                 << (run - WARMUP + 1) << "," << std::setprecision(6) << tp
                 << std::endl;
       std::cerr << "  insert run " << (run - WARMUP + 1) << ": " << tp
-                << " B-KV/s" << std::endl;
+                << " B-KV/s (" << success << "/" << BATCH_SIZE << " ok)"
+                << std::endl;
     }
   }
 

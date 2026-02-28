@@ -127,6 +127,22 @@ inline void scatter_values(float* values, const float* in,
                                                      n);
 }
 
+/* ─── Count Successful Inserts (index-based) ─── */
+// After insert + find-back, count how many keys got non-sentinel indices.
+// Used by BGHT, P2BHT, cuCollections to compute actual insert success count.
+
+inline size_t count_successful_indices(const uint64_t* d_indices, size_t n,
+                                       uint64_t sentinel = ~0ULL) {
+  std::vector<uint64_t> h_indices(n);
+  CUDA_CHECK(cudaMemcpy(h_indices.data(), d_indices, n * sizeof(uint64_t),
+                         cudaMemcpyDeviceToHost));
+  size_t count = 0;
+  for (size_t i = 0; i < n; i++) {
+    if (h_indices[i] != sentinel) count++;
+  }
+  return count;
+}
+
 /* ─── Throughput Helper ─── */
 // Throughput in Billion-KV/s.
 

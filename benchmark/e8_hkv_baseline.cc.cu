@@ -1,7 +1,7 @@
 /*
  * E8: HKV Baseline Benchmark
  *
- * Config B: dim=32, capacity=128M, HBM=16GB, EvictStrategy::kCustomized
+ * Config B: dim=32, capacity=128M, HBM=16GB, EvictStrategy::kLru
  * Measures insert_or_assign and find throughput at load factors {0.50, 0.75}
  * using BATCH_SIZE=1M keys, 5 runs with 3 warmup iterations.
  *
@@ -36,40 +36,30 @@ static constexpr float EPSILON = 0.001f;
 /* ─── Pre-populate Table to Target LF ─── */
 
 static K prepopulate(std::shared_ptr<HashTable<K, V, S,
-                     EvictStrategy::kCustomized, Sm80>>& table,
+                     EvictStrategy::kLru, Sm80>>& table,
                      size_t target_count, cudaStream_t stream) {
   K* h_keys;
-  S* h_scores;
   CUDA_CHECK(cudaMallocHost(&h_keys, BATCH_SIZE * sizeof(K)));
-  CUDA_CHECK(cudaMallocHost(&h_scores, BATCH_SIZE * sizeof(S)));
 
   K* d_keys;
-  S* d_scores;
   V* d_vectors;
   CUDA_CHECK(cudaMalloc(&d_keys, BATCH_SIZE * sizeof(K)));
-  CUDA_CHECK(cudaMalloc(&d_scores, BATCH_SIZE * sizeof(S)));
   CUDA_CHECK(cudaMalloc(&d_vectors, BATCH_SIZE * sizeof(V) * DIM));
   CUDA_CHECK(cudaMemset(d_vectors, 1, BATCH_SIZE * sizeof(V) * DIM));
 
   K start = 0;
-  int epoch = 0;
   while (start < target_count) {
     size_t cur = std::min(BATCH_SIZE, target_count - start);
-    table->set_global_epoch(epoch++);
-    create_continuous_keys<K, S>(h_keys, h_scores, cur, start);
+    for (size_t i = 0; i < cur; i++) h_keys[i] = start + i;
     CUDA_CHECK(
         cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                           cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);
+    table->insert_or_assign(cur, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += cur;
   }
 
   CUDA_CHECK(cudaFreeHost(h_keys));
-  CUDA_CHECK(cudaFreeHost(h_scores));
   CUDA_CHECK(cudaFree(d_keys));
-  CUDA_CHECK(cudaFree(d_scores));
   CUDA_CHECK(cudaFree(d_vectors));
 
   return start;
@@ -89,7 +79,7 @@ static void bench_insert(float target_lf, cudaStream_t stream) {
     options.dim = DIM;
     options.max_hbm_for_vectors = nv::merlin::GB(HBM_GB);
 
-    using Table = HashTable<K, V, S, EvictStrategy::kCustomized, Sm80>;
+    using Table = HashTable<K, V, S, EvictStrategy::kLru, Sm80>;
     auto table = std::make_shared<Table>();
     table->init(options);
 
@@ -98,27 +88,21 @@ static void bench_insert(float target_lf, cudaStream_t stream) {
 
     // Prepare the timed batch
     K* h_keys;
-    S* h_scores;
     CUDA_CHECK(cudaMallocHost(&h_keys, BATCH_SIZE * sizeof(K)));
-    CUDA_CHECK(cudaMallocHost(&h_scores, BATCH_SIZE * sizeof(S)));
-    create_continuous_keys<K, S>(h_keys, h_scores, BATCH_SIZE, start);
+    for (size_t i = 0; i < BATCH_SIZE; i++) h_keys[i] = start + i;
 
     K* d_keys;
-    S* d_scores;
     V* d_vectors;
     CUDA_CHECK(cudaMalloc(&d_keys, BATCH_SIZE * sizeof(K)));
-    CUDA_CHECK(cudaMalloc(&d_scores, BATCH_SIZE * sizeof(S)));
     CUDA_CHECK(cudaMalloc(&d_vectors, BATCH_SIZE * sizeof(V) * DIM));
     CUDA_CHECK(cudaMemset(d_vectors, 1, BATCH_SIZE * sizeof(V) * DIM));
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
                            cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_scores, h_scores, BATCH_SIZE * sizeof(S),
-                           cudaMemcpyHostToDevice));
 
-    // Timed insert_or_assign
+    // Timed insert_or_assign (kLru: no scores, uses internal timestamps)
     auto timer = benchmark::KernelTimer<double>();
     timer.start();
-    table->insert_or_assign(BATCH_SIZE, d_keys, d_vectors, d_scores, stream);
+    table->insert_or_assign(BATCH_SIZE, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     timer.end();
 
@@ -133,9 +117,7 @@ static void bench_insert(float target_lf, cudaStream_t stream) {
     }
 
     CUDA_CHECK(cudaFreeHost(h_keys));
-    CUDA_CHECK(cudaFreeHost(h_scores));
     CUDA_CHECK(cudaFree(d_keys));
-    CUDA_CHECK(cudaFree(d_scores));
     CUDA_CHECK(cudaFree(d_vectors));
   }
 }
@@ -152,7 +134,7 @@ static void bench_find(float target_lf, cudaStream_t stream) {
   options.dim = DIM;
   options.max_hbm_for_vectors = nv::merlin::GB(HBM_GB);
 
-  using Table = HashTable<K, V, S, EvictStrategy::kCustomized, Sm80>;
+  using Table = HashTable<K, V, S, EvictStrategy::kLru, Sm80>;
   auto table = std::make_shared<Table>();
   table->init(options);
 
@@ -209,7 +191,7 @@ int main(int argc, char** argv) {
   std::cerr << "GPU: " << props.name << std::endl;
   std::cerr << "E16: HKV LF Degradation (kThroughput, eviction-enabled)" << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << INIT_CAPACITY
-            << ", HBM=" << HBM_GB << "GB, kCustomized"
+            << ", HBM=" << HBM_GB << "GB, kLru"
             << std::endl;
 
   std::cout << "library,operation,load_factor,run,throughput_bkvs" << std::endl;
