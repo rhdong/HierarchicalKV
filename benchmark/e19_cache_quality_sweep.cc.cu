@@ -282,22 +282,29 @@ void run_policy(const char* policy_name, double alpha, BenchBuffers& buf,
   }
 
   /* -----------------------------------------------------------------
-   * Phase 3: Measure hit ratio with 5 rounds of 1M Zipfian find queries
+   * Phase 3: Measure hit ratio AND throughput with find queries
    * ----------------------------------------------------------------- */
   std::cerr << " find..." << std::flush;
 
   ZipfianGenerator zipf_find(KEY_RANGE, alpha, FIND_SEED);
   size_t total_found = 0;
   size_t total_queries = 0;
+  double total_find_ms = 0.0;
 
   for (int r = 0; r < FIND_ROUNDS; r++) {
     zipf_find.fill(buf.h_keys, BATCH_SIZE);
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, BATCH_SIZE * sizeof(K),
                           cudaMemcpyHostToDevice));
 
+    // Time the find kernel
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    auto t0 = std::chrono::high_resolution_clock::now();
     table->find(BATCH_SIZE, buf.d_keys, buf.d_vectors, buf.d_found, nullptr,
                 stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
+    auto t1 = std::chrono::high_resolution_clock::now();
+    total_find_ms +=
+        std::chrono::duration<double, std::milli>(t1 - t0).count();
 
     CUDA_CHECK(cudaMemcpy(buf.h_found, buf.d_found, BATCH_SIZE * sizeof(bool),
                           cudaMemcpyDeviceToHost));
@@ -309,14 +316,18 @@ void run_policy(const char* policy_name, double alpha, BenchBuffers& buf,
 
   double hit_ratio =
       static_cast<double>(total_found) / static_cast<double>(total_queries);
+  double find_throughput_bkvs =
+      static_cast<double>(total_queries) / (total_find_ms * 1e-3) / 1e9;
 
   std::cerr << " hit=" << std::fixed << std::setprecision(4) << hit_ratio
-            << std::endl;
+            << " find=" << std::setprecision(3) << find_throughput_bkvs
+            << " B-KV/s" << std::endl;
 
-  // CSV output: policy,alpha,hit_ratio,total_found,total_queries
+  // CSV output: policy,alpha,hit_ratio,total_found,total_queries,find_throughput_bkvs
   std::cout << policy_name << "," << std::fixed << std::setprecision(2) << alpha
             << "," << std::setprecision(4) << hit_ratio << "," << total_found
-            << "," << total_queries << std::endl;
+            << "," << total_queries << "," << std::setprecision(4)
+            << find_throughput_bkvs << std::endl;
 }
 
 /* ================================================================
@@ -383,7 +394,7 @@ int main(int argc, char** argv) {
   buf.alloc();
 
   // CSV header
-  std::cout << "policy,alpha,hit_ratio,total_found,total_queries" << std::endl;
+  std::cout << "policy,alpha,hit_ratio,total_found,total_queries,find_throughput_bkvs" << std::endl;
 
   try {
     if (target_policy == "all" || target_policy == "kLru") {
