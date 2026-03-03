@@ -241,6 +241,10 @@ add_executable(e17_single_vs_dual benchmark/e17_single_vs_dual.cc.cu)
 target_compile_features(e17_single_vs_dual PUBLIC cxx_std_14)
 set_target_properties(e17_single_vs_dual PROPERTIES CUDA_ARCHITECTURES OFF)
 
+add_executable(e19_cache_quality_sweep benchmark/e19_cache_quality_sweep.cc.cu)
+target_compile_features(e19_cache_quality_sweep PUBLIC cxx_std_17)
+set_target_properties(e19_cache_quality_sweep PROPERTIES CUDA_ARCHITECTURES OFF)
+
 add_executable(bucket_size_benchmark benchmark/bucket_size_benchmark.cc.cu)
 target_compile_features(bucket_size_benchmark PUBLIC cxx_std_14)
 set_target_properties(bucket_size_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)

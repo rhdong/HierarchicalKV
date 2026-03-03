@@ -5,7 +5,7 @@
  * side-by-side under identical conditions.
  *
  * Config B: dim=32, capacity=128M, Pure HBM (max_hbm_for_vectors=0),
- *           EvictStrategy::kCustomized, bucket_size=128
+ *           EvictStrategy::kLru, bucket_size=128
  *
  * Four measurements:
  *   Part 1: First-eviction load factor for BOTH modes
@@ -146,7 +146,7 @@ static constexpr int NUM_MODES = 2;
  * Helper: create table for a given mode
  * ================================================================ */
 
-using HKVTable = HashTable<K, V, S, EvictStrategy::kCustomized>;
+using HKVTable = HashTable<K, V, S, EvictStrategy::kLru>;
 
 std::shared_ptr<HKVTable> create_table(TableMode mode) {
   HashTableOptions options;
@@ -173,13 +173,14 @@ void fill_sequential(HKVTable& table, size_t target_count, BenchBuffers& buf,
     size_t cur = std::min(BATCH_SIZE, target_count - inserted);
     for (size_t i = 0; i < cur; i++) {
       buf.h_keys[i] = inserted + i;
-      buf.h_scores[i] = inserted + i;  // score = key
+      buf.h_scores[i] = inserted + i;  // score = key (ignored under kLru)
     }
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
                            cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
                            cudaMemcpyHostToDevice));
-    table.insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
+    // kLru mode: pass nullptr for scores (auto-generates LRU timestamps)
+    table.insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
                            stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     inserted += cur;
@@ -212,7 +213,7 @@ void part1_first_eviction_lf(const ModeConfig& mode, BenchBuffers& buf,
                            cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
                            cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
                             stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     total_inserted += cur;
@@ -288,7 +289,7 @@ void part2_hit_ratio(const ModeConfig& mode, BenchBuffers& buf,
                            cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
                            cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
                             stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     inserted += cur;
@@ -372,8 +373,9 @@ void part3_throughput(const ModeConfig& mode, BenchBuffers& buf,
       CUDA_CHECK(cudaStreamSynchronize(stream));
       auto t_insert = Timer<double>();
       t_insert.start();
+      // kLru mode: pass nullptr for scores (auto-generates LRU timestamps)
       table->insert_or_assign(BATCH_SIZE, buf.d_keys, buf.d_vectors,
-                              buf.d_scores, stream);
+                              nullptr, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       t_insert.end();
       double insert_tp =
@@ -477,7 +479,7 @@ void part4_score_retention(const ModeConfig& mode, BenchBuffers& buf,
                            cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
                            cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
                             stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     inserted += cur;
@@ -561,7 +563,7 @@ int main(int argc, char** argv) {
   std::cerr << "E17: Single-Bucket vs Dual-Bucket Comparison" << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << CAPACITY
             << ", bucket_size=" << BUCKET_SIZE
-            << ", Pure HBM, kCustomized" << std::endl;
+            << ", Pure HBM, kLru" << std::endl;
 
   // Usage: ./e17_single_vs_dual [part]
   // part: 0 for all (default), 1/2/3/4 for specific part
