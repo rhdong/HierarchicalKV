@@ -2494,24 +2494,11 @@ class HashTable : public HashTableBase<K, V, S> {
     }
 
     if (is_fast_mode()) {
-      using Selector = SelectPipelineLookupKernelWithIO<key_type, value_type,
-                                                        score_type, ArchTag>;
-      const uint32_t pipeline_max_size = Selector::max_value_size();
-      // Pipeline lookup kernel only supports "bucket_size = 128".
-      if (options_.max_bucket_size == 128 && value_size <= pipeline_max_size) {
-        LookupKernelParams<key_type, value_type, score_type> lookupParams(
-            table_->buckets, table_->buckets_num, static_cast<uint32_t>(dim()),
-            keys, values, scores, founds, n);
-        Selector::select_kernel(lookupParams, stream);
-      } else {
+      // [PAPER-EXP] Force TLP kernel for A/B comparison vs Pipeline.
+      {
         using Selector =
             SelectLookupKernelWithIO<key_type, value_type, score_type>;
-        static thread_local int step_counter = 0;
-        static thread_local float load_factor = 0.0;
-
-        if (((step_counter++) % kernel_select_interval_) == 0) {
-          load_factor = fast_load_factor(0, stream, false);
-        }
+        static thread_local float load_factor = 0.50f;  // fixed: always TLP path
         Selector::execute_kernel(load_factor, options_.block_size,
                                  options_.max_bucket_size, table_->buckets_num,
                                  options_.dim, stream, n, d_table_,
