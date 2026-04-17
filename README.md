@@ -4,6 +4,13 @@
 [![GitHub License](https://img.shields.io/github/license/NVIDIA-Merlin/HierarchicalKV)](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/LICENSE)
 [![Documentation](https://img.shields.io/badge/documentation-blue.svg)](https://nvidia-merlin.github.io/HierarchicalKV/master/README.html)
 
+> **SIGMOD reviewers — start here:** see [`benchmark/README.md`](benchmark/README.md)
+> for the paper↔script mapping, per-experiment build/run commands, and
+> expected numbers. A one-shot runner for the full suite is at
+> [`scripts/run_all_benchmarks.sh`](scripts/run_all_benchmarks.sh), and the
+> anonymized Company-A production log backing Exp #5 is under
+> [`benchmark/company_a_hkv_realtime/`](benchmark/company_a_hkv_realtime/README.md).
+
 ## About HierarchicalKV
 
 HierarchicalKV is a part of NVIDIA Merlin and provides hierarchical key-value storage to meet RecSys requirements.
