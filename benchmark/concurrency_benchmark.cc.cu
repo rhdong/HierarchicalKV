@@ -44,12 +44,12 @@ using TableOptions = nv::merlin::HashTableOptions;
 using HKVTable =
     nv::merlin::HashTable<K, V, S, EvictStrategy::kLru, nv::merlin::Sm80>;
 
-/* ---- experiment knobs (E7v2) ---- */
+/* ---- experiment knobs (EXP-3: standard params) ---- */
 static constexpr int BATCHES_PER_THREAD = 200;
-static constexpr size_t BATCH_SIZE = 64UL * 1024;  // 64K keys per batch
-static constexpr size_t DIM = 16;                    // E7v2: smaller dim to expose lock overhead
+static constexpr size_t BATCH_SIZE = 1UL * 1024 * 1024;  // 1M keys per batch
+static constexpr size_t DIM = 32;                          // standard dim
 static constexpr size_t INIT_CAPACITY = 128UL * 1024 * 1024;  // 128M
-static constexpr size_t HBM_GB = 16;
+static constexpr size_t HBM_GB = 32;
 static constexpr float LOAD_FACTOR = 0.75f;
 static constexpr float EPSILON = 0.001f;
 
@@ -154,11 +154,15 @@ void populate_table(std::shared_ptr<HKVTable>& table, cudaStream_t stream) {
 
 /* ---- worker thread function ----
  *
- * Design: Each thread pre-allocates GPU memory and pre-copies keys
- * for ALL batches. During the timed region, threads only call the
- * table API and stream-sync, with no host-side key generation or
- * H2D copies. This isolates lock contention effects.
+ * Design: Each thread pre-allocates a small pool of GPU buffers
+ * (BUFFER_POOL_SIZE slots) and pre-copies random keys into them.
+ * During the timed region, threads rotate through the pool via
+ * modular indexing. Since keys are random, reuse across pool slots
+ * is fine for throughput measurement — this avoids OOM when
+ * batches * batch_size * dim is large.
  */
+static constexpr int BUFFER_POOL_SIZE = 4;
+
 void worker_thread(HKVTable* table, OpType op, int batches,
                    size_t batch_size, size_t dim, uint64_t key_range,
                    uint64_t insert_start, int thread_id, Barrier* barrier,
@@ -166,12 +170,13 @@ void worker_thread(HKVTable* table, OpType op, int batches,
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
 
-  /* Allocate per-batch device buffers */
-  std::vector<K*> d_keys_vec(batches);
-  std::vector<V*> d_vectors_vec(batches);
-  std::vector<bool*> d_found_vec(batches);
+  /* Allocate a small pool of device buffers */
+  const int pool = std::min(BUFFER_POOL_SIZE, batches);
+  std::vector<K*> d_keys_vec(pool);
+  std::vector<V*> d_vectors_vec(pool);
+  std::vector<bool*> d_found_vec(pool);
 
-  for (int b = 0; b < batches; b++) {
+  for (int b = 0; b < pool; b++) {
     CUDA_CHECK(cudaMalloc(&d_keys_vec[b], batch_size * sizeof(K)));
     CUDA_CHECK(cudaMalloc(&d_vectors_vec[b], batch_size * sizeof(V) * dim));
     CUDA_CHECK(
@@ -181,7 +186,7 @@ void worker_thread(HKVTable* table, OpType op, int batches,
     }
   }
 
-  /* Pre-generate and upload keys for all batches */
+  /* Pre-generate and upload keys for pool slots */
   K* h_keys;
   CUDA_CHECK(cudaMallocHost(&h_keys, batch_size * sizeof(K)));
   std::mt19937_64 rng(42 + thread_id);
@@ -189,7 +194,7 @@ void worker_thread(HKVTable* table, OpType op, int batches,
   K insert_key_base =
       insert_start + static_cast<K>(thread_id) * batches * batch_size;
 
-  for (int b = 0; b < batches; b++) {
+  for (int b = 0; b < pool; b++) {
     switch (op) {
       case OP_FIND:
       case OP_ASSIGN: {
@@ -221,20 +226,21 @@ void worker_thread(HKVTable* table, OpType op, int batches,
 
   size_t total_keys = 0;
   for (int b = 0; b < batches; b++) {
+    int slot = b % pool;
     switch (op) {
       case OP_FIND: {
-        table->find(batch_size, d_keys_vec[b], d_vectors_vec[b],
-                    d_found_vec[b], nullptr, stream);
+        table->find(batch_size, d_keys_vec[slot], d_vectors_vec[slot],
+                    d_found_vec[slot], nullptr, stream);
         break;
       }
       case OP_ASSIGN: {
-        table->assign(batch_size, d_keys_vec[b], d_vectors_vec[b], nullptr,
-                      stream);
+        table->assign(batch_size, d_keys_vec[slot], d_vectors_vec[slot],
+                      nullptr, stream);
         break;
       }
       case OP_INSERT: {
-        table->insert_or_assign(batch_size, d_keys_vec[b], d_vectors_vec[b],
-                                nullptr, stream);
+        table->insert_or_assign(batch_size, d_keys_vec[slot],
+                                d_vectors_vec[slot], nullptr, stream);
         break;
       }
     }
@@ -250,7 +256,7 @@ void worker_thread(HKVTable* table, OpType op, int batches,
   result->elapsed_s = elapsed;
 
   /* Cleanup */
-  for (int b = 0; b < batches; b++) {
+  for (int b = 0; b < pool; b++) {
     CUDA_CHECK(cudaFree(d_keys_vec[b]));
     CUDA_CHECK(cudaFree(d_vectors_vec[b]));
     if (op == OP_FIND) {

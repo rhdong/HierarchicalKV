@@ -248,3 +248,7 @@ set_target_properties(e19_cache_quality_sweep PROPERTIES CUDA_ARCHITECTURES OFF)
 add_executable(bucket_size_benchmark benchmark/bucket_size_benchmark.cc.cu)
 target_compile_features(bucket_size_benchmark PUBLIC cxx_std_14)
 set_target_properties(bucket_size_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
+
+add_executable(p25_admission_control benchmark/p25_admission_control.cc.cu)
+target_compile_features(p25_admission_control PUBLIC cxx_std_17)
+set_target_properties(p25_admission_control PROPERTIES CUDA_ARCHITECTURES OFF)
