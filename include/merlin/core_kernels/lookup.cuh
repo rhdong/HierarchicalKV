@@ -942,9 +942,16 @@ struct SelectLookupKernelWithIOImpl {
                              Bucket<K, V, S>* buckets, const K* __restrict keys,
                              V* __restrict values, S* __restrict scores,
                              const FoundFunctor& found_functor) {
-    // [PAPER-EXP] Always use TLP (tile_size=4) regardless of load factor.
-    {
+    if (load_factor <= 0.75) {
       const unsigned int tile_size = 4;
+      const size_t N = n * tile_size;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      lookup_kernel_with_io<K, V, S, FoundFunctor, tile_size>
+          <<<grid_size, block_size, 0, stream>>>(
+              table, buckets, bucket_max_size, buckets_num, dim, keys, values,
+              scores, found_functor, N);
+    } else {
+      const unsigned int tile_size = 16;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
       lookup_kernel_with_io<K, V, S, FoundFunctor, tile_size>
