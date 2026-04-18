@@ -44,12 +44,15 @@ using TableOptions = nv::merlin::HashTableOptions;
 using HKVTable =
     nv::merlin::HashTable<K, V, S, EvictStrategy::kLru, nv::merlin::Sm80>;
 
-/* ---- experiment knobs (EXP-3: standard params) ---- */
+/* ---- experiment knobs (Exp #3e, paper §5.4) ----
+ * Paper specifies dim=16, 64K keys/batch, 200 batches/thread,
+ * lambda=0.75 (see s5-evaluation.tex line 282).
+ */
 static constexpr int BATCHES_PER_THREAD = 200;
-static constexpr size_t BATCH_SIZE = 1UL * 1024 * 1024;  // 1M keys per batch
-static constexpr size_t DIM = 32;                          // standard dim
+static constexpr size_t BATCH_SIZE = 64UL * 1024;             // 64K keys per batch
+static constexpr size_t DIM = 16;                             // paper-spec dim
 static constexpr size_t INIT_CAPACITY = 128UL * 1024 * 1024;  // 128M
-static constexpr size_t HBM_GB = 32;
+static constexpr size_t HBM_GB = 16;
 static constexpr float LOAD_FACTOR = 0.75f;
 static constexpr float EPSILON = 0.001f;
 
