@@ -97,8 +97,14 @@ float measure_find(size_t dim, size_t init_capacity, size_t hbm_gb,
     CUDA_CHECK(cudaStreamSynchronize(stream));
   }
 
-  // Prepare 100% hit keys for pure throughput measurement
-  create_continuous_keys<K, S>(h_keys, h_scores, BATCH_SIZE, 0);
+  // Prepare 0% hit keys (all misses) — exercises the worst case for
+  // digest pre-filtering. Paper s5 Exp #3a line 215: "without digest
+  // every miss compares all 128 keys (throughput converges to ~1.83
+  // B-KV/s regardless of dimension)". With 100% hits the kernel short-
+  // circuits on first compare and masks the digest filter's contribution.
+  // Use keys far above the populated range so no collisions occur.
+  const K miss_base = static_cast<K>(init_capacity) * 4 + 1;
+  create_continuous_keys<K, S>(h_keys, h_scores, BATCH_SIZE, miss_base);
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
                          cudaMemcpyHostToDevice));
 
