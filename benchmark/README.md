@@ -212,6 +212,14 @@ appears as the Config A→C gradient (3.89 → 3.61 B-KV/s).
 (λ=0.5) – 2.61× (λ=1.0) speedup, growing because without digest a
 miss scans all 128 bucket slots. Converges to ~1.83 B-KV/s.
 
+**Benchmark uses the miss path.** `digest_ablation_benchmark.cc.cu`
+generates lookup keys starting at `4 × init_capacity + 1` so every
+query is guaranteed to miss. This is the path the paper measured
+(s5 line 215: "without digest every miss compares all 128 keys").
+Under a 100%-hit workload the lookup kernel short-circuits on the
+first successful key compare and masks the digest contribution,
+collapsing the speedup to ~1.0×.
+
 **Binary.** `build/digest_ablation_benchmark`, built twice.
 
 **Reproduce (dual compile + merge).**
@@ -353,13 +361,14 @@ triple_group,read_heavy,10,...
 (4F/5U/1I), `insert_heavy` (4F/2U/4I), `assign_only` × {1,2,5,10} t,
 `assign5_insert5`.
 
-**Note on paper parameters.** The paper text mentions "dim=16,
-64 K keys/batch"; the shipped code uses **dim=32, 1 M keys/batch**
-(constants in `concurrency_benchmark.cc.cu`). The qualitative ratios
-(4.8×, 3.21×, 1.20×, 1.03×) reproduce at either setting; to match
-the paper exactly change `DIM` and `BATCH_SIZE` at the top of the
-file and rebuild both variants. Results under both settings are
-archived in `results-h100-nvl/E7{,v2}/`.
+**Paper-spec config.** Constants in `concurrency_benchmark.cc.cu` match
+paper Exp #3e (§5.4 line 282): `DIM=16`, `BATCH_SIZE=64*1024`,
+`BATCHES_PER_THREAD=200`, `LOAD_FACTOR=0.75`. The paper's 4.8×
+triple-group vs R/W-lock ratio at 10 updaters requires the small
+dim / small batch combination — a 1 M batch at dim=32 amortizes lock
+acquisition across a heavier kernel and masks the contention
+behavior that the 4.8× claim depends on. Results under both settings
+are archived in `results-h100-nvl/E7{,v2}/` for reference.
 
 ---
 
