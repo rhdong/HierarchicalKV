@@ -149,9 +149,6 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
       }
     }
   }
-  if (occupy_result == OccupyResult::INITIAL) {
-    evict_idx = atomicAdd(evicted_counter, 1);
-  }
   while (occupy_result == OccupyResult::INITIAL) {
     S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
     S min_score = MAX_SCORE;
@@ -192,6 +189,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
     score = ScoreFunctor::desired_when_missed(scores, kv_idx, global_epoch);
     if (score < min_score) {
       occupy_result = OccupyResult::REFUSED;
+      evict_idx = atomicAdd(evicted_counter, 1);
       evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx, key,
                             score);
       break;
@@ -218,6 +216,7 @@ __global__ void tlp_v1_upsert_and_evict_kernel_unique(
             atomicAdd(bucket_size_ptr, 1);
           } else {
             occupy_result = OccupyResult::EVICT;
+            evict_idx = atomicAdd(evicted_counter, 1);
             evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx,
                                   expected_key, min_score);
           }
@@ -376,9 +375,6 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
       }
     }
   }
-  if (occupy_result == OccupyResult::INITIAL) {
-    evict_idx = atomicAdd(evicted_counter, 1);
-  }
   while (occupy_result == OccupyResult::INITIAL) {
     S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
     S min_score = static_cast<S>(MAX_SCORE);
@@ -425,6 +421,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
     score = ScoreFunctor::desired_when_missed(scores, kv_idx, global_epoch);
     if (score < min_score) {
       occupy_result = OccupyResult::REFUSED;
+      evict_idx = atomicAdd(evicted_counter, 1);
       evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx, key,
                             score);
       break;
@@ -450,6 +447,7 @@ __global__ void tlp_v2_upsert_and_evict_kernel_unique(
             atomicAdd(bucket_size_ptr, 1);
           } else {
             occupy_result = OccupyResult::EVICT;
+            evict_idx = atomicAdd(evicted_counter, 1);
             evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx,
                                   expected_key, min_score);
           }
@@ -781,9 +779,6 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
       }
       occupy_result_cur = g.shfl(occupy_result, i);
       if (occupy_result_cur == OccupyResult::INITIAL) {
-        if (rank == i) {
-          evict_idx = atomicAdd(evicted_counter, 1);
-        }
         S* sm_bucket_scores = SMM::bucket_scores(smem, groupID, same_buf(i));
         S* dst = sm_bucket_scores + rank * Load_LEN_S;
         S* src = BUCKET::scores(keys_ptr_cur, BUCKET_SIZE, rank * Load_LEN_S);
@@ -827,6 +822,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
         if (score_cur < min_score_global) {
           if (rank == i - 1) {
             occupy_result = OccupyResult::REFUSED;
+            evict_idx = atomicAdd(evicted_counter, 1);
             evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx, key,
                                   score_cur);
           }
@@ -858,6 +854,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
                     atomicAdd(bucket_size_ptr, 1);
                   } else {
                     occupy_result = OccupyResult::EVICT;
+                    evict_idx = atomicAdd(evicted_counter, 1);
                     evict_key_score<K, S>(evicted_keys, evicted_scores,
                                           evict_idx, expected_key,
                                           min_score_global);
@@ -960,6 +957,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
     if (score_cur < min_score_global) {
       if (rank == GROUP_SIZE - 1) {
         occupy_result = OccupyResult::REFUSED;
+        evict_idx = atomicAdd(evicted_counter, 1);
         evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx, key,
                               score_cur);
       }
@@ -992,6 +990,7 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
                 occupy_result = OccupyResult::OCCUPIED_RECLAIMED;
               } else {
                 occupy_result = OccupyResult::EVICT;
+                evict_idx = atomicAdd(evicted_counter, 1);
                 evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx,
                                       expected_key, min_score_global);
               }
@@ -1263,9 +1262,6 @@ __global__ void insert_and_evict_kernel_with_filter(
       }
     }
   }
-  if (occupy_result == OccupyResult::INITIAL) {
-    evict_idx = atomicAdd(evicted_counter, 1);
-  }
   while (occupy_result == OccupyResult::INITIAL) {
     S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
     S min_score = static_cast<S>(MAX_SCORE);
@@ -1312,6 +1308,7 @@ __global__ void insert_and_evict_kernel_with_filter(
     score = ScoreFunctor::desired_when_missed(scores, kv_idx, global_epoch);
     if (score < min_score) {
       occupy_result = OccupyResult::REFUSED;
+      evict_idx = atomicAdd(evicted_counter, 1);
       evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx, key,
                             score);
       break;
@@ -1337,6 +1334,7 @@ __global__ void insert_and_evict_kernel_with_filter(
             atomicAdd(bucket_size_ptr, 1);
           } else {
             occupy_result = OccupyResult::EVICT;
+            evict_idx = atomicAdd(evicted_counter, 1);
             evict_key_score<K, S>(evicted_keys, evicted_scores, evict_idx,
                                   expected_key, min_score);
           }
