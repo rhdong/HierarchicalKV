@@ -916,7 +916,7 @@ __global__ void lookup_kernel_with_io(
     }
 
     OccupyResult occupy_result{OccupyResult::INITIAL};
-    occupy_result = find_without_lock<K, V, S, TILE_SIZE>(
+    occupy_result = find_without_lock<K, V, S, SS, TILE_SIZE>(
         g, bucket, find_key, start_idx, key_pos, src_lane, bucket_max_size);
 
     bool found = occupy_result == OccupyResult::DUPLICATE;
@@ -1176,7 +1176,7 @@ __device__ void lookup_kernel_impl(
     }
 
     OccupyResult occupy_result{OccupyResult::INITIAL};
-    occupy_result = find_without_lock<K, V, S, TILE_SIZE>(
+    occupy_result = find_without_lock<K, V, S, SS, TILE_SIZE>(
         g, bucket, find_key, start_idx, key_pos, src_lane, bucket_max_size);
 
     bool found = (occupy_result == OccupyResult::DUPLICATE);

@@ -570,8 +570,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
     return input_scores[key_idx];
   }
 
+  template <class BucketT>
   __forceinline__ __device__ static void update(
-      BUCKET* __restrict bucket, const int key_pos,
+      BucketT* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& desired_score_when_missed, const bool new_insert) {
     score_store(bucket->scores(key_pos), desired_score_when_missed);
@@ -591,8 +592,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
     __stcg(dst_score_ptr, desired_score_when_missed);
     return;
   }
+  template <class BucketT>
   __forceinline__ __device__ static void update_without_missed(
-      BUCKET* __restrict bucket, const int key_pos,
+      BucketT* __restrict bucket, const int key_pos,
       const S* __restrict const input_scores, const int key_idx,
       const S& epoch) {
     if (input_scores == nullptr) return;

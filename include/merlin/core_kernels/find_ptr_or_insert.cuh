@@ -296,12 +296,12 @@ __global__ void find_ptr_or_insert_kernel(
     const int bucket_size = buckets_size[bkt_idx];
     do {
       if (bucket_size < bucket_max_size) {
-        occupy_result = find_and_lock_when_vacant<K, V, S, TILE_SIZE>(
+        occupy_result = find_and_lock_when_vacant<K, V, S, SS, TILE_SIZE>(
             g, bucket, find_or_insert_key, find_or_insert_score, evicted_key,
             start_idx, key_pos, src_lane, bucket_max_size);
       } else {
         start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
-        occupy_result = find_and_lock_when_full<K, V, S, TILE_SIZE,
+        occupy_result = find_and_lock_when_full<K, V, S, SS, TILE_SIZE,
                                                 ScoreFunctor::LOCK_MEM_ORDER,
                                                 ScoreFunctor::UNLOCK_MEM_ORDER>(
             g, bucket, find_or_insert_key, find_or_insert_score, evicted_key,

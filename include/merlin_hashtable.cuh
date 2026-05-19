@@ -2743,6 +2743,10 @@ class HashTable : public HashTableBase<K, V, S> {
             bool* founds,                             // (n)
             score_type* scores = nullptr,             // (n)
             cudaStream_t stream = 0, bool unique_key = true) const {
+    MERLIN_CHECK(
+        !is_memory_mode(),
+        "[MEMORY_MODE] pointer-return find() is not supported in "
+        "dual-bucket mode. Key may reside in either bucket.");
     if (n == 0) {
       return;
     }
@@ -2827,6 +2831,10 @@ class HashTable : public HashTableBase<K, V, S> {
                        bool* founds,                             // (n)
                        score_type* scores = nullptr,             // (n)
                        cudaStream_t stream = 0, bool unique_key = true) {
+    MERLIN_CHECK(
+        !is_memory_mode(),
+        "[MEMORY_MODE] pointer-return find_and_update() is not supported "
+        "in dual-bucket mode. Key may reside in either bucket.");
     if (n == 0) {
       return;
     }

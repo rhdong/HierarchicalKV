@@ -272,7 +272,7 @@ __global__ void contains_kernel(const Table<K, V, S, SS>* __restrict table,
     }
 
     OccupyResult occupy_result{OccupyResult::INITIAL};
-    occupy_result = find_without_lock<K, V, S, TILE_SIZE>(
+    occupy_result = find_without_lock<K, V, S, SS, TILE_SIZE>(
         g, bucket, find_key, start_idx, key_pos, src_lane, bucket_max_size);
 
     if (rank == src_lane) {

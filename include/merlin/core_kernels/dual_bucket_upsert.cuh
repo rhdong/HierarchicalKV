@@ -553,7 +553,8 @@ __global__ void dual_bucket_pipeline_upsert_kernel_with_io(
                     cuda::std::memory_order_relaxed);
                 if (cas_ok) {
                   auto verify_score_ptr =
-                      BUCKET::scores(evict_keys_ptr, BUCKET_SIZE, min_pos_evict);
+                      reinterpret_cast<SS*>(BUCKET::scores(
+                          evict_keys_ptr, BUCKET_SIZE, min_pos_evict));
                   auto verify_score = score_load(verify_score_ptr);
                   if (verify_score <= min_score_global) {
                     if (expected_key == static_cast<K>(RECLAIM_KEY)) {

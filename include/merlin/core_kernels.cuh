@@ -84,8 +84,7 @@ __global__ void create_scores(Bucket<K, V, S, SS>* __restrict buckets,
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
     for (size_t i = 0; i < bucket_max_size; i++) {
-      score_store(buckets[start + tid].scores(i),
-                  static_cast<S>(EMPTY_SCORE));
+      new (buckets[start + tid].scores(i)) SS{static_cast<S>(EMPTY_SCORE)};
     }
   }
 }

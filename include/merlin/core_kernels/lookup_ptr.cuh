@@ -412,7 +412,7 @@ __global__ void lookup_ptr_kernel(const Table<K, V, S, SS>* __restrict table,
         start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
       }
 
-      occupy_result = find_without_lock<K, V, S, TILE_SIZE>(
+      occupy_result = find_without_lock<K, V, S, SS, TILE_SIZE>(
           g, bucket, find_key, start_idx, key_pos, src_lane, bucket_max_size);
     } else {
       occupy_result = OccupyResult::ILLEGAL;

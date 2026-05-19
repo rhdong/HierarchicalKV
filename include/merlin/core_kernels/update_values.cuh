@@ -658,7 +658,7 @@ __global__ void update_values_kernel_with_io(
     if (bucket_size >= bucket_max_size) {
       start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
     }
-    occupy_result = find_and_lock_for_update<K, V, S, TILE_SIZE>(
+    occupy_result = find_and_lock_for_update<K, V, S, SS, TILE_SIZE>(
         g, bucket, update_key, start_idx, key_pos, src_lane, bucket_max_size);
 
     occupy_result = g.shfl(occupy_result, src_lane);
@@ -843,7 +843,7 @@ __global__ void update_values_kernel(const Table<K, V, S, SS>* __restrict table,
     if (bucket_size >= bucket_max_size) {
       start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
     }
-    occupy_result = find_and_lock_for_update<K, V, S, TILE_SIZE>(
+    occupy_result = find_and_lock_for_update<K, V, S, SS, TILE_SIZE>(
         g, bucket, update_key, start_idx, key_pos, src_lane, bucket_max_size);
 
     occupy_result = g.shfl(occupy_result, src_lane);
