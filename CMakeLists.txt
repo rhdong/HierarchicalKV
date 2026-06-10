@@ -201,6 +201,11 @@ target_compile_features(dual_bucket_test PUBLIC cxx_std_14)
 set_target_properties(dual_bucket_test PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(dual_bucket_test gtest_main)
 
+add_executable(correctness_stress_test tests/correctness_stress_test.cc.cu)
+target_compile_features(correctness_stress_test PUBLIC cxx_std_14)
+set_target_properties(correctness_stress_test PROPERTIES CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(correctness_stress_test gtest_main)
+
 add_executable(dual_bucket_benchmark benchmark/dual_bucket_benchmark.cc.cu)
 target_compile_features(dual_bucket_benchmark PUBLIC cxx_std_14)
 set_target_properties(dual_bucket_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
