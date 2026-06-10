@@ -115,6 +115,10 @@ add_executable(hkv_lookup_modes_benchmark benchmark/hkv_lookup_modes_benchmark.c
 target_compile_features(hkv_lookup_modes_benchmark PUBLIC cxx_std_14)
 set_target_properties(hkv_lookup_modes_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
 
+add_executable(tbe_like_cache_baseline benchmark/tbe_like_cache_baseline.cc.cu)
+target_compile_features(tbe_like_cache_baseline PUBLIC cxx_std_17)
+set_target_properties(tbe_like_cache_baseline PROPERTIES CUDA_ARCHITECTURES OFF)
+
 add_executable(merlin_hashtable_test tests/merlin_hashtable_test.cc.cu)
 target_compile_features(merlin_hashtable_test PUBLIC cxx_std_14)
 set_target_properties(merlin_hashtable_test PROPERTIES  CUDA_ARCHITECTURES OFF)
@@ -206,6 +210,11 @@ target_compile_features(correctness_stress_test PUBLIC cxx_std_14)
 set_target_properties(correctness_stress_test PROPERTIES CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(correctness_stress_test gtest_main)
 
+add_executable(hkv_correctness_stress_benchmark benchmark/hkv_correctness_stress_benchmark.cc.cu)
+target_compile_features(hkv_correctness_stress_benchmark PUBLIC cxx_std_17)
+set_target_properties(hkv_correctness_stress_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
+target_link_libraries(hkv_correctness_stress_benchmark pthread)
+
 add_executable(dual_bucket_benchmark benchmark/dual_bucket_benchmark.cc.cu)
 target_compile_features(dual_bucket_benchmark PUBLIC cxx_std_14)
 set_target_properties(dual_bucket_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
@@ -262,3 +271,7 @@ set_target_properties(bucket_size_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
 add_executable(p25_admission_control benchmark/p25_admission_control.cc.cu)
 target_compile_features(p25_admission_control PUBLIC cxx_std_17)
 set_target_properties(p25_admission_control PROPERTIES CUDA_ARCHITECTURES OFF)
+
+add_executable(hash_sensitivity_benchmark benchmark/hash_sensitivity_benchmark.cc.cu)
+target_compile_features(hash_sensitivity_benchmark PUBLIC cxx_std_17)
+set_target_properties(hash_sensitivity_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
