@@ -111,6 +111,10 @@ add_executable(find_with_missed_keys_benchmark benchmark/find_with_missed_keys_b
 target_compile_features(find_with_missed_keys_benchmark PUBLIC cxx_std_14)
 set_target_properties(find_with_missed_keys_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
 
+add_executable(hkv_lookup_modes_benchmark benchmark/hkv_lookup_modes_benchmark.cc.cu)
+target_compile_features(hkv_lookup_modes_benchmark PUBLIC cxx_std_14)
+set_target_properties(hkv_lookup_modes_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
+
 add_executable(merlin_hashtable_test tests/merlin_hashtable_test.cc.cu)
 target_compile_features(merlin_hashtable_test PUBLIC cxx_std_14)
 set_target_properties(merlin_hashtable_test PROPERTIES  CUDA_ARCHITECTURES OFF)
@@ -126,7 +130,8 @@ target_compile_features(merlin_memory_pool_test PUBLIC cxx_std_14)
 set_target_properties(merlin_memory_pool_test PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(merlin_memory_pool_test gtest_main)
 
-set(CMAKE_BUILD_TYPE "Debug")
+# Keep the caller-selected build type. Forcing Debug here makes later CUDA
+# benchmark targets compile with debug flags even when Release was requested.
 add_executable(save_and_load_test tests/save_and_load_test.cc.cu)
 target_compile_features(save_and_load_test PUBLIC cxx_std_14)
 set_target_properties(save_and_load_test PROPERTIES  CUDA_ARCHITECTURES OFF)

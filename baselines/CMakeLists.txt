@@ -7,6 +7,7 @@ set(CMAKE_CUDA_STANDARD 17)
 # GPU architecture (default: Ampere sm_86 for RTX A6000)
 set(GPU_ARCH "86" CACHE STRING "CUDA architecture")
 set(CMAKE_CUDA_ARCHITECTURES ${GPU_ARCH})
+option(ENABLE_CUCO_BENCH "Build cuCollections benchmark target" ON)
 
 # Release by default
 if(NOT CMAKE_BUILD_TYPE)
@@ -41,12 +42,14 @@ FetchContent_Declare(bght
   GIT_SHALLOW    TRUE
 )
 
-# ─── cuCollections ───
-FetchContent_Declare(cuco
-  GIT_REPOSITORY https://github.com/NVIDIA/cuCollections.git
-  GIT_TAG        dev
-  GIT_SHALLOW    TRUE
-)
+if(ENABLE_CUCO_BENCH)
+  # ─── cuCollections ───
+  FetchContent_Declare(cuco
+    GIT_REPOSITORY https://github.com/NVIDIA/cuCollections.git
+    GIT_TAG        dev
+    GIT_SHALLOW    TRUE
+  )
+endif()
 
 # ─── WarpCore benchmark ───
 message(STATUS "Fetching WarpCore ...")
@@ -55,6 +58,13 @@ add_executable(warpcore_bench warpcore_bench.cu)
 target_include_directories(warpcore_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(warpcore_bench PRIVATE warpcore)
 set_target_properties(warpcore_bench PROPERTIES
+  CUDA_SEPARABLE_COMPILATION ON
+)
+
+add_executable(warpcore_lookup_modes_bench warpcore_lookup_modes_bench.cu)
+target_include_directories(warpcore_lookup_modes_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(warpcore_lookup_modes_bench PRIVATE warpcore)
+set_target_properties(warpcore_lookup_modes_bench PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
 )
 
@@ -83,12 +93,14 @@ set_target_properties(p2bht_bench PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
 )
 
-# ─── cuCollections benchmark ───
-message(STATUS "Fetching cuCollections ...")
-FetchContent_MakeAvailable(cuco)
-add_executable(cuco_bench cuco_bench.cu)
-target_include_directories(cuco_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(cuco_bench PRIVATE cuco::cuco)
-set_target_properties(cuco_bench PROPERTIES
-  CUDA_SEPARABLE_COMPILATION ON
-)
+if(ENABLE_CUCO_BENCH)
+  # ─── cuCollections benchmark ───
+  message(STATUS "Fetching cuCollections ...")
+  FetchContent_MakeAvailable(cuco)
+  add_executable(cuco_bench cuco_bench.cu)
+  target_include_directories(cuco_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(cuco_bench PRIVATE cuco::cuco)
+  set_target_properties(cuco_bench PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+  )
+endif()
