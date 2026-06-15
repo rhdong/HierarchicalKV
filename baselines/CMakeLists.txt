@@ -8,6 +8,18 @@ set(CMAKE_CUDA_STANDARD 17)
 set(GPU_ARCH "86" CACHE STRING "CUDA architecture")
 set(CMAKE_CUDA_ARCHITECTURES ${GPU_ARCH})
 option(ENABLE_CUCO_BENCH "Build cuCollections benchmark target" ON)
+set(BASELINE_DIM "32" CACHE STRING "Baseline audit value dimension")
+set(BASELINE_CAPACITY "134217728" CACHE STRING "Baseline audit table capacity")
+set(BASELINE_BATCH_SIZE "1048576" CACHE STRING "Baseline audit batch/query size")
+set(BASELINE_WARMUP "3" CACHE STRING "Baseline audit warmup runs")
+set(BASELINE_RUNS "5" CACHE STRING "Baseline audit measured runs")
+add_compile_definitions(
+  BASELINE_DIM=${BASELINE_DIM}
+  BASELINE_CAPACITY=${BASELINE_CAPACITY}
+  BASELINE_BATCH_SIZE=${BASELINE_BATCH_SIZE}
+  BASELINE_WARMUP=${BASELINE_WARMUP}
+  BASELINE_RUNS=${BASELINE_RUNS}
+)
 
 # Release by default
 if(NOT CMAKE_BUILD_TYPE)
@@ -65,6 +77,13 @@ add_executable(warpcore_lookup_modes_bench warpcore_lookup_modes_bench.cu)
 target_include_directories(warpcore_lookup_modes_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(warpcore_lookup_modes_bench PRIVATE warpcore)
 set_target_properties(warpcore_lookup_modes_bench PROPERTIES
+  CUDA_SEPARABLE_COMPILATION ON
+)
+
+add_executable(warpcore_warpspeed_value_size_bench warpcore_warpspeed_value_size_bench.cu)
+target_include_directories(warpcore_warpspeed_value_size_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(warpcore_warpspeed_value_size_bench PRIVATE warpcore)
+set_target_properties(warpcore_warpspeed_value_size_bench PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
 )
 

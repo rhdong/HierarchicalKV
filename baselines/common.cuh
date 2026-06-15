@@ -17,23 +17,39 @@
 
 /* ─── CUDA Error Checking ─── */
 
-#define CUDA_CHECK(call)                                                \
-  do {                                                                  \
-    cudaError_t err = (call);                                           \
-    if (err != cudaSuccess) {                                           \
+#define CUDA_CHECK(call)                                               \
+  do {                                                                 \
+    cudaError_t err = (call);                                          \
+    if (err != cudaSuccess) {                                          \
       fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__, \
-              cudaGetErrorString(err));                                  \
-      exit(EXIT_FAILURE);                                               \
-    }                                                                   \
+              cudaGetErrorString(err));                                \
+      exit(EXIT_FAILURE);                                              \
+    }                                                                  \
   } while (0)
 
-/* ─── Benchmark Constants (Config B) ─── */
+/* ─── Benchmark Constants (Config B by default) ─── */
 
-static constexpr size_t DIM = 32;
-static constexpr size_t CAPACITY = 128UL * 1024 * 1024;  // 128M
-static constexpr size_t BATCH_SIZE = 1UL * 1024 * 1024;  // 1M
-static constexpr int WARMUP = 3;
-static constexpr int RUNS = 5;
+#ifndef BASELINE_DIM
+#define BASELINE_DIM 32
+#endif
+#ifndef BASELINE_CAPACITY
+#define BASELINE_CAPACITY 134217728
+#endif
+#ifndef BASELINE_BATCH_SIZE
+#define BASELINE_BATCH_SIZE 1048576
+#endif
+#ifndef BASELINE_WARMUP
+#define BASELINE_WARMUP 3
+#endif
+#ifndef BASELINE_RUNS
+#define BASELINE_RUNS 5
+#endif
+
+static constexpr size_t DIM = BASELINE_DIM;
+static constexpr size_t CAPACITY = BASELINE_CAPACITY;
+static constexpr size_t BATCH_SIZE = BASELINE_BATCH_SIZE;
+static constexpr int WARMUP = BASELINE_WARMUP;
+static constexpr int RUNS = BASELINE_RUNS;
 
 /* ─── CUDA Event Timer ─── */
 
@@ -89,13 +105,13 @@ __global__ void gather_values_kernel(float* __restrict__ out,
 }
 
 inline void gather_values(float* out, const float* values,
-                           const uint64_t* indices, size_t dim, size_t n,
-                           cudaStream_t stream = 0) {
+                          const uint64_t* indices, size_t dim, size_t n,
+                          cudaStream_t stream = 0) {
   const size_t block = 256;
   const size_t total = n * dim;
   const size_t grid = (total + block - 1) / block;
   gather_values_kernel<<<grid, block, 0, stream>>>(out, values, indices, dim,
-                                                    n);
+                                                   n);
 }
 
 /* ─── Scatter Kernel ─── */
@@ -118,13 +134,13 @@ __global__ void scatter_values_kernel(float* __restrict__ values,
 }
 
 inline void scatter_values(float* values, const float* in,
-                            const uint64_t* indices, size_t dim, size_t n,
-                            cudaStream_t stream = 0) {
+                           const uint64_t* indices, size_t dim, size_t n,
+                           cudaStream_t stream = 0) {
   const size_t block = 256;
   const size_t total = n * dim;
   const size_t grid = (total + block - 1) / block;
   scatter_values_kernel<<<grid, block, 0, stream>>>(values, in, indices, dim,
-                                                     n);
+                                                    n);
 }
 
 /* ─── Count Successful Inserts (index-based) ─── */
@@ -135,7 +151,7 @@ inline size_t count_successful_indices(const uint64_t* d_indices, size_t n,
                                        uint64_t sentinel = ~0ULL) {
   std::vector<uint64_t> h_indices(n);
   CUDA_CHECK(cudaMemcpy(h_indices.data(), d_indices, n * sizeof(uint64_t),
-                         cudaMemcpyDeviceToHost));
+                        cudaMemcpyDeviceToHost));
   size_t count = 0;
   for (size_t i = 0; i < n; i++) {
     if (h_indices[i] != sentinel) count++;

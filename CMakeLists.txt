@@ -34,6 +34,25 @@ option(USE_RW_LOCK "Use R/W lock instead of triple-group for ablation" OFF)
 if(USE_RW_LOCK)
   add_definitions(-DUSE_RW_LOCK)
 endif()
+set(HKV_LOOKUP_DIM "32" CACHE STRING "HKV lookup-mode audit value dimension")
+set(HKV_LOOKUP_CAPACITY "134217728" CACHE STRING "HKV lookup-mode audit table capacity")
+set(HKV_LOOKUP_BATCH_SIZE "1048576" CACHE STRING "HKV lookup-mode audit batch/query size")
+set(HKV_LOOKUP_WARMUP "3" CACHE STRING "HKV lookup-mode audit warmup runs")
+set(HKV_LOOKUP_RUNS "5" CACHE STRING "HKV lookup-mode audit measured runs")
+set(HKV_LOOKUP_HBM_GB "16" CACHE STRING "HKV lookup-mode audit HBM budget for vectors")
+set(HKV_LOOKUP_BLOCK_SIZE "128" CACHE STRING "HKV lookup-mode audit CUDA block size")
+set(HKV_LOOKUP_API_LOCK "1" CACHE STRING "HKV lookup-mode audit API lock: 1=enabled, 0=disabled for phased academic audit")
+option(HKV_CONTAINS_LOW_LF_TLP
+  "Use TLP/early-empty contains kernel instead of pipeline contains below the contains LF threshold"
+  ON)
+set(HKV_CONTAINS_TLP_LF_THRESHOLD "0.75" CACHE STRING
+  "Load-factor threshold for the HKV contains TLP fast path")
+if(HKV_CONTAINS_LOW_LF_TLP)
+  add_compile_definitions(HKV_CONTAINS_LOW_LF_TLP=1)
+else()
+  add_compile_definitions(HKV_CONTAINS_LOW_LF_TLP=0)
+endif()
+add_compile_definitions(HKV_CONTAINS_TLP_LF_THRESHOLD=${HKV_CONTAINS_TLP_LF_THRESHOLD}f)
 if(CLANGFORMAT)
   include(ClangFormat)
   file(GLOB_RECURSE clangformat_includes
@@ -113,6 +132,16 @@ set_target_properties(find_with_missed_keys_benchmark PROPERTIES  CUDA_ARCHITECT
 
 add_executable(hkv_lookup_modes_benchmark benchmark/hkv_lookup_modes_benchmark.cc.cu)
 target_compile_features(hkv_lookup_modes_benchmark PUBLIC cxx_std_14)
+target_compile_definitions(hkv_lookup_modes_benchmark PRIVATE
+  HKV_LOOKUP_DIM=${HKV_LOOKUP_DIM}
+  HKV_LOOKUP_CAPACITY=${HKV_LOOKUP_CAPACITY}
+  HKV_LOOKUP_BATCH_SIZE=${HKV_LOOKUP_BATCH_SIZE}
+  HKV_LOOKUP_WARMUP=${HKV_LOOKUP_WARMUP}
+  HKV_LOOKUP_RUNS=${HKV_LOOKUP_RUNS}
+  HKV_LOOKUP_HBM_GB=${HKV_LOOKUP_HBM_GB}
+  HKV_LOOKUP_BLOCK_SIZE=${HKV_LOOKUP_BLOCK_SIZE}
+  HKV_LOOKUP_API_LOCK=${HKV_LOOKUP_API_LOCK}
+)
 set_target_properties(hkv_lookup_modes_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
 
 add_executable(tbe_like_cache_baseline benchmark/tbe_like_cache_baseline.cc.cu)

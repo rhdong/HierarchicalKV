@@ -38,6 +38,14 @@
 #include "merlin/types.cuh"
 #include "merlin/utils.cuh"
 
+#ifndef HKV_CONTAINS_LOW_LF_TLP
+#define HKV_CONTAINS_LOW_LF_TLP 1
+#endif
+
+#ifndef HKV_CONTAINS_TLP_LF_THRESHOLD
+#define HKV_CONTAINS_TLP_LF_THRESHOLD 0.75f
+#endif
+
 namespace nv {
 namespace merlin {
 
@@ -2872,13 +2880,31 @@ class HashTable : public HashTableBase<K, V, S> {
     }
 
     if (options_.max_bucket_size == 128) {
-      // Pipeline lookup kernel only supports "bucket_size = 128".
-      using Selector = SelectPipelineContainsKernel<key_type, value_type,
-                                                    score_type, ArchTag>;
-      ContainsKernelParams<key_type, value_type, score_type> containsParams(
-          table_->buckets, table_->buckets_num, static_cast<uint32_t>(dim()),
-          keys, founds, n);
-      Selector::select_kernel(containsParams, stream);
+#if HKV_CONTAINS_LOW_LF_TLP
+      static thread_local int step_counter = 0;
+      static thread_local float load_factor = 0.0;
+
+      if (((step_counter++) % kernel_select_interval_) == 0) {
+        load_factor = fast_load_factor(0, stream, false);
+      }
+
+      if (load_factor <= HKV_CONTAINS_TLP_LF_THRESHOLD) {
+        using Selector = SelectContainsKernel<key_type, value_type, score_type>;
+        Selector::execute_kernel(load_factor, options_.block_size,
+                                 options_.max_bucket_size, table_->buckets_num,
+                                 options_.dim, stream, n, d_table_,
+                                 table_->buckets, keys, founds);
+      } else
+#endif
+      {
+        // Pipeline lookup kernel only supports "bucket_size = 128".
+        using Selector = SelectPipelineContainsKernel<key_type, value_type,
+                                                      score_type, ArchTag>;
+        ContainsKernelParams<key_type, value_type, score_type> containsParams(
+            table_->buckets, table_->buckets_num, static_cast<uint32_t>(dim()),
+            keys, founds, n);
+        Selector::select_kernel(containsParams, stream);
+      }
     } else {
       using Selector = SelectContainsKernel<key_type, value_type, score_type>;
       static thread_local int step_counter = 0;
@@ -2891,6 +2917,58 @@ class HashTable : public HashTableBase<K, V, S> {
                                options_.max_bucket_size, table_->buckets_num,
                                options_.dim, stream, n, d_table_,
                                table_->buckets, keys, founds);
+    }
+    CudaCheckError();
+  }
+
+  /**
+   * @brief Read-only direct value lookup for audit/fast-path experiments.
+   *
+   * This path preserves the hash table layout and single-bucket search, but it
+   * deliberately skips cache-side score maintenance, miss collection, pointer
+   * materialization, and eviction/admission semantics.  It exists to isolate
+   * bucket-search + value-copy cost from the full industrial cache API cost.
+   *
+   * @warning This is not a replacement for find() in online serving/training
+   * paths that require score/LRU updates, miss handling, or concurrent cache
+   * semantics.
+   */
+  void find_readonly_fast(const size_type n, const key_type* keys,  // (n)
+                          value_type* values,                       // (n, DIM)
+                          bool* founds = nullptr,                   // (n)
+                          cudaStream_t stream = 0) const {
+    MERLIN_CHECK(
+        !is_memory_mode(),
+        "[MEMORY_MODE] find_readonly_fast() is not supported in dual-bucket "
+        "mode. Key may reside in either bucket.");
+    if (n == 0) {
+      return;
+    }
+
+    std::unique_ptr<read_shared_lock> lock_ptr;
+    if (options_.api_lock) {
+      lock_ptr = std::make_unique<read_shared_lock>(mutex_, stream);
+    }
+
+    using Selector =
+        SelectReadonlyValueLookupKernel<key_type, value_type, score_type>;
+    static thread_local int step_counter = 0;
+    static thread_local float load_factor = 0.0;
+
+    if (((step_counter++) % kernel_select_interval_) == 0) {
+      load_factor = fast_load_factor(0, stream, false);
+    }
+
+    if (founds != nullptr) {
+      Selector::template execute_kernel<true>(
+          load_factor, options_.block_size, options_.max_bucket_size,
+          table_->buckets_num, options_.dim, stream, n, d_table_,
+          table_->buckets, keys, values, founds);
+    } else {
+      Selector::template execute_kernel<false>(
+          load_factor, options_.block_size, options_.max_bucket_size,
+          table_->buckets_num, options_.dim, stream, n, d_table_,
+          table_->buckets, keys, values, nullptr);
     }
     CudaCheckError();
   }
