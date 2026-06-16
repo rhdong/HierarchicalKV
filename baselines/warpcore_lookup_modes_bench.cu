@@ -302,7 +302,8 @@ int main(int argc, char** argv) {
             << std::endl;
 
   for (float lf : load_factors) {
-    if (mode == "both" || mode == "key_only" || mode == "key_only_hashset") {
+    if (mode == "both" || mode == "key_only" || mode == "key_only_hashset" ||
+        mode == "all") {
       run_key_only_hashset(lf);
     }
     if (mode == "key_only_proxy" || mode == "all") {
