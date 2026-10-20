@@ -1311,7 +1311,8 @@ __global__ void lock_kernel_with_filter(
         uint32_t index = (__ffs(cmp_result) - 1) >> 3;
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
-        auto current_key = bucket_keys_ptr[possible_pos];
+        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos)
+                               ->load(cuda::std::memory_order_relaxed);
         if (current_key == key) {
           key_pos = possible_pos;
           occupy_result = OccupyResult::DUPLICATE;
@@ -1327,7 +1328,8 @@ __global__ void lock_kernel_with_filter(
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
         if (offset == 0 && possible_pos < key_pos) continue;
-        auto current_key = bucket_keys_ptr[possible_pos];
+        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos)
+                               ->load(cuda::std::memory_order_relaxed);
         if (current_key == static_cast<K>(EMPTY_KEY)) {
           occupy_result = OccupyResult::OCCUPIED_EMPTY;
           goto WRITE_BACK;
