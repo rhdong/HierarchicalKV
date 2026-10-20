@@ -1292,7 +1292,7 @@ __global__ void lock_kernel_with_filter(
     pos_cur = (pos_cur + offset) & (bucket_capacity - 1);
 
     D* digests_ptr = BUCKET::digests(bucket_keys_ptr, bucket_capacity, pos_cur);
-    VecD_Load digests_vec = *(reinterpret_cast<VecD_Load*>(digests_ptr));
+    VecD_Load digests_vec = load_digest_vector(digests_ptr);
     VecD_Comp digests_arr[4] = {digests_vec.x, digests_vec.y, digests_vec.z,
                                 digests_vec.w};
 

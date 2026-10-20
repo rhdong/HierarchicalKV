@@ -147,7 +147,7 @@ __global__ void dual_bucket_pipeline_upsert_kernel_with_io(
     D* dst = sm_bucket_digests + rank * Load_LEN;
     D* src = BUCKET::digests(keys_ptr_next, BUCKET_SIZE, rank * Load_LEN);
     if (rank * Load_LEN < BUCKET_SIZE) {
-      __pipeline_memcpy_async(dst, src, sizeof(VecD_Load));
+      *reinterpret_cast<VecD_Load*>(dst) = load_digest_vector(src);
     }
   }
   __pipeline_commit();
@@ -166,7 +166,7 @@ __global__ void dual_bucket_pipeline_upsert_kernel_with_io(
         D* dst = sm_bucket_digests + rank * Load_LEN;
         D* src = BUCKET::digests(keys_ptr_next, BUCKET_SIZE, rank * Load_LEN);
         if (rank * Load_LEN < BUCKET_SIZE) {
-          __pipeline_memcpy_async(dst, src, sizeof(VecD_Load));
+          *reinterpret_cast<VecD_Load*>(dst) = load_digest_vector(src);
         }
       }
     }
@@ -211,7 +211,7 @@ __global__ void dual_bucket_pipeline_upsert_kernel_with_io(
       // Load b2 digests (synchronous read).
       D* b2_digests_ptr = BUCKET::digests(keys_ptr2_cur, BUCKET_SIZE, 0);
       VecD_Comp b2_probe_digests =
-          *reinterpret_cast<VecD_Comp*>(b2_digests_ptr + b2_probe_offset);
+          load_digest_word(b2_digests_ptr + b2_probe_offset);
       uint32_t b2_cmp = __vcmpeq4(b2_probe_digests, target_digests_cur);
       b2_cmp &= 0x01010101;
 
@@ -464,8 +464,8 @@ __global__ void dual_bucket_pipeline_upsert_kernel_with_io(
           int idx = 0;
           for (int j = 0; j < BUCKET_SIZE; j += GROUP_SIZE * Load_LEN_S) {
             S tmp[Load_LEN_S];
-            *reinterpret_cast<byte16*>(tmp) =
-                *reinterpret_cast<byte16*>(b1_scores + rank * Load_LEN_S + j);
+            copy_bucket_scores<Load_LEN_S>(tmp,
+                                           b1_scores + rank * Load_LEN_S + j);
             for (int k = 0; k < Load_LEN_S; k++) {
               b1_cached[idx] = tmp[k];
               b1_pos_cached[idx] = rank * Load_LEN_S + j + k;
@@ -477,8 +477,8 @@ __global__ void dual_bucket_pipeline_upsert_kernel_with_io(
           int idx = 0;
           for (int j = 0; j < BUCKET_SIZE; j += GROUP_SIZE * Load_LEN_S) {
             S tmp[Load_LEN_S];
-            *reinterpret_cast<byte16*>(tmp) =
-                *reinterpret_cast<byte16*>(b2_scores + rank * Load_LEN_S + j);
+            copy_bucket_scores<Load_LEN_S>(tmp,
+                                           b2_scores + rank * Load_LEN_S + j);
             for (int k = 0; k < Load_LEN_S; k++) {
               b2_cached[idx] = tmp[k];
               b2_pos_cached[idx] = rank * Load_LEN_S + j + k;

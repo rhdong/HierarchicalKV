@@ -246,8 +246,8 @@ __global__ void dual_bucket_pipeline_lookup_kernel_with_io(
         int src_lane = __ffs(found_vote) - 1;
         int target_pos = g.shfl(key_pos, src_lane);
         if (rank == src_lane && scores != nullptr) {
-          CopyScore::ldg_sts(sm_target_scores + prev_block,
-                             score_ptr + target_pos);
+          CopyScore::ldg_sts_atomic(sm_target_scores + prev_block,
+                                    score_ptr + target_pos);
         }
         VecV* v_src = value_ptr + target_pos * dim;
         CopyValue::ldg_sts(rank, v_dst, v_src, dim);
@@ -303,8 +303,8 @@ __global__ void dual_bucket_pipeline_lookup_kernel_with_io(
       int src_lane = __ffs(found_vote) - 1;
       int target_pos = g.shfl(key_pos, src_lane);
       if (rank == src_lane && scores != nullptr) {
-        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                           score_ptr + target_pos);
+        CopyScore::ldg_sts_atomic(sm_target_scores + key_idx_block,
+                                  score_ptr + target_pos);
       }
       VecV* v_src = value_ptr + target_pos * dim;
       VecV* v_dst = sm_vector[diff_buf(loop_num)][groupID];
@@ -532,8 +532,8 @@ __global__ void dual_bucket_pipeline_lookup_kernel_with_io(
           int src_lane = __ffs(found_vote) - 1;
           int target_pos = g.shfl(key_pos, src_lane);
           if (rank == src_lane && scores != nullptr) {
-            CopyScore::ldg_sts(sm_target_scores + prev_block,
-                               score_ptr + target_pos);
+            CopyScore::ldg_sts_atomic(sm_target_scores + prev_block,
+                                      score_ptr + target_pos);
           }
           VecV* v_src = value_ptr + target_pos * dim;
           CopyValue::ldg_sts(rank, v_dst, v_src, dim);
@@ -602,8 +602,8 @@ __global__ void dual_bucket_pipeline_lookup_kernel_with_io(
         int src_lane = __ffs(found_vote) - 1;
         int target_pos = g.shfl(key_pos, src_lane);
         if (rank == src_lane && scores != nullptr) {
-          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                             score_ptr + target_pos);
+          CopyScore::ldg_sts_atomic(sm_target_scores + key_idx_block,
+                                    score_ptr + target_pos);
         }
         VecV* v_src = value_ptr + target_pos * dim;
         VecV* v_dst = sm_vector[diff_buf(loop_num)][groupID];

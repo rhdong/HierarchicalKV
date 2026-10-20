@@ -298,8 +298,8 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
         int src_lane = __ffs(found_vote) - 1;
         int target_pos = g.shfl(key_pos, src_lane);
         if (rank == src_lane && scores != nullptr) {
-          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                             score_ptr + target_pos);
+          CopyScore::ldg_sts_atomic(sm_target_scores + key_idx_block,
+                                    score_ptr + target_pos);
         }
         VecV* v_src = value_ptr + target_pos * dim;
         CopyValue::ldg_sts(rank, v_dst, v_src, dim);
@@ -355,8 +355,8 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
       int src_lane = __ffs(found_vote) - 1;
       int target_pos = g.shfl(key_pos, src_lane);
       if (rank == src_lane && scores != nullptr) {
-        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                           score_ptr + target_pos);
+        CopyScore::ldg_sts_atomic(sm_target_scores + key_idx_block,
+                                  score_ptr + target_pos);
       }
       VecV* v_src = value_ptr + target_pos * dim;
       VecV* v_dst = sm_vector[diff_buf(loop_num)][groupID];
@@ -611,8 +611,8 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
         int src_lane = __ffs(found_vote) - 1;
         int target_pos = g.shfl(key_pos, src_lane);
         if (rank == src_lane && scores != nullptr) {
-          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                             score_ptr + target_pos);
+          CopyScore::ldg_sts_atomic(sm_target_scores + key_idx_block,
+                                    score_ptr + target_pos);
         }
         VecV* v_src = value_ptr + target_pos * dim;
         VecV* v_dst = sm_vector[diff_buf(i)][groupID];
@@ -669,8 +669,8 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
       int src_lane = __ffs(found_vote) - 1;
       int target_pos = g.shfl(key_pos, src_lane);
       if (rank == src_lane && scores != nullptr) {
-        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                           score_ptr + target_pos);
+        CopyScore::ldg_sts_atomic(sm_target_scores + key_idx_block,
+                                  score_ptr + target_pos);
       }
       VecV* v_src = value_ptr + target_pos * dim;
       VecV* v_dst = sm_vector[diff_buf(loop_num)][groupID];
@@ -1133,7 +1133,8 @@ __device__ void tlp_lookup_kernel_hybrid_impl(
         cmp_result &= (cmp_result - 1);
         possible_pos = pos_cur + i * 4 + index;
         auto current_key = bucket_keys_ptr[possible_pos];
-        score = *BUCKET::scores(bucket_keys_ptr, bucket_capacity, possible_pos);
+        score = load_bucket_score(
+            BUCKET::scores(bucket_keys_ptr, bucket_capacity, possible_pos));
         bool found = (current_key == key);
         if (found) {
           key_pos = possible_pos;
