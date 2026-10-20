@@ -651,7 +651,7 @@ template <int strategy>
 void check_compatible_value_score_completion() {
   constexpr size_t capacity = 128;
   constexpr K missing_key = 1000000;
-  const size_t paths[][2] = {{128, 48}, {128, 112}, {4, 112}};
+  const size_t paths[][2] = {{128, 48}, {128, 112}, {4, 112}, {4, 48}};
   for (const auto& path : paths) {
     const size_t dimension = path[0];
     const size_t populated = path[1];
