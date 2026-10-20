@@ -58,11 +58,15 @@ __global__ void tlp_update_values_kernel_with_io(
   } else {
     return;
   }
+  const unsigned int active_warp_mask = __ballot_sync(0xffffffff, true);
+  bool retry_needed = false;
+  bool scan_complete = false;
 
   // Load `STRIDE` digests every time.
   constexpr uint32_t STRIDE = sizeof(VecD_Load) / sizeof(D);
   // One more loop to handle empty keys.
-  for (int offset = 0; offset < bucket_capacity + STRIDE; offset += STRIDE) {
+  for (int offset = 0; offset < bucket_capacity + STRIDE && !scan_complete;
+       offset += STRIDE) {
     if (occupy_result != OccupyResult::INITIAL) break;
 
     uint32_t pos_cur = align_to<STRIDE>(key_pos);
@@ -73,7 +77,7 @@ __global__ void tlp_update_values_kernel_with_io(
     VecD_Comp digests_arr[4] = {digests_vec.x, digests_vec.y, digests_vec.z,
                                 digests_vec.w};
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4 && !scan_complete; i++) {
       VecD_Comp probe_digests = digests_arr[i];
       uint32_t possible_pos = 0;
       bool result = false;
@@ -95,6 +99,7 @@ __global__ void tlp_update_values_kernel_with_io(
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
             cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
+        retry_needed |= expected_key == static_cast<K>(LOCKED_KEY);
       } while (!result);
       if (result) {
         occupy_result = OccupyResult::DUPLICATE;
@@ -120,11 +125,41 @@ __global__ void tlp_update_values_kernel_with_io(
         auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
         auto probe_key = current_key->load(cuda::std::memory_order_relaxed);
         if (probe_key == static_cast<K>(EMPTY_KEY)) {
-          return;
+          scan_complete = true;
+          break;
         }
       } while (true);
     }
   }
+  if (!retry_needed) return;
+  __syncwarp(active_warp_mask);
+  const unsigned int retry_warp_mask = __ballot_sync(active_warp_mask, true);
+  bool completed = false;
+  do {
+    if (!completed) {
+      bool has_locked_keys = false;
+      for (uint32_t position = 0; position < bucket_capacity; ++position) {
+        auto key_address = BUCKET::keys(bucket_keys_ptr, position);
+        const K possible_key =
+            key_address->load(cuda::std::memory_order_relaxed);
+        has_locked_keys |= possible_key == static_cast<K>(LOCKED_KEY);
+        if (possible_key != key) continue;
+        K expected_key = key;
+        if (key_address->compare_exchange_strong(
+                expected_key, static_cast<K>(LOCKED_KEY),
+                cuda::std::memory_order_acquire,
+                cuda::std::memory_order_relaxed)) {
+          CopyValue::ldg_stg(0, bucket_values_ptr + position * dim,
+                             values + kv_idx * dim, dim);
+          key_address->store(key, cuda::std::memory_order_release);
+          completed = true;
+          break;
+        }
+        has_locked_keys |= expected_key == static_cast<K>(LOCKED_KEY);
+      }
+      completed |= !has_locked_keys;
+    }
+  } while (__any_sync(retry_warp_mask, !completed));
 }
 template <typename K = uint64_t, typename V = byte4, typename S = uint64_t,
           typename VecV = byte16, uint32_t BLOCK_SIZE = 128,
@@ -161,12 +196,15 @@ __global__ void pipeline_update_values_kernel_with_io(
   extern __shared__ __align__(alignof(byte16)) byte sm_values_buffer[];
 
   bool CAS_res[2]{false};
+  unsigned int retry_mask = 0;
 
   // Initialization
   auto g = cg::tiled_partition<GROUP_SIZE>(cg::this_thread_block());
   int groupID = threadIdx.x / GROUP_SIZE;
   int rank = g.thread_rank();
   uint64_t key_idx_base = (blockIdx.x * blockDim.x) + groupID * GROUP_SIZE;
+  const unsigned int active_warp_mask =
+      __ballot_sync(0xffffffff, key_idx_base < n);
   if (key_idx_base >= n) return;
   int loop_num =
       (n - key_idx_base) < GROUP_SIZE ? (n - key_idx_base) : GROUP_SIZE;
@@ -367,6 +405,9 @@ __global__ void pipeline_update_values_kernel_with_io(
         succ = CAS_res_cur ? 1 : 0;
       }
       succ = g.shfl(succ, src_lane);
+      if (target_pos < 0 || succ == 0) {
+        retry_mask |= 1U << (key_idx_block - groupID * GROUP_SIZE);
+      }
       if (target_pos >= 0 && succ == 1) {
         auto tmp = reinterpret_cast<VecV*>(sm_values_buffer);
         VecV* v_src = tmp + (groupID * 2 + same_buf(i)) * dim;
@@ -449,6 +490,9 @@ __global__ void pipeline_update_values_kernel_with_io(
       succ = CAS_res_cur ? 1 : 0;
     }
     succ = g.shfl(succ, src_lane);
+    if (target_pos < 0 || succ == 0) {
+      retry_mask |= 1U << (key_idx_block - groupID * GROUP_SIZE);
+    }
     if (target_pos >= 0 && succ == 1) {
       auto tmp = reinterpret_cast<VecV*>(sm_values_buffer);
       VecV* v_src = tmp + (groupID * 2 + same_buf(loop_num)) * dim;
@@ -480,6 +524,9 @@ __global__ void pipeline_update_values_kernel_with_io(
       succ = CAS_res_cur ? 1 : 0;
     }
     succ = g.shfl(succ, src_lane);
+    if (target_pos < 0 || succ == 0) {
+      retry_mask |= 1U << (key_idx_block - groupID * GROUP_SIZE);
+    }
     if (target_pos >= 0 && succ == 1) {
       auto tmp = reinterpret_cast<VecV*>(sm_values_buffer);
       VecV* v_src = tmp + (groupID * 2 + same_buf(loop_num + 1)) * dim;
@@ -491,6 +538,64 @@ __global__ void pipeline_update_values_kernel_with_io(
         key_address->store(target_key, cuda::std::memory_order_release);
       }
     }
+  }
+  g.sync();
+
+  __syncwarp(active_warp_mask);
+  while (retry_mask != 0) {
+    const int retry_index = __ffs(retry_mask) - 1;
+    const int retry_key_idx = groupID * GROUP_SIZE + retry_index;
+    const uint64_t retry_input_idx = key_idx_base + retry_index;
+    const K retry_key = sm_target_keys[retry_key_idx];
+    K* retry_keys_ptr = sm_keys_ptr[retry_key_idx];
+    int retry_pos = sm_position[retry_key_idx];
+    if (retry_pos < 0 && !IS_RESERVED_KEY<K>(retry_key)) {
+      bool has_locked_keys = false;
+      do {
+        int possible_pos = -1;
+        has_locked_keys = false;
+        for (int position = rank; position < BUCKET_SIZE;
+             position += GROUP_SIZE) {
+          const K possible_key = BUCKET::keys(retry_keys_ptr, position)
+                                     ->load(cuda::std::memory_order_relaxed);
+          if (possible_key == retry_key) {
+            possible_pos = position;
+          }
+          has_locked_keys |= possible_key == static_cast<K>(LOCKED_KEY);
+        }
+        const auto found_vote = g.ballot(possible_pos >= 0);
+        if (found_vote) {
+          retry_pos = g.shfl(possible_pos, __ffs(found_vote) - 1);
+        }
+        has_locked_keys = g.any(has_locked_keys);
+      } while (retry_pos < 0 && has_locked_keys);
+    }
+    if (retry_pos < 0) {
+      retry_mask &= retry_mask - 1;
+      continue;
+    }
+    auto retry_key_address = BUCKET::keys(retry_keys_ptr, retry_pos);
+    int acquired = 0;
+    do {
+      if (rank == 0) {
+        K expected_key = retry_key;
+        acquired = retry_key_address->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY),
+            cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
+      }
+      acquired = g.shfl(acquired, 0);
+    } while (acquired == 0);
+    g.sync();
+
+    const VecV* retry_value_src = values + retry_input_idx * dim;
+    VecV* retry_value_dst = sm_values_ptr[retry_key_idx] + retry_pos * dim;
+    CopyValue::ldg_stg(rank, retry_value_dst, retry_value_src, dim);
+    g.sync();
+    if (rank == 0) {
+      retry_key_address->store(retry_key, cuda::std::memory_order_release);
+    }
+    g.sync();
+    retry_mask &= retry_mask - 1;
   }
 }  // End function
 
