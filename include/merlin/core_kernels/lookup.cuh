@@ -165,11 +165,13 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
     Bucket<K, V, S>* bucket = buckets + bkt_idx;
     __pipeline_memcpy_async(sm_keys_ptr + idx_block, bucket->keys_addr(),
                             sizeof(K*));
-    __pipeline_commit();
     __pipeline_memcpy_async(sm_values_ptr + idx_block, &(bucket->vectors),
                             sizeof(VecV*));
   }
+  g.sync();
+  __pipeline_commit();
   __pipeline_wait_prior(0);
+  g.sync();
 
   // Pipeline loading
   uint8_t* digests_ptr =
@@ -200,8 +202,10 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
     /* Step2: check digests and load possible keys */
     uint32_t target_digest = sm_target_digests[key_idx_block];
     uint32_t target_digests = __byte_perm(target_digest, target_digest, 0x0000);
-    sm_counts[key_idx_block] = 0;
+    g.sync();
+    if (rank == 0) sm_counts[key_idx_block] = 0;
     __pipeline_wait_prior(3);
+    g.sync();
     uint32_t probing_digests =
         sm_probing_digests[same_buf(i)][groupID * DIGEST_SPAN + rank];
     uint32_t find_result_ = __vcmpeq4(probing_digests, target_digests);
@@ -236,29 +240,34 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
       } while (true);
     } else {
       K target_key = sm_target_keys[key_idx_block];
-      sm_counts[key_idx_block] = 0;
+      g.sync();
+      if (rank == 0) sm_counts[key_idx_block] = 0;
+      g.sync();
       int found_vote = 0;
       bool found = false;
       do {
         int digest_idx = __ffs(find_result) - 1;
+        int candidate_pos = 0;
         if (digest_idx >= 0) {
           find_result &= (find_result - 1);
-          int key_pos = rank * 4 + digest_idx;
-          K possible_key = key_ptr[key_pos];
-          if (possible_key == target_key) {
-            found = true;
-            sm_counts[key_idx_block] = 1;
-            sm_possible_pos[same_buf(i)][groupID * RESERVE] = key_pos;
-            sm_possible_keys[same_buf(i)][groupID * RESERVE] = possible_key;
-          }
+          candidate_pos = rank * 4 + digest_idx;
+          K possible_key = key_ptr[candidate_pos];
+          found = possible_key == target_key;
         }
         found_vote = g.ballot(found);
         if (found_vote) {
+          int src_lane = __ffs(found_vote) - 1;
+          if (rank == src_lane) {
+            sm_counts[key_idx_block] = 1;
+            sm_possible_pos[same_buf(i)][groupID * RESERVE] = candidate_pos;
+            sm_possible_keys[same_buf(i)][groupID * RESERVE] = target_key;
+          }
           break;
         }
         found_vote = digest_idx >= 0;
       } while (g.any(found_vote));
     }
+    g.sync();
     __pipeline_commit();
 
     /* Step3: check possible keys, and prefecth the value and score */
@@ -266,11 +275,13 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
       key_idx_block -= 1;
       K target_key = sm_target_keys[key_idx_block];
       int possible_num = sm_counts[key_idx_block];
-      sm_founds[key_idx_block] = 0;
+      g.sync();
+      if (rank == 0) sm_founds[key_idx_block] = 0;
       S* score_ptr = CopyScore::get_base_ptr(sm_keys_ptr, key_idx_block);
       VecV* value_ptr = sm_values_ptr[key_idx_block];
       __pipeline_wait_prior(3);
-      int key_pos;
+      g.sync();
+      int key_pos = 0;
       bool found_flag = false;
       if (rank < possible_num) {
         K possible_key =
@@ -278,20 +289,23 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
         key_pos = sm_possible_pos[diff_buf(i)][groupID * RESERVE + rank];
         if (possible_key == target_key) {
           found_flag = true;
-          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                             score_ptr + key_pos);
         }
       }
       int found_vote = g.ballot(found_flag);
       if (found_vote) {
         VecV* v_dst = sm_vector[diff_buf(i)][groupID];
-        sm_founds[key_idx_block] = 1;
+        if (rank == 0) sm_founds[key_idx_block] = 1;
         int src_lane = __ffs(found_vote) - 1;
         int target_pos = g.shfl(key_pos, src_lane);
+        if (rank == src_lane && scores != nullptr) {
+          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
+                             score_ptr + target_pos);
+        }
         VecV* v_src = value_ptr + target_pos * dim;
         CopyValue::ldg_sts(rank, v_dst, v_src, dim);
       }
     }
+    g.sync();
     __pipeline_commit();
 
     /* Step4: write back value and score */
@@ -302,12 +316,16 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
       VecV* v_dst = values + key_idx_grid * dim;
       int found_flag = sm_founds[key_idx_block];
       __pipeline_wait_prior(3);
+      g.sync();
       if (found_flag > 0) {
         S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
         CopyValue::lds_stg(rank, v_dst, v_src, dim);
-        CopyScore::stg(scores + key_idx_grid, score_);
+        if (rank == 0 && scores != nullptr) {
+          CopyScore::stg(scores + key_idx_grid, score_);
+        }
       }
     }
+    g.sync();
   }  // End loop
 
   /* Pipeline emptying: step3, i = loop_num */
@@ -315,11 +333,13 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
     int key_idx_block = groupID * GROUP_SIZE + (loop_num - 1);
     K target_key = sm_target_keys[key_idx_block];
     int possible_num = sm_counts[key_idx_block];
-    sm_founds[key_idx_block] = 0;
+    g.sync();
+    if (rank == 0) sm_founds[key_idx_block] = 0;
     S* score_ptr = CopyScore::get_base_ptr(sm_keys_ptr, key_idx_block);
     VecV* value_ptr = sm_values_ptr[key_idx_block];
     __pipeline_wait_prior(1);
-    int key_pos;
+    g.sync();
+    int key_pos = 0;
     bool found_flag = false;
     if (rank < possible_num) {
       key_pos = sm_possible_pos[diff_buf(loop_num)][groupID * RESERVE + rank];
@@ -327,20 +347,23 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
           sm_possible_keys[diff_buf(loop_num)][groupID * RESERVE + rank];
       if (target_key == possible_key) {
         found_flag = true;
-        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                           score_ptr + key_pos);
       }
     }
     int found_vote = g.ballot(found_flag);
     if (found_vote) {
-      sm_founds[key_idx_block] = 1;
+      if (rank == 0) sm_founds[key_idx_block] = 1;
       int src_lane = __ffs(found_vote) - 1;
       int target_pos = g.shfl(key_pos, src_lane);
+      if (rank == src_lane && scores != nullptr) {
+        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
+                           score_ptr + target_pos);
+      }
       VecV* v_src = value_ptr + target_pos * dim;
       VecV* v_dst = sm_vector[diff_buf(loop_num)][groupID];
       CopyValue::ldg_sts(rank, v_dst, v_src, dim);
     }
   }
+  g.sync();
   __pipeline_commit();
 
   /* Pipeline emptying: step4, i = loop_num */
@@ -351,10 +374,13 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
     VecV* v_dst = values + key_idx_grid * dim;
     int found_flag = sm_founds[key_idx_block];
     __pipeline_wait_prior(1);
+    g.sync();
     if (found_flag > 0) {
       S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
       CopyValue::lds_stg(rank, v_dst, v_src, dim);
-      CopyScore::stg(scores + key_idx_grid, score_);
+      if (rank == 0 && scores != nullptr) {
+        CopyScore::stg(scores + key_idx_grid, score_);
+      }
     }
   }
 
@@ -366,12 +392,17 @@ __global__ void lookup_kernel_with_io_pipeline_v1(
     VecV* v_dst = values + key_idx_grid * dim;
     int found_flag = sm_founds[key_idx_block];
     __pipeline_wait_prior(0);
+    g.sync();
     if (found_flag > 0) {
       S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
       CopyValue::lds_stg(rank, v_dst, v_src, dim);
-      CopyScore::stg(scores + key_idx_grid, score_);
+      if (rank == 0 && scores != nullptr) {
+        CopyScore::stg(scores + key_idx_grid, score_);
+      }
     }
   }
+
+  g.sync();
 
   if (rank < loop_num) {
     int key_idx_block = groupID * GROUP_SIZE + rank;
@@ -436,11 +467,13 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     Bucket<K, V, S>* bucket = buckets + bkt_idx;
     __pipeline_memcpy_async(sm_keys_ptr + idx_block, bucket->keys_addr(),
                             sizeof(K*));
-    __pipeline_commit();
     __pipeline_memcpy_async(sm_values_ptr + idx_block, &(bucket->vectors),
                             sizeof(VecV*));
   }
+  g.sync();
+  __pipeline_commit();
   __pipeline_wait_prior(0);
+  g.sync();
 
   // Pipeline loading
   uint8_t* digests_ptr =
@@ -472,8 +505,10 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     /* Step2: check digests and load possible keys */
     uint32_t target_digest = sm_target_digests[key_idx_block];
     uint32_t target_digests = __byte_perm(target_digest, target_digest, 0x0000);
-    sm_counts[key_idx_block] = 0;
+    g.sync();
+    if (rank == 0) sm_counts[key_idx_block] = 0;
     __pipeline_wait_prior(3);
+    g.sync();
     uint32_t probing_digests =
         sm_probing_digests[same_buf(i)][groupID * DIGEST_SPAN + rank];
     uint32_t find_result_ = __vcmpeq4(probing_digests, target_digests);
@@ -517,31 +552,36 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
       } while (true);
     } else {
       K target_key = sm_target_keys[key_idx_block];
-      sm_counts[key_idx_block] = 0;
+      g.sync();
+      if (rank == 0) sm_counts[key_idx_block] = 0;
+      g.sync();
       int found_vote = 0;
       bool found = false;
       do {
         int digest_idx = __ffs(find_result) - 1;
+        int candidate_pos = 0;
         if (digest_idx >= 0) {
           find_result &= (find_result - 1);
-          int key_pos = digest_idx < 4
-                            ? (rank * 4 + digest_idx)
-                            : ((GROUP_SIZE + rank - 1) * 4 + digest_idx);
-          K possible_key = key_ptr[key_pos];
-          if (possible_key == target_key) {
-            found = true;
-            sm_counts[key_idx_block] = 1;
-            sm_possible_pos[same_buf(i)][groupID * RESERVE] = key_pos;
-            sm_possible_keys[same_buf(i)][groupID * RESERVE] = possible_key;
-          }
+          candidate_pos = digest_idx < 4
+                              ? (rank * 4 + digest_idx)
+                              : ((GROUP_SIZE + rank - 1) * 4 + digest_idx);
+          K possible_key = key_ptr[candidate_pos];
+          found = possible_key == target_key;
         }
         found_vote = g.ballot(found);
         if (found_vote) {
+          int src_lane = __ffs(found_vote) - 1;
+          if (rank == src_lane) {
+            sm_counts[key_idx_block] = 1;
+            sm_possible_pos[same_buf(i)][groupID * RESERVE] = candidate_pos;
+            sm_possible_keys[same_buf(i)][groupID * RESERVE] = target_key;
+          }
           break;
         }
         found_vote = digest_idx >= 0;
       } while (g.any(found_vote));
     }
+    g.sync();
     __pipeline_commit();
 
     /* Step3: check possible keys, and prefecth the value and score */
@@ -549,11 +589,13 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
       key_idx_block -= 1;
       K target_key = sm_target_keys[key_idx_block];
       int possible_num = sm_counts[key_idx_block];
-      sm_founds[key_idx_block] = 0;
+      g.sync();
+      if (rank == 0) sm_founds[key_idx_block] = 0;
       S* score_ptr = CopyScore::get_base_ptr(sm_keys_ptr, key_idx_block);
       VecV* value_ptr = sm_values_ptr[key_idx_block];
       __pipeline_wait_prior(3);
-      int key_pos;
+      g.sync();
+      int key_pos = 0;
       bool found_flag = false;
       if (rank < possible_num) {
         K possible_key =
@@ -561,20 +603,23 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
         key_pos = sm_possible_pos[diff_buf(i)][groupID * RESERVE + rank];
         if (possible_key == target_key) {
           found_flag = true;
-          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                             score_ptr + key_pos);
         }
       }
       int found_vote = g.ballot(found_flag);
       if (found_vote) {
-        sm_founds[key_idx_block] = 1;
+        if (rank == 0) sm_founds[key_idx_block] = 1;
         int src_lane = __ffs(found_vote) - 1;
         int target_pos = g.shfl(key_pos, src_lane);
+        if (rank == src_lane && scores != nullptr) {
+          CopyScore::ldg_sts(sm_target_scores + key_idx_block,
+                             score_ptr + target_pos);
+        }
         VecV* v_src = value_ptr + target_pos * dim;
         VecV* v_dst = sm_vector[diff_buf(i)][groupID];
         CopyValue::ldg_sts(rank, v_dst, v_src, dim);
       }
     }
+    g.sync();
     __pipeline_commit();
 
     /* Step4: write back value and score */
@@ -585,12 +630,16 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
       VecV* v_src = sm_vector[same_buf(i)][groupID];
       VecV* v_dst = values + key_idx_grid * dim;
       __pipeline_wait_prior(3);
+      g.sync();
       if (found_flag > 0) {
         S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
         CopyValue::lds_stg(rank, v_dst, v_src, dim);
-        CopyScore::stg(scores + key_idx_grid, score_);
+        if (rank == 0 && scores != nullptr) {
+          CopyScore::stg(scores + key_idx_grid, score_);
+        }
       }
     }
+    g.sync();
   }  // End loop
 
   /* Pipeline emptying: step3, i = loop_num */
@@ -598,11 +647,13 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     int key_idx_block = groupID * GROUP_SIZE + (loop_num - 1);
     K target_key = sm_target_keys[key_idx_block];
     int possible_num = sm_counts[key_idx_block];
-    sm_founds[key_idx_block] = 0;
+    g.sync();
+    if (rank == 0) sm_founds[key_idx_block] = 0;
     S* score_ptr = CopyScore::get_base_ptr(sm_keys_ptr, key_idx_block);
     VecV* value_ptr = sm_values_ptr[key_idx_block];
     __pipeline_wait_prior(1);
-    int key_pos;
+    g.sync();
+    int key_pos = 0;
     bool found_flag = false;
     if (rank < possible_num) {
       key_pos = sm_possible_pos[diff_buf(loop_num)][groupID * RESERVE + rank];
@@ -610,20 +661,23 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
           sm_possible_keys[diff_buf(loop_num)][groupID * RESERVE + rank];
       if (possible_key == target_key) {
         found_flag = true;
-        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
-                           score_ptr + key_pos);
       }
     }
     int found_vote = g.ballot(found_flag);
     if (found_vote) {
-      sm_founds[key_idx_block] = 1;
+      if (rank == 0) sm_founds[key_idx_block] = 1;
       int src_lane = __ffs(found_vote) - 1;
       int target_pos = g.shfl(key_pos, src_lane);
+      if (rank == src_lane && scores != nullptr) {
+        CopyScore::ldg_sts(sm_target_scores + key_idx_block,
+                           score_ptr + target_pos);
+      }
       VecV* v_src = value_ptr + target_pos * dim;
       VecV* v_dst = sm_vector[diff_buf(loop_num)][groupID];
       CopyValue::ldg_sts(rank, v_dst, v_src, dim);
     }
   }
+  g.sync();
   __pipeline_commit();
 
   /* Pipeline emptying: step4, i = loop_num */
@@ -634,10 +688,13 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     VecV* v_src = sm_vector[same_buf(loop_num)][groupID];
     int found_flag = sm_founds[key_idx_block];
     __pipeline_wait_prior(1);
+    g.sync();
     if (found_flag > 0) {
       S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
       CopyValue::lds_stg(rank, v_dst, v_src, dim);
-      CopyScore::stg(scores + key_idx_grid, score_);
+      if (rank == 0 && scores != nullptr) {
+        CopyScore::stg(scores + key_idx_grid, score_);
+      }
     }
   }
 
@@ -649,12 +706,17 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     VecV* v_src = sm_vector[same_buf(loop_num + 1)][groupID];
     int found_flag = sm_founds[key_idx_block];
     __pipeline_wait_prior(0);
+    g.sync();
     if (found_flag > 0) {
       S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
       CopyValue::lds_stg(rank, v_dst, v_src, dim);
-      CopyScore::stg(scores + key_idx_grid, score_);
+      if (rank == 0 && scores != nullptr) {
+        CopyScore::stg(scores + key_idx_grid, score_);
+      }
     }
   }
+
+  g.sync();
 
   if (rank < loop_num) {
     int key_idx_block = groupID * GROUP_SIZE + rank;
@@ -942,20 +1004,21 @@ struct SelectLookupKernelWithIOImpl {
                              Bucket<K, V, S>* buckets, const K* __restrict keys,
                              V* __restrict values, S* __restrict scores,
                              const FoundFunctor& found_functor) {
+    const int launch_block_size = ((block_size + 31) / 32) * 32;
     if (load_factor <= 0.75) {
       const unsigned int tile_size = 4;
       const size_t N = n * tile_size;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, launch_block_size);
       lookup_kernel_with_io<K, V, S, FoundFunctor, tile_size>
-          <<<grid_size, block_size, 0, stream>>>(
+          <<<grid_size, launch_block_size, 0, stream>>>(
               table, buckets, bucket_max_size, buckets_num, dim, keys, values,
               scores, found_functor, N);
     } else {
       const unsigned int tile_size = 16;
       const size_t N = n * tile_size;
-      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, launch_block_size);
       lookup_kernel_with_io<K, V, S, FoundFunctor, tile_size>
-          <<<grid_size, block_size, 0, stream>>>(
+          <<<grid_size, launch_block_size, 0, stream>>>(
               table, buckets, bucket_max_size, buckets_num, dim, keys, values,
               scores, found_functor, N);
     }

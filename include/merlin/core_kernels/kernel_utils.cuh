@@ -281,9 +281,9 @@ __forceinline__ __device__ S make_nano() {
 template <class K, class V, class S>
 struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_acquire;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_release;
   using BUCKET = Bucket<K, V, S>;
 
   __forceinline__ __device__ static S desired_when_missed(
@@ -389,7 +389,8 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
     if (new_insert) {
       __stcg(dst_score_ptr, input_scores[key_idx]);
     } else {
-      __stcg(dst_score_ptr, saturating_add(*dst_score_ptr, input_scores[key_idx]));
+      __stcg(dst_score_ptr,
+             saturating_add(*dst_score_ptr, input_scores[key_idx]));
     }
     return;
   }
@@ -402,8 +403,7 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
     S old_score =
         bucket->scores(key_pos)->load(cuda::std::memory_order_relaxed);
     S new_score = saturating_add(old_score, input_scores[key_idx]);
-    bucket->scores(key_pos)->store(new_score,
-                                   cuda::std::memory_order_relaxed);
+    bucket->scores(key_pos)->store(new_score, cuda::std::memory_order_relaxed);
     return;
   }
 
@@ -415,16 +415,17 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
     S* dst_score_ptr =
         BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
     // Cache in L2 cache, bypass L1 Cache.
-    __stcg(dst_score_ptr, saturating_add(*dst_score_ptr, input_scores[key_idx]));
+    __stcg(dst_score_ptr,
+           saturating_add(*dst_score_ptr, input_scores[key_idx]));
   }
 };
 
 template <class K, class V, class S>
 struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_acquire;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_release;
   using BUCKET = Bucket<K, V, S>;
 
   __forceinline__ __device__ static S desired_when_missed(
@@ -483,9 +484,9 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
 template <class K, class V, class S>
 struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
   static constexpr cuda::std::memory_order LOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_acquire;
   static constexpr cuda::std::memory_order UNLOCK_MEM_ORDER =
-      cuda::std::memory_order_relaxed;
+      cuda::std::memory_order_release;
   using BUCKET = Bucket<K, V, S>;
 
   __forceinline__ __device__ static S desired_when_missed(
@@ -730,7 +731,7 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
       expected_key = desired_key;
       result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;
@@ -750,7 +751,7 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
         expected_key = static_cast<K>(EMPTY_KEY);
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
-            cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+            cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
       }
       result = g.shfl(result, src_lane);
       if (result) {
@@ -775,7 +776,7 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
 
     // Step 4: record min score location.
     temp_min_score_val = current_score->load(cuda::std::memory_order_relaxed);
-    if (temp_min_score_val < local_min_score_val) {
+    if (local_min_score_pos < 0 || temp_min_score_val < local_min_score_val) {
       expected_key =
           bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed);
       if (expected_key != static_cast<K>(LOCKED_KEY) &&
@@ -789,12 +790,16 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
   // Step 5: insert by evicting some one.
   const S global_min_score_val =
       cg::reduce(g, local_min_score_val, cg::less<S>());
+  vote = g.ballot(local_min_score_pos >= 0 &&
+                  local_min_score_val <= global_min_score_val);
+  src_lane = vote ? __ffs(vote) - 1 : 0;
+  if (!vote) {
+    return OccupyResult::CONTINUE;
+  }
   if (desired_score < global_min_score_val) {
     return OccupyResult::REFUSED;
   }
-  vote = g.ballot(local_min_score_val <= global_min_score_val);
   if (vote) {
-    src_lane = __ffs(vote) - 1;
     result = false;
     if (src_lane == g.thread_rank()) {
       // TBD: Here can be compare_exchange_weak. Do benchmark.
@@ -803,7 +808,7 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
       evicted_key = local_min_score_key;
       result = current_key->compare_exchange_strong(
           local_min_score_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
 
       // Need to recover when fail.
       if (result && (current_score->load(cuda::std::memory_order_relaxed) >
@@ -817,9 +822,12 @@ __device__ __inline__ OccupyResult find_and_lock_when_vacant(
     if (result) {
       // Not every `evicted_key` is correct expect the `src_lane` thread.
       key_pos = g.shfl(local_min_score_pos, src_lane);
-      return (evicted_key == static_cast<K>(RECLAIM_KEY))
-                 ? OccupyResult::OCCUPIED_RECLAIMED
-                 : OccupyResult::EVICT;
+      bool reclaimed = false;
+      if (src_lane == g.thread_rank()) {
+        reclaimed = evicted_key == static_cast<K>(RECLAIM_KEY);
+      }
+      return g.shfl(reclaimed, src_lane) ? OccupyResult::OCCUPIED_RECLAIMED
+                                         : OccupyResult::EVICT;
     }
   }
   return OccupyResult::CONTINUE;
@@ -947,7 +955,7 @@ __device__ __forceinline__ OccupyResult find_and_lock_for_update(
       expected_key = desired_key;
       result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
-          cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
       vote = g.ballot(result);
       if (vote) {
         src_lane = __ffs(vote) - 1;

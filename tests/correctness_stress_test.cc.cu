@@ -8,10 +8,15 @@
 
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
+#include <exception>
 #include <numeric>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
-
 #include "merlin_hashtable.cuh"
 #include "test_util.cuh"
 
@@ -27,14 +32,17 @@ using EvictStrategy = nv::merlin::EvictStrategy;
 using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kCustomized>;
 
 void create_table(Table& table, TableMode mode, size_t capacity,
-                  size_t dim = kDim) {
+                  size_t dim = kDim, bool pure_hbm = false,
+                  bool io_by_cpu = false) {
   TableOptions options;
   options.init_capacity = capacity;
   options.max_capacity = capacity;
-  options.max_hbm_for_vectors = 0;
+  options.max_hbm_for_vectors = pure_hbm ? capacity * dim * sizeof(V) : 0;
   options.dim = dim;
   options.max_bucket_size = 128;
   options.table_mode = mode;
+  options.io_by_cpu = io_by_cpu;
+  options.api_lock = true;
   table.init(options);
 }
 
@@ -57,29 +65,41 @@ size_t count_found(const std::vector<bool>& found) {
 }
 
 std::vector<bool> find_keys(Table& table, const std::vector<K>& keys,
-                            std::vector<V>* values_out = nullptr) {
+                            std::vector<V>* values_out = nullptr,
+                            std::vector<S>* scores_out = nullptr) {
   K* d_keys = copy_to_device(keys);
   V* d_values = nullptr;
   bool* d_found = nullptr;
-  CUDA_CHECK(cudaMalloc(&d_values, keys.size() * kDim * sizeof(V)));
+  S* d_scores = nullptr;
+  const size_t dim = table.dim();
+  CUDA_CHECK(cudaMalloc(&d_values, keys.size() * dim * sizeof(V)));
   CUDA_CHECK(cudaMalloc(&d_found, keys.size() * sizeof(bool)));
+  CUDA_CHECK(cudaMemset(d_found, 0, keys.size() * sizeof(bool)));
+  if (scores_out != nullptr)
+    CUDA_CHECK(cudaMalloc(&d_scores, keys.size() * sizeof(S)));
 
-  table.find(keys.size(), d_keys, d_values, d_found, nullptr, 0);
+  table.find(keys.size(), d_keys, d_values, d_found, d_scores, 0);
   CUDA_CHECK(cudaDeviceSynchronize());
 
   std::vector<uint8_t> found_bytes(keys.size());
-  CUDA_CHECK(cudaMemcpy(found_bytes.data(), d_found,
-                        keys.size() * sizeof(bool), cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(found_bytes.data(), d_found, keys.size() * sizeof(bool),
+                        cudaMemcpyDeviceToHost));
   std::vector<bool> found(keys.size());
   for (size_t i = 0; i < keys.size(); i++) {
     found[i] = found_bytes[i] != 0;
   }
 
   if (values_out != nullptr) {
-    values_out->resize(keys.size() * kDim);
+    values_out->resize(keys.size() * dim);
     CUDA_CHECK(cudaMemcpy(values_out->data(), d_values,
-                          keys.size() * kDim * sizeof(V),
+                          keys.size() * dim * sizeof(V),
                           cudaMemcpyDeviceToHost));
+  }
+  if (scores_out != nullptr) {
+    scores_out->resize(keys.size());
+    CUDA_CHECK(cudaMemcpy(scores_out->data(), d_scores, keys.size() * sizeof(S),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d_scores));
   }
 
   CUDA_CHECK(cudaFree(d_keys));
@@ -96,8 +116,8 @@ void insert_or_assign(Table& table, const std::vector<K>& keys,
   V* d_values = copy_to_device(values);
   S* d_scores = copy_to_device(scores);
 
-  table.insert_or_assign(keys.size(), d_keys, d_values, d_scores, 0,
-                         unique_key, ignore_evict_strategy);
+  table.insert_or_assign(keys.size(), d_keys, d_values, d_scores, 0, unique_key,
+                         ignore_evict_strategy);
   CUDA_CHECK(cudaDeviceSynchronize());
 
   CUDA_CHECK(cudaFree(d_keys));
@@ -149,10 +169,15 @@ TEST(CorrectnessStress, DuplicateSameKeyBatchThroughputNoTornValue) {
   EXPECT_EQ(table.size(0), static_cast<size_t>(1));
 
   std::vector<V> found_values;
-  auto found = find_keys(table, std::vector<K>{kHotKey}, &found_values);
+  std::vector<S> found_scores;
+  auto found =
+      find_keys(table, std::vector<K>{kHotKey}, &found_values, &found_scores);
   ASSERT_EQ(count_found(found), static_cast<size_t>(1));
   EXPECT_TRUE(is_whole_sentinel_vector(found_values, 0, legal_sentinels))
       << "duplicate same-key update produced a torn or unknown value";
+  ASSERT_GE(found_scores[0], S{1});
+  ASSERT_LE(found_scores[0], S{kBatch});
+  EXPECT_EQ(found_values[0], static_cast<V>(999 + found_scores[0]));
 }
 
 TEST(CorrectnessStress, DualBucketRejectsNonUniqueBatchContract) {
@@ -170,9 +195,9 @@ TEST(CorrectnessStress, DualBucketRejectsNonUniqueBatchContract) {
   V* d_values = copy_to_device(values);
   S* d_scores = copy_to_device(scores);
 
-  EXPECT_THROW(table.insert_or_assign(kBatch, d_keys, d_values, d_scores, 0,
-                                      false),
-               std::runtime_error);
+  EXPECT_THROW(
+      table.insert_or_assign(kBatch, d_keys, d_values, d_scores, 0, false),
+      std::runtime_error);
 
   CUDA_CHECK(cudaFree(d_keys));
   CUDA_CHECK(cudaFree(d_values));
@@ -197,17 +222,559 @@ TEST(CorrectnessStress, DualBucketRepeatedBatchUpdateNoDuplicates) {
   fill_sentinel_values(values_v2, kBatch, kDim, 2.0f);
 
   insert_or_assign(table, keys, values_v1, scores, true);
+  for (auto& score : scores) score += kBatch;
   insert_or_assign(table, keys, values_v2, scores, true);
 
   EXPECT_EQ(table.size(0), kBatch);
 
   std::vector<V> found_values;
-  auto found = find_keys(table, keys, &found_values);
+  std::vector<S> found_scores;
+  auto found = find_keys(table, keys, &found_values, &found_scores);
   ASSERT_EQ(count_found(found), kBatch);
   for (size_t i = 0; i < kBatch; i++) {
+    EXPECT_EQ(found_scores[i], scores[i]);
     for (size_t d = 0; d < kDim; d++) {
       EXPECT_FLOAT_EQ(found_values[i * kDim + d], 2.0f)
           << "key " << keys[i] << " dim " << d;
+    }
+  }
+}
+
+namespace {
+
+struct StressPath {
+  TableMode mode;
+  bool pure_hbm;
+  bool unique;
+  bool io_by_cpu;
+  const char* name;
+};
+
+class CorrectnessPaths : public testing::TestWithParam<StressPath> {};
+
+bool legal_role_generation(const std::string& roles, size_t row, S score,
+                           V value, bool completed) {
+  if (score == 0 || (score - 1) % 1000 != row ||
+      value != static_cast<V>(1000 + score))
+    return false;
+  const size_t generation = (score - 1) / 1000;
+  if (generation == 0)
+    return !completed || roles.find_first_of("UI") == std::string::npos;
+  return generation <= roles.size() && roles[generation - 1] != 'R';
+}
+
+TEST(CorrectnessStress, RoleGenerationOracleRejectsNoOpWrites) {
+  for (const std::string roles : {"RR", "UU", "II", "RU", "RI", "UI", "RUI"}) {
+    SCOPED_TRACE(roles);
+    for (size_t row = 0; row < 33; ++row) {
+      EXPECT_TRUE(
+          legal_role_generation(roles, row, row + 1, 1001 + row, false));
+      EXPECT_EQ(legal_role_generation(roles, row, row + 1, 1001 + row, true),
+                roles.find_first_of("UI") == std::string::npos);
+      EXPECT_FALSE(
+          legal_role_generation(roles, row, row + 1, 1002 + row, true));
+      for (size_t worker = 0; worker < roles.size(); ++worker) {
+        const S score = (worker + 1) * 1000 + row + 1;
+        EXPECT_EQ(legal_role_generation(roles, row, score, 1000 + score, true),
+                  roles[worker] != 'R');
+        EXPECT_FALSE(
+            legal_role_generation(roles, row, score + 1, 1001 + score, true));
+      }
+    }
+  }
+}
+
+std::vector<K> collision_keys(size_t count, TableMode mode, K start = 1) {
+  constexpr size_t capacity = 512;
+  std::vector<K> keys;
+  for (K candidate = start; keys.size() < count; ++candidate) {
+    const auto hash = nv::merlin::Murmur3HashHost(candidate);
+    const size_t first = static_cast<uint32_t>(hash) % 4;
+    size_t second = static_cast<uint32_t>(hash >> 32) % 4;
+    if (second == first) second = (second + 1) % 4;
+    if ((mode == TableMode::kThroughput &&
+         (hash & (capacity - 1)) / 128 == 0) ||
+        (mode == TableMode::kMemory && first == 0 && second == 1))
+      keys.push_back(candidate);
+  }
+  return keys;
+}
+
+using GenerationMap = std::unordered_map<K, std::pair<S, V>>;
+
+void check_residents(Table& table, const GenerationMap& expected,
+                     size_t expected_size) {
+  const size_t capacity = table.capacity();
+  K* device_keys = nullptr;
+  V* device_values = nullptr;
+  S* device_scores = nullptr;
+  CUDA_CHECK(cudaMalloc(&device_keys, capacity * sizeof(K)));
+  CUDA_CHECK(cudaMalloc(&device_values, capacity * kDim * sizeof(V)));
+  CUDA_CHECK(cudaMalloc(&device_scores, capacity * sizeof(S)));
+  const size_t exported = table.export_batch(capacity, 0, device_keys,
+                                             device_values, device_scores, 0);
+  CUDA_CHECK(cudaDeviceSynchronize());
+  std::vector<K> keys(exported);
+  std::vector<V> values(exported * kDim);
+  std::vector<S> scores(exported);
+  CUDA_CHECK(cudaMemcpy(keys.data(), device_keys, exported * sizeof(K),
+                        cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(values.data(), device_values, values.size() * sizeof(V),
+                        cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(scores.data(), device_scores, exported * sizeof(S),
+                        cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaFree(device_keys));
+  CUDA_CHECK(cudaFree(device_values));
+  CUDA_CHECK(cudaFree(device_scores));
+  ASSERT_EQ(exported, expected_size);
+  EXPECT_EQ(table.size(0), expected_size);
+  EXPECT_EQ(std::unordered_set<K>(keys.begin(), keys.end()).size(), exported);
+  if (keys.empty()) return;
+  std::vector<V> found_values;
+  std::vector<S> found_scores;
+  const auto found = find_keys(table, keys, &found_values, &found_scores);
+  ASSERT_EQ(count_found(found), exported);
+  for (size_t row = 0; row < exported; ++row) {
+    const auto generation = expected.find(keys[row]);
+    ASSERT_NE(generation, expected.end()) << keys[row];
+    EXPECT_EQ(scores[row], generation->second.first) << keys[row];
+    EXPECT_EQ(found_scores[row], scores[row]);
+    for (size_t dim = 0; dim < kDim; ++dim) {
+      EXPECT_EQ(values[row * kDim + dim], generation->second.second)
+          << keys[row];
+      EXPECT_EQ(found_values[row * kDim + dim], values[row * kDim + dim]);
+    }
+  }
+}
+
+TEST_P(CorrectnessPaths, SameBucketOrPairGenerationCompletion) {
+  const auto path = GetParam();
+  for (size_t count : {2, 31, 32, 33}) {
+    SCOPED_TRACE(count);
+    Table table;
+    create_table(table, path.mode, 512, kDim, path.pure_hbm, path.io_by_cpu);
+    const auto distinct = collision_keys(count, path.mode);
+    std::vector<K> keys;
+    std::vector<V> values;
+    std::vector<S> scores;
+    const size_t repeats = path.unique ? 1 : 4;
+    for (size_t repeat = 0; repeat < repeats; ++repeat) {
+      for (K key : distinct) {
+        keys.push_back(key);
+        scores.push_back(keys.size());
+        values.insert(values.end(), kDim, static_cast<V>(1000 + keys.size()));
+      }
+    }
+    insert_or_assign(table, keys, values, scores, path.unique);
+    std::vector<V> found_values;
+    std::vector<S> found_scores;
+    const auto found = find_keys(table, distinct, &found_values, &found_scores);
+    ASSERT_EQ(count_found(found), count);
+    EXPECT_EQ(table.size(0), count);
+    for (size_t row = 0; row < count; ++row) {
+      ASSERT_GE(found_scores[row], S{1});
+      ASSERT_LE(found_scores[row], scores.size());
+      const size_t generation = found_scores[row] - 1;
+      EXPECT_EQ(keys[generation], distinct[row]);
+      for (size_t dim = 0; dim < kDim; ++dim)
+        EXPECT_EQ(found_values[row * kDim + dim],
+                  values[generation * kDim + dim]);
+    }
+    GenerationMap expected;
+    values.clear();
+    for (size_t row = 0; row < count; ++row) {
+      const V value = static_cast<V>(2000 + row);
+      values.insert(values.end(), kDim, value);
+      expected.emplace(distinct[row], std::make_pair(S{42}, value));
+    }
+    insert_or_assign(table, distinct, values, std::vector<S>(count, 42),
+                     path.unique);
+    check_residents(table, expected, count);
+  }
+}
+
+TEST_P(CorrectnessPaths, SaturatedCandidatesLowEqualScoreAndContinuousIngress) {
+  const auto path = GetParam();
+  const size_t slots = path.mode == TableMode::kMemory ? 256 : 128;
+  const auto keys = collision_keys(slots + 33 * 6, path.mode);
+  Table table;
+  create_table(table, path.mode, 512, kDim, path.pure_hbm, path.io_by_cpu);
+  GenerationMap expected;
+  auto insert = [&](size_t offset, size_t count, S score) {
+    std::vector<K> batch(keys.begin() + offset, keys.begin() + offset + count);
+    std::vector<V> values;
+    for (size_t row = offset; row < offset + count; ++row) {
+      const V value = static_cast<V>(1000 + row);
+      expected.emplace(keys[row], std::make_pair(score, value));
+      values.insert(values.end(), kDim, value);
+    }
+    insert_or_assign(table, batch, values, std::vector<S>(count, score),
+                     path.unique);
+    return batch;
+  };
+  insert(0, slots, 10);
+  check_residents(table, expected, slots);
+  auto low = insert(slots, 33, 1);
+  EXPECT_EQ(count_found(find_keys(table, low)), size_t{0});
+  check_residents(table, expected, slots);
+  insert(slots + 33, 33, 10);
+  check_residents(table, expected, slots);
+  for (size_t round = 0; round < 4; ++round) {
+    SCOPED_TRACE(round);
+    const auto ingress = insert(slots + 33 * (round + 2), 33, 20 + round);
+    EXPECT_EQ(count_found(find_keys(table, ingress)), ingress.size());
+    check_residents(table, expected, slots);
+  }
+}
+
+TEST_P(CorrectnessPaths, SupportedOverlappingRolesCompleteWithGenerationPairs) {
+  const auto path = GetParam();
+  const std::vector<std::string> combinations =
+      path.mode == TableMode::kMemory
+          ? std::vector<std::string>{"RR", "II", "RI"}
+          : std::vector<std::string>{"RR", "UU", "II", "RU", "RI", "UI", "RUI"};
+  constexpr size_t count = 33;
+  const auto keys = collision_keys(count, path.mode);
+  for (const auto& roles : combinations) {
+    SCOPED_TRACE(roles);
+    Table table;
+    create_table(table, path.mode, 512, kDim, path.pure_hbm, path.io_by_cpu);
+    std::vector<S> initial_scores(count);
+    std::vector<V> initial_values;
+    for (size_t row = 0; row < count; ++row) {
+      initial_scores[row] = row + 1;
+      initial_values.insert(initial_values.end(), kDim,
+                            static_cast<V>(1001 + row));
+    }
+    insert_or_assign(table, keys, initial_values, initial_scores, path.unique);
+    struct Buffers {
+      cudaStream_t stream;
+      K* keys;
+      V* values;
+      S* scores;
+      V* found_values;
+      S* found_scores;
+      bool* found;
+    };
+    std::vector<Buffers> buffers(roles.size());
+    for (size_t worker = 0; worker < roles.size(); ++worker) {
+      auto& buffer = buffers[worker];
+      CUDA_CHECK(
+          cudaStreamCreateWithFlags(&buffer.stream, cudaStreamNonBlocking));
+      buffer.keys = copy_to_device(keys);
+      std::vector<S> scores(count);
+      std::vector<V> values;
+      for (size_t row = 0; row < count; ++row) {
+        scores[row] = (worker + 1) * 1000 + row + 1;
+        values.insert(values.end(), kDim, static_cast<V>(1000 + scores[row]));
+      }
+      buffer.scores = copy_to_device(scores);
+      buffer.values = copy_to_device(values);
+      CUDA_CHECK(cudaMalloc(&buffer.found_values, count * kDim * sizeof(V)));
+      CUDA_CHECK(cudaMalloc(&buffer.found_scores, count * sizeof(S)));
+      CUDA_CHECK(cudaMalloc(&buffer.found, count * sizeof(bool)));
+    }
+    int device = 0;
+    CUDA_CHECK(cudaGetDevice(&device));
+    std::atomic<size_t> ready{0};
+    std::atomic<bool> start{false};
+    std::atomic<size_t> errors{0};
+    std::atomic<size_t> completed{0};
+    std::vector<std::exception_ptr> exceptions(roles.size());
+    std::vector<std::thread> threads;
+    for (size_t worker = 0; worker < roles.size(); ++worker) {
+      threads.emplace_back([&, worker] {
+        ready.fetch_add(1);
+        while (!start.load()) std::this_thread::yield();
+        try {
+          CUDA_CHECK(cudaSetDevice(device));
+          auto& buffer = buffers[worker];
+          for (size_t round = 0; round < 4; ++round) {
+            if (roles[worker] == 'R') {
+              CUDA_CHECK(cudaMemsetAsync(buffer.found, 0, count * sizeof(bool),
+                                         buffer.stream));
+              table.find(count, buffer.keys, buffer.found_values, buffer.found,
+                         buffer.found_scores, buffer.stream);
+              std::vector<uint8_t> found(count);
+              std::vector<S> scores(count);
+              std::vector<V> values(count * kDim);
+              CUDA_CHECK(cudaMemcpyAsync(
+                  found.data(), buffer.found, count * sizeof(bool),
+                  cudaMemcpyDeviceToHost, buffer.stream));
+              CUDA_CHECK(cudaMemcpyAsync(
+                  scores.data(), buffer.found_scores, count * sizeof(S),
+                  cudaMemcpyDeviceToHost, buffer.stream));
+              CUDA_CHECK(cudaMemcpyAsync(
+                  values.data(), buffer.found_values, values.size() * sizeof(V),
+                  cudaMemcpyDeviceToHost, buffer.stream));
+              CUDA_CHECK(cudaStreamSynchronize(buffer.stream));
+              for (size_t row = 0; row < count; ++row) {
+                bool valid = found[row] &&
+                             legal_role_generation(roles, row, scores[row],
+                                                   values[row * kDim], false);
+                for (size_t dim = 1; dim < kDim; ++dim)
+                  valid =
+                      valid && values[row * kDim + dim] == values[row * kDim];
+                errors.fetch_add(!valid);
+              }
+            } else if (roles[worker] == 'U') {
+              table.assign(count, buffer.keys, buffer.values, buffer.scores,
+                           buffer.stream, path.unique);
+            } else {
+              table.insert_or_assign(count, buffer.keys, buffer.values,
+                                     buffer.scores, buffer.stream, path.unique);
+            }
+            CUDA_CHECK(cudaStreamSynchronize(buffer.stream));
+            completed.fetch_add(1);
+          }
+        } catch (...) {
+          exceptions[worker] = std::current_exception();
+        }
+      });
+    }
+    while (ready.load() != roles.size()) std::this_thread::yield();
+    start.store(true);
+    for (auto& thread : threads) thread.join();
+    for (auto& buffer : buffers) {
+      CUDA_CHECK(cudaFree(buffer.keys));
+      CUDA_CHECK(cudaFree(buffer.values));
+      CUDA_CHECK(cudaFree(buffer.scores));
+      CUDA_CHECK(cudaFree(buffer.found_values));
+      CUDA_CHECK(cudaFree(buffer.found_scores));
+      CUDA_CHECK(cudaFree(buffer.found));
+      CUDA_CHECK(cudaStreamDestroy(buffer.stream));
+    }
+    for (const auto& error : exceptions) {
+      if (error) std::rethrow_exception(error);
+    }
+    EXPECT_EQ(completed.load(), roles.size() * 4);
+    EXPECT_EQ(errors.load(), size_t{0});
+    std::vector<V> values;
+    std::vector<S> scores;
+    const auto found = find_keys(table, keys, &values, &scores);
+    ASSERT_EQ(count_found(found), count);
+    EXPECT_EQ(table.size(0), count);
+    for (size_t row = 0; row < count; ++row) {
+      EXPECT_TRUE(legal_role_generation(roles, row, scores[row],
+                                        values[row * kDim], true))
+          << keys[row];
+      for (size_t dim = 1; dim < kDim; ++dim)
+        EXPECT_EQ(values[row * kDim + dim], values[row * kDim]);
+    }
+  }
+}
+
+TEST(CorrectnessStress, FullSingleBucketPipelineGenerationCompletion) {
+  Table table;
+  create_table(table, TableMode::kThroughput, 512, kDim, true);
+  std::vector<K> keys;
+  for (size_t bucket = 0; bucket < 4; ++bucket) {
+    size_t selected = 0;
+    for (K candidate = 1; selected < 128; ++candidate) {
+      if ((nv::merlin::Murmur3HashHost(candidate) & 511) / 128 != bucket)
+        continue;
+      keys.push_back(candidate);
+      ++selected;
+    }
+  }
+  GenerationMap expected;
+  std::vector<V> values;
+  std::vector<S> scores;
+  for (size_t row = 0; row < keys.size(); ++row) {
+    scores.push_back(row + 1);
+    values.insert(values.end(), kDim, static_cast<V>(1001 + row));
+    expected.emplace(keys[row], std::make_pair(scores.back(), values.back()));
+  }
+  insert_or_assign(table, keys, values, scores, true);
+  check_residents(table, expected, 512);
+  for (size_t count : {2, 31, 32, 33}) {
+    SCOPED_TRACE(count);
+    const std::vector<K> updates(keys.begin(), keys.begin() + count);
+    for (size_t round = 0; round < 8; ++round) {
+      const S score = 1000 + count * 8 + round;
+      const V value = static_cast<V>(1000 + score);
+      insert_or_assign(table, updates, std::vector<V>(count * kDim, value),
+                       std::vector<S>(count, score), true);
+      for (K key : updates) expected[key] = std::make_pair(score, value);
+      check_residents(table, expected, 512);
+    }
+  }
+}
+
+TEST(CorrectnessStress, UniqueLargeValueFallbackGenerationPairs) {
+  constexpr size_t dim = 160;
+  const auto keys = collision_keys(33, TableMode::kThroughput);
+  for (bool pure_hbm : {false, true}) {
+    SCOPED_TRACE(pure_hbm);
+    Table table;
+    create_table(table, TableMode::kThroughput, 512, dim, pure_hbm);
+    for (size_t generation = 1; generation <= 2; ++generation) {
+      std::vector<V> values;
+      std::vector<S> scores;
+      for (size_t row = 0; row < keys.size(); ++row) {
+        scores.push_back(generation * 1000 + row);
+        values.insert(values.end(), dim, static_cast<V>(1000 + scores.back()));
+      }
+      insert_or_assign(table, keys, values, scores, true);
+      std::vector<V> found_values;
+      std::vector<S> found_scores;
+      const auto found = find_keys(table, keys, &found_values, &found_scores);
+      EXPECT_EQ(count_found(found), keys.size());
+      EXPECT_EQ(table.size(0), keys.size());
+      EXPECT_EQ(found_scores, scores);
+      EXPECT_EQ(found_values, values);
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Supported, CorrectnessPaths,
+    testing::Values(StressPath{TableMode::kThroughput, true, true, false,
+                               "SingleHbmUnique"},
+                    StressPath{TableMode::kThroughput, true, false, false,
+                               "SingleHbmNonUnique"},
+                    StressPath{TableMode::kThroughput, false, true, false,
+                               "SinglePipelineUnique"},
+                    StressPath{TableMode::kThroughput, false, false, false,
+                               "SinglePipelineNonUnique"},
+                    StressPath{TableMode::kThroughput, false, true, true,
+                               "SingleCpuIoUnique"},
+                    StressPath{TableMode::kThroughput, false, false, true,
+                               "SingleCpuIoNonUnique"},
+                    StressPath{TableMode::kMemory, false, true, false,
+                               "DualPureHbmUnique"}),
+    [](const testing::TestParamInfo<StressPath>& info) {
+      return info.param.name;
+    });
+
+}  // namespace
+
+TEST(CorrectnessStress, PureHbmCompatibleValueWritersPublishWholeRows) {
+  for (size_t dimension : {4U, 16U, 64U, 513U}) {
+    for (bool unique : {false, true}) {
+      for (size_t count :
+           {1U, 15U, 16U, 17U, 31U, 32U, 33U, 127U, 128U, 129U}) {
+        SCOPED_TRACE(dimension);
+        SCOPED_TRACE(unique);
+        SCOPED_TRACE(count);
+        TableOptions options;
+        options.init_capacity = 2048;
+        options.max_capacity = 2048;
+        options.max_hbm_for_vectors = 2048 * dimension * sizeof(V);
+        options.dim = dimension;
+        options.max_bucket_size = 128;
+        options.block_size = count % 2 ? 33 : 65;
+        options.api_lock = true;
+        Table table;
+        table.init(options);
+        std::vector<K> keys(count);
+        std::iota(keys.begin(), keys.end(), 1);
+        std::vector<S> scores(count, 100);
+        std::vector<V> initial(count * dimension);
+        for (size_t row = 0; row < count; ++row) {
+          for (size_t component = 0; component < dimension; ++component) {
+            initial[row * dimension + component] = row * 1024 + component;
+          }
+        }
+        K* device_keys = copy_to_device(keys);
+        S* device_scores = copy_to_device(scores);
+        V* device_values = copy_to_device(initial);
+        table.insert_or_assign(count, device_keys, device_values, device_scores,
+                               0, unique);
+        CUDA_CHECK(cudaStreamSynchronize(0));
+        struct Writer {
+          cudaStream_t stream;
+          size_t count;
+          K* keys;
+          V* values;
+        };
+        std::vector<Writer> writers(2);
+        const size_t middle = count / 2;
+        for (size_t worker = 0; worker < writers.size(); ++worker) {
+          const size_t begin = worker == 0 ? 0 : middle;
+          const size_t end = worker == 0 ? middle + 1 : count;
+          std::vector<K> update_keys(keys.begin() + begin, keys.begin() + end);
+          std::vector<V> values((end - begin) * dimension);
+          for (size_t row = begin; row < end; ++row) {
+            for (size_t component = 0; component < dimension; ++component) {
+              values[(row - begin) * dimension + component] =
+                  (worker + 1) * 100000 + row * 1024 + component;
+            }
+          }
+          auto& writer = writers[worker];
+          CUDA_CHECK(
+              cudaStreamCreateWithFlags(&writer.stream, cudaStreamNonBlocking));
+          writer.count = update_keys.size();
+          writer.keys = copy_to_device(update_keys);
+          writer.values = copy_to_device(values);
+        }
+        bool* device_found = nullptr;
+        CUDA_CHECK(cudaMalloc(&device_found, count * sizeof(bool)));
+        cudaStream_t consumer;
+        CUDA_CHECK(cudaStreamCreateWithFlags(&consumer, cudaStreamNonBlocking));
+        int device = 0;
+        CUDA_CHECK(cudaGetDevice(&device));
+        std::atomic<size_t> ready{0};
+        std::atomic<bool> start{false};
+        std::vector<std::exception_ptr> failures(2);
+        std::vector<std::thread> threads;
+        for (size_t worker = 0; worker < writers.size(); ++worker) {
+          threads.emplace_back([&, worker] {
+            ready.fetch_add(1);
+            while (!start.load()) std::this_thread::yield();
+            try {
+              CUDA_CHECK(cudaSetDevice(device));
+              auto& writer = writers[worker];
+              table.assign_values(writer.count, writer.keys, writer.values,
+                                  writer.stream, unique);
+            } catch (...) {
+              failures[worker] = std::current_exception();
+            }
+          });
+        }
+        while (ready.load() != writers.size()) std::this_thread::yield();
+        start.store(true);
+        for (auto& thread : threads) thread.join();
+        for (auto failure : failures) {
+          if (failure) std::rethrow_exception(failure);
+        }
+        CUDA_CHECK(cudaMemsetAsync(device_found, 0xff, count * sizeof(bool),
+                                   consumer));
+        table.find(count, device_keys, device_values, device_found,
+                   device_scores, consumer);
+        CUDA_CHECK(cudaStreamSynchronize(consumer));
+        std::vector<uint8_t> found(count);
+        CUDA_CHECK(cudaMemcpy(found.data(), device_found, count * sizeof(bool),
+                              cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(initial.data(), device_values,
+                              initial.size() * sizeof(V),
+                              cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(scores.data(), device_scores, count * sizeof(S),
+                              cudaMemcpyDeviceToHost));
+        for (size_t row = 0; row < count; ++row) {
+          EXPECT_EQ(found[row], 1);
+          EXPECT_EQ(scores[row], 100);
+          const V base = initial[row * dimension] - row * 1024;
+          if (row < middle) EXPECT_EQ(base, 100000);
+          if (row > middle) EXPECT_EQ(base, 200000);
+          if (row == middle) EXPECT_TRUE(base == 100000 || base == 200000);
+          for (size_t component = 0; component < dimension; ++component) {
+            EXPECT_EQ(initial[row * dimension + component],
+                      base + row * 1024 + component);
+          }
+        }
+        for (auto& writer : writers) {
+          CUDA_CHECK(cudaStreamSynchronize(writer.stream));
+          CUDA_CHECK(cudaStreamDestroy(writer.stream));
+          CUDA_CHECK(cudaFree(writer.keys));
+          CUDA_CHECK(cudaFree(writer.values));
+        }
+        CUDA_CHECK(cudaStreamDestroy(consumer));
+        CUDA_CHECK(cudaFree(device_keys));
+        CUDA_CHECK(cudaFree(device_scores));
+        CUDA_CHECK(cudaFree(device_values));
+        CUDA_CHECK(cudaFree(device_found));
+      }
     }
   }
 }
@@ -260,4 +827,110 @@ TEST(CorrectnessStress, MemoryModeScoreAdmissionAccounting) {
       << "low-score burst should not be fully admitted near capacity";
   EXPECT_GT(high_accepted, low_accepted)
       << "high-score burst should admit more keys than low-score burst";
+}
+
+TEST(CorrectnessStress, HybridPendingPayloadMatchesFinalMetadata) {
+  constexpr size_t dim = 33;
+  for (bool io_by_cpu : {false, true}) {
+    for (bool equal_scores : {false, true}) {
+      for (size_t count :
+           {size_t{2}, size_t{31}, size_t{32}, size_t{33}, size_t{1025}}) {
+        SCOPED_TRACE(::testing::Message()
+                     << "cpu_io=" << io_by_cpu << " equal=" << equal_scores
+                     << " count=" << count);
+        Table table;
+        create_table(table, TableMode::kThroughput, 512, dim, false, io_by_cpu);
+        std::vector<K> keys(count + 2, K{42});
+        keys.front() = nv::merlin::DEFAULT_EMPTY_KEY;
+        keys.back() = nv::merlin::DEFAULT_EMPTY_KEY;
+        std::vector<V> values(keys.size() * dim);
+        std::vector<S> scores(keys.size());
+        for (size_t index = 0; index < keys.size(); ++index) {
+          scores[index] = UINT64_MAX - (equal_scores ? 0 : index);
+          for (size_t component = 0; component < dim; ++component) {
+            values[index * dim + component] =
+                static_cast<V>(1000 + index * 64 + component);
+          }
+        }
+        insert_or_assign(table, keys, values, scores, false);
+        EXPECT_EQ(table.size(0), size_t{1});
+        std::vector<V> found_values;
+        std::vector<S> found_scores;
+        auto found = find_keys(table, {K{42}}, &found_values, &found_scores);
+        ASSERT_EQ(count_found(found), size_t{1});
+        ASSERT_GE(found_values[0], V{1064});
+        ASSERT_LE(found_values[0], static_cast<V>(1000 + count * 64));
+        const size_t winner = static_cast<size_t>(found_values[0] - 1000) / 64;
+        ASSERT_GE(winner, size_t{1});
+        ASSERT_LE(winner, count);
+        EXPECT_EQ(found_scores[0], scores[winner]);
+        for (size_t component = 0; component < dim; ++component) {
+          EXPECT_EQ(found_values[component], values[winner * dim + component]);
+        }
+      }
+    }
+  }
+}
+
+TEST(CorrectnessStress, HybridPendingPayloadPreservesEveryLfuIncrement) {
+  constexpr size_t count = 33;
+  constexpr size_t dim = 33;
+  using LfuTable = nv::merlin::HashTable<K, V, S, EvictStrategy::kLfu>;
+  for (bool io_by_cpu : {false, true}) {
+    SCOPED_TRACE(::testing::Message() << "cpu_io=" << io_by_cpu);
+    TableOptions options;
+    options.init_capacity = 512;
+    options.max_capacity = 512;
+    options.max_hbm_for_vectors = 0;
+    options.max_bucket_size = 128;
+    options.dim = dim;
+    options.io_by_cpu = io_by_cpu;
+    LfuTable table;
+    table.init(options);
+    std::vector<K> keys(count, K{42});
+    std::vector<S> scores(count, S{1});
+    std::vector<V> values(count * dim);
+    for (size_t index = 0; index < count; ++index) {
+      for (size_t component = 0; component < dim; ++component) {
+        values[index * dim + component] =
+            static_cast<V>(1000 + index * 64 + component);
+      }
+    }
+    K* device_keys = copy_to_device(keys);
+    V* device_values = copy_to_device(values);
+    S* device_scores = copy_to_device(scores);
+    bool* device_found = nullptr;
+    CUDA_CHECK(cudaMalloc(&device_found, sizeof(bool)));
+    for (size_t batch = 0; batch < 2; ++batch) {
+      table.insert_or_assign(count, device_keys, device_values, device_scores,
+                             0, false);
+    }
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaMemset(device_found, 0, sizeof(bool)));
+    table.find(1, device_keys, device_values, device_found, device_scores, 0);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    bool found = false;
+    S found_score = 0;
+    std::vector<V> found_values(dim);
+    CUDA_CHECK(
+        cudaMemcpy(&found, device_found, sizeof(bool), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&found_score, device_scores, sizeof(S),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(found_values.data(), device_values, dim * sizeof(V),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(device_keys));
+    CUDA_CHECK(cudaFree(device_values));
+    CUDA_CHECK(cudaFree(device_scores));
+    CUDA_CHECK(cudaFree(device_found));
+    ASSERT_TRUE(found);
+    EXPECT_EQ(table.size(0), size_t{1});
+    EXPECT_EQ(found_score, S{2 * count});
+    ASSERT_GE(found_values[0], V{1000});
+    ASSERT_LE(found_values[0], static_cast<V>(1000 + (count - 1) * 64));
+    const size_t winner = static_cast<size_t>(found_values[0] - 1000) / 64;
+    ASSERT_LT(winner, count);
+    for (size_t component = 0; component < dim; ++component) {
+      EXPECT_EQ(found_values[component], values[winner * dim + component]);
+    }
+  }
 }

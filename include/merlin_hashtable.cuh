@@ -1135,7 +1135,50 @@ class HashTable : public HashTableBase<K, V, S> {
                              const value_type* values,  // (n, DIM)
                              const score_type* scores,  // (n)
                              cudaStream_t stream, bool unique_key,
-                             bool ignore_evict_strategy) {
+                             bool ignore_evict_strategy,
+                             OccupyResult* outcomes = nullptr) {
+    if (outcomes != nullptr) {
+      MERLIN_CHECK(initialized_,
+                   "[UPSERT_OUTCOMES] Table must be initialized.");
+      MERLIN_CHECK(
+          (std::is_same<key_type, uint64_t>::value &&
+           std::is_same<value_type, float>::value &&
+           std::is_same<score_type, uint64_t>::value),
+          "[UPSERT_OUTCOMES] Requires uint64_t keys/scores and float values.");
+      MERLIN_CHECK(
+          evict_strategy == EvictStrategy::kCustomized &&
+              evict_strategy_ == EvictStrategy::kCustomized &&
+              !ignore_evict_strategy,
+          "[UPSERT_OUTCOMES] Requires the customized policy without override.");
+      MERLIN_CHECK(unique_key && is_fast_mode() &&
+                       options_.max_bucket_size == 128 && options_.dim == 32,
+                   "[UPSERT_OUTCOMES] Requires unique batches, pure HBM, "
+                   "bucket 128 and dim 32.");
+      MERLIN_CHECK(options_.table_mode == TableMode::kThroughput ||
+                       options_.table_mode == TableMode::kMemory,
+                   "[UPSERT_OUTCOMES] Unsupported table mode.");
+      MERLIN_CHECK(n <= std::numeric_limits<uint32_t>::max() - 127,
+                   "[UPSERT_OUTCOMES] Batch exceeds the kernels' padded 32-bit "
+                   "indexing.");
+      MERLIN_CHECK(
+          n == 0 || (keys != nullptr && values != nullptr && scores != nullptr),
+          "[UPSERT_OUTCOMES] Nonempty batches require keys, values and "
+          "scores.");
+#if defined(CUDART_VERSION) && (CUDART_VERSION >= 11030)
+      using OutcomeSelector =
+          KernelSelector_Upsert<key_type, value_type, score_type,
+                                evict_strategy_, ArchTag>;
+      MERLIN_CHECK(
+          OutcomeSelector::callable(
+              unique_key, static_cast<uint32_t>(options_.max_bucket_size),
+              static_cast<uint32_t>(options_.dim)) &&
+              options_.dim * sizeof(value_type) >
+                  OutcomeSelector::ValueConfig::size_tlp_v1,
+          "[UPSERT_OUTCOMES] Selected upsert path is not instrumented.");
+#else
+      MERLIN_CHECK(false, "[UPSERT_OUTCOMES] Requires CUDA 11.3 or newer.");
+#endif
+    }
     if (n == 0) {
       return;
     }
@@ -1167,7 +1210,7 @@ class HashTable : public HashTableBase<K, V, S> {
           /*load_factor=*/0.0f, table_->buckets, table_->buckets_size,
           table_->buckets_num, static_cast<uint32_t>(options_.max_bucket_size),
           static_cast<uint32_t>(options_.dim), keys, values, scores, n,
-          global_epoch_);
+          global_epoch_, outcomes);
       DualSelector::select_kernel(kernelParams, stream);
       CudaCheckError();
       return;
@@ -1191,7 +1234,7 @@ class HashTable : public HashTableBase<K, V, S> {
             table_->buckets_num,
             static_cast<uint32_t>(options_.max_bucket_size),
             static_cast<uint32_t>(options_.dim), keys, values, scores, n,
-            global_epoch_);
+            global_epoch_, outcomes);
         Selector::select_kernel(kernelParams, stream);
       } else {
         using Selector = SelectUpsertKernelWithIO<key_type, value_type,
@@ -1206,8 +1249,8 @@ class HashTable : public HashTableBase<K, V, S> {
       auto sortOp = SortPairOp<uintptr_t, int>();
       auto d_sort_bytes = sortOp.get_storage_bytes(n, stream);
 
-      MultiVector<value_type*, int, value_type*, int, key_type*, uint8_t> mv(
-          n, n, n, n, n, d_sort_bytes);
+      MultiVector<value_type*, int, value_type*, int, key_type*, uint8_t, int>
+          mv(n, n, n, n, n, d_sort_bytes, 1);
       const size_type dev_ws_size = mv.total_size();
       auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};
       auto temp_storage = dev_ws.get<uint8_t*>(0);
@@ -1217,6 +1260,7 @@ class HashTable : public HashTableBase<K, V, S> {
       auto d_src_offset_sorted = get_vector<3>(mv, temp_storage);
       auto keys_ptr = get_vector<4>(mv, temp_storage);
       auto d_sort_storage = get_vector<5>(mv, temp_storage);
+      auto d_successful_count = get_vector<6>(mv, temp_storage);
       sortOp.set_storage(reinterpret_cast<void*>(d_sort_storage));
 
       CUDA_CHECK(cudaMemsetAsync(d_dst, 0, dev_ws_size, stream));
@@ -1247,7 +1291,7 @@ class HashTable : public HashTableBase<K, V, S> {
                       TILE_SIZE><<<grid_size, block_size, 0, stream>>>(
             d_table_, table_->buckets, options_.max_bucket_size,
             table_->buckets_num, options_.dim, keys, d_dst, scores,
-            d_src_offset, global_epoch_, N);
+            d_src_offset, global_epoch_, N, d_successful_count);
       }
 
       sortOp.sort(n, reinterpret_cast<uintptr_t*>(d_dst),
@@ -1280,14 +1324,14 @@ class HashTable : public HashTableBase<K, V, S> {
                                    cudaMemcpyDeviceToHost, stream));
         CUDA_CHECK(cudaStreamSynchronize(stream));
 
-        write_by_cpu<value_type>(h_dst_sorted, h_values, h_src_offset_sorted,
-                                 dim(), n);
+        write_by_cpu<value_type, true>(h_dst_sorted, h_values,
+                                       h_src_offset_sorted, dim(), n);
       } else {
         const size_t block_size = options_.io_block_size;
         const size_t N = n * dim();
         const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
 
-        write_kernel<key_type, value_type, score_type>
+        write_kernel<key_type, value_type, score_type, true>
             <<<grid_size, block_size, 0, stream>>>(
                 values, d_dst_sorted, d_src_offset_sorted, dim(), N);
       }

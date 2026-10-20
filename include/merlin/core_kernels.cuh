@@ -357,8 +357,10 @@ void create_table(Table<K, V, S>** table, BaseAllocator* allocator,
   }
 
   (*table)->capacity = (*table)->buckets_num * (*table)->bucket_max_size;
-  (*table)->max_hbm_for_vectors = max_hbm_for_vectors;
-  (*table)->remaining_hbm_for_vectors = max_hbm_for_vectors;
+  (*table)->max_hbm_for_vectors = dual_bucket_mode
+                                      ? (*table)->capacity * dim * sizeof(V)
+                                      : max_hbm_for_vectors;
+  (*table)->remaining_hbm_for_vectors = (*table)->max_hbm_for_vectors;
   (*table)->primary = primary;
 
   allocator->alloc(MemoryType::Device, (void**)&((*table)->locks),
