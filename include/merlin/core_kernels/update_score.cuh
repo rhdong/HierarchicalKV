@@ -287,9 +287,9 @@ __global__ void pipeline_update_score_kernel(
                             : ((GROUP_SIZE + rank - 1) * 4 + digest_idx);
           sm_possible_pos[groupID][same_buf(i) * RESERVE + group_base] =
               key_pos;
-          __pipeline_memcpy_async(
-              sm_possible_keys[groupID] + same_buf(i) * RESERVE + group_base,
-              key_ptr + key_pos, sizeof(K));
+          sm_possible_keys[groupID][same_buf(i) * RESERVE + group_base] =
+              BUCKET::keys(key_ptr, key_pos)
+                  ->load(cuda::std::memory_order_relaxed);
           group_base += 1;
         } else {
           break;
@@ -308,7 +308,8 @@ __global__ void pipeline_update_score_kernel(
           int key_pos = digest_idx < 4
                             ? (rank * 4 + digest_idx)
                             : ((GROUP_SIZE + rank - 1) * 4 + digest_idx);
-          K possible_key = key_ptr[key_pos];
+          K possible_key = BUCKET::keys(key_ptr, key_pos)
+                               ->load(cuda::std::memory_order_relaxed);
           if (possible_key == target_key) {
             found = true;
             sm_counts[key_idx_block] = 1;
