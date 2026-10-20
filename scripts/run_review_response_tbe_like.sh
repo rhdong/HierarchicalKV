@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Review-response TBE-like baseline runner.
 #
-# Produces CSV artifacts for the faithful TBE-like cache baseline:
+# Produces validated CSV artifacts for a device-only TBE-like simulation:
 #   - 32-way set-associative cache by default
 #   - 128B value rows
-#   - staged lookup/miss/victim/replacement/value-returning timings
+#   - native batch wall timing and asynchronous GPU-stage diagnostics
 #   - LF sweep: 0.25, 0.50, 0.75, 1.00
 #
 # Usage:
@@ -18,7 +18,13 @@ set -euo pipefail
 
 HKV_ROOT="${HKV_ROOT:-$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel 2>/dev/null || echo "$PWD")}"
 SM="${SM:-90}"
-RESULTS="${RESULTS:-$HKV_ROOT/results/review-response-tbe-like}"
+RESULTS="${RESULTS:-$HKV_ROOT/results/review-response-tbe-like/$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+if [[ "$CUDA_VISIBLE_DEVICES" == *,* || "$CUDA_VISIBLE_DEVICES" == "-1" ]]; then
+  echo "This runner requires one visible GPU" >&2
+  exit 1
+fi
 MODE="quick"
 POLICY="lru"
 LFS="0.25,0.50,0.75,1.00"
@@ -153,7 +159,7 @@ else
   JOBS="${JOBS:-8}"
 fi
 
-BUILD_DIR="$HKV_ROOT/build"
+BUILD_DIR="${BUILD_DIR:-$RESULTS/build}"
 RUN_CMD=(
   "$BUILD_DIR/tbe_like_cache_baseline"
   --mode "$MODE"
@@ -165,6 +171,10 @@ RUN_CMD=(
   "${EXTRA_ARGS[@]}"
 )
 
+if [[ -e "$RESULTS/run-info.txt" || -e "$RESULTS/raw/tbe_like_cache_baseline.csv" ]]; then
+  echo "Refusing to overwrite prior artifacts in $RESULTS" >&2
+  exit 1
+fi
 mkdir -p "$RESULTS"/{logs,raw}
 
 {
@@ -188,6 +198,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "cd $HKV_ROOT"
     echo "cmake -Dsm=\"$SM\" -DCMAKE_BUILD_TYPE=Release -S . -B \"$BUILD_DIR\""
     echo "cmake --build \"$BUILD_DIR\" --target tbe_like_cache_baseline -j\"$JOBS\""
+    echo "timeout $TIMEOUT_SECONDS $BUILD_DIR/tbe_like_cache_baseline --self-test"
     printf '%q ' "${RUN_CMD[@]}"
     echo "> \"$RESULTS/raw/tbe_like_cache_baseline.csv\" 2> \"$RESULTS/logs/tbe_like_cache_baseline.log\""
   } | tee -a "$RESULTS/run-info.txt"
@@ -196,8 +207,8 @@ fi
 
 cd "$HKV_ROOT"
 if [ ! -f tests/googletest/CMakeLists.txt ]; then
-  rm -rf tests/googletest
-  git clone --depth 1 https://github.com/google/googletest.git tests/googletest
+  echo "Missing GoogleTest; preserve pinned/dirty dependency and ask coordinator to restore it" >&2
+  exit 1
 fi
 
 cmake -Dsm="$SM" -DCMAKE_BUILD_TYPE=Release -S . -B "$BUILD_DIR" \
@@ -205,9 +216,35 @@ cmake -Dsm="$SM" -DCMAKE_BUILD_TYPE=Release -S . -B "$BUILD_DIR" \
 cmake --build "$BUILD_DIR" --target tbe_like_cache_baseline -j"$JOBS" \
   > "$RESULTS/logs/build-tbe-like.log" 2>&1
 
-"${RUN_CMD[@]}" \
-  > "$RESULTS/raw/tbe_like_cache_baseline.csv" \
+timeout "$TIMEOUT_SECONDS" "$BUILD_DIR/tbe_like_cache_baseline" --self-test \
+  > "$RESULTS/logs/self-test.stdout" 2> "$RESULTS/logs/self-test.log"
+grep -Eq '^SELF_TEST PASS cases=[1-9][0-9]* ' "$RESULTS/logs/self-test.log"
+
+timeout "$TIMEOUT_SECONDS" "${RUN_CMD[@]}" \
+  > "$RESULTS/raw/tbe_like_cache_baseline.csv.partial" \
   2> "$RESULTS/logs/tbe_like_cache_baseline.log"
+python3 - "$RESULTS/raw/tbe_like_cache_baseline.csv.partial" <<'PY'
+import csv
+import math
+import sys
+with open(sys.argv[1], newline="") as handle:
+    rows = list(csv.DictReader(handle))
+assert rows, "No benchmark rows"
+totals = [row for row in rows if row["stage"] == "total_wall"]
+assert totals, "No completed service rows"
+for row in rows:
+    assert row["oracle_status"] == "PASS", "Failed oracle"
+    assert int(row["completed_requests"]) == int(row["batch_size"]) > 0
+    assert int(row["hits"]) + int(row["misses"]) == int(row["completed_requests"])
+    if row["stage"] != "total_wall":
+        assert row["throughput_grequests_s"] == "", "Stage is not completed service"
+for row in totals:
+    seconds = float(row["elapsed_ms"]) / 1000
+    assert math.isfinite(seconds) and seconds > 0
+    expected = int(row["completed_requests"]) / seconds / 1e9
+    assert math.isclose(float(row["throughput_grequests_s"]), expected, rel_tol=1e-5, abs_tol=1e-9)
+PY
+mv "$RESULTS/raw/tbe_like_cache_baseline.csv.partial" "$RESULTS/raw/tbe_like_cache_baseline.csv"
 
 {
   echo "Finished: $(date)"
