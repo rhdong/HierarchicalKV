@@ -436,12 +436,26 @@ TEST(DualBucketTest, ThroughputModeRegression) {
 TEST(DualBucketTest, FirstEvictionLoadFactor) {
   using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kCustomized>;
 
+  const char* phase_log_env = getenv("HKV_FIRST_EVICTION_PHASE_LOG");
+  const bool phase_logging = phase_log_env != nullptr &&
+                             phase_log_env[0] == '1' &&
+                             phase_log_env[1] == '\0';
+  auto log_phase = [phase_logging](const char* phase, size_t batches = 0) {
+    if (phase_logging) {
+      fprintf(stderr, "[HKV_FIRST_EVICTION] phase=%s batches=%zu\n", phase,
+              batches);
+      fflush(stderr);
+    }
+  };
+
   constexpr size_t CAPACITY = 10 * 1024 * 1024;  // ~10M slots
 
   // Run for MEMORY_MODE.
   {
     Table table;
+    log_phase("before_table_init");
     create_memory_mode_table(table, CAPACITY);
+    log_phase("after_table_init");
 
     constexpr size_t BATCH = 128;
     std::vector<K> h_keys(BATCH);
@@ -458,6 +472,8 @@ TEST(DualBucketTest, FirstEvictionLoadFactor) {
     K next_key = 1;
     size_t total_inserted = 0;
     float first_eviction_lf = 0.0f;
+
+    log_phase("before_batches");
 
     // Insert in batches until table is nearly full.
     while (total_inserted < CAPACITY) {
@@ -479,6 +495,13 @@ TEST(DualBucketTest, FirstEvictionLoadFactor) {
       size_t table_size = table.size(0);
       CUDA_CHECK(cudaDeviceSynchronize());
 
+      if (phase_logging &&
+          (total_inserted == BATCH || (total_inserted / BATCH) % 16384 == 0)) {
+        log_phase(total_inserted == BATCH ? "first_batch_completed"
+                                          : "batch_milestone",
+                  total_inserted / BATCH);
+      }
+
       // If table_size < total_inserted, eviction occurred.
       if (table_size < total_inserted && first_eviction_lf == 0.0f) {
         first_eviction_lf =
@@ -487,6 +510,7 @@ TEST(DualBucketTest, FirstEvictionLoadFactor) {
       }
     }
 
+    log_phase("insert_loop_complete", total_inserted / BATCH);
     std::cout << "[MEMORY_MODE] First eviction LF: " << first_eviction_lf
               << " (total_inserted=" << total_inserted << ")" << std::endl;
 
@@ -498,7 +522,9 @@ TEST(DualBucketTest, FirstEvictionLoadFactor) {
     CUDA_CHECK(cudaFree(d_keys));
     CUDA_CHECK(cudaFree(d_values));
     CUDA_CHECK(cudaFree(d_scores));
+    log_phase("body_complete_before_destruction", total_inserted / BATCH);
   }
+  log_phase("after_table_destruction");
 }
 
 // ===================================
