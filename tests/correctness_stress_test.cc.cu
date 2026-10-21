@@ -648,165 +648,169 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 template <int strategy>
-void check_compatible_value_score_completion() {
+void check_compatible_value_score_completion_case(const size_t dimension,
+                                                  const size_t populated,
+                                                  const size_t count) {
   constexpr size_t capacity = 128;
   constexpr K missing_key = 1000000;
+  SCOPED_TRACE(dimension);
+  SCOPED_TRACE(populated);
+  SCOPED_TRACE(count);
+  TableOptions options;
+  options.init_capacity = capacity;
+  options.max_capacity = capacity;
+  options.max_hbm_for_vectors = capacity * dimension * sizeof(V);
+  options.dim = dimension;
+  options.max_bucket_size = capacity;
+  options.table_mode = TableMode::kThroughput;
+  options.api_lock = true;
+  nv::merlin::HashTable<K, V, S, strategy> table;
+  table.init(options);
+  std::vector<K> keys(populated);
+  std::iota(keys.begin(), keys.end(), 1);
+  std::vector<V> expected_values(populated * dimension, -1);
+  std::vector<S> expected_scores(populated, 100);
+  K* device_keys = copy_to_device(keys);
+  V* device_values = copy_to_device(expected_values);
+  S* device_scores = copy_to_device(expected_scores);
+  table.insert_or_assign(populated, device_keys, device_values, device_scores,
+                         0, true);
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  std::vector<K> update_keys(keys.begin(), keys.begin() + count);
+  if (count > 1) update_keys.back() = missing_key;
+  K* device_update_keys = copy_to_device(update_keys);
+  V* device_update_values = nullptr;
+  S* device_update_scores = nullptr;
+  CUDA_CHECK(cudaMalloc(&device_update_values, count * dimension * sizeof(V)));
+  CUDA_CHECK(cudaMalloc(&device_update_scores, count * sizeof(S)));
+  std::vector<K> query_keys = keys;
+  query_keys.push_back(missing_key);
+  K* device_query_keys = copy_to_device(query_keys);
+  V* device_query_values = nullptr;
+  S* device_query_scores = nullptr;
+  bool* device_found = nullptr;
+  CUDA_CHECK(cudaMalloc(&device_query_values,
+                        query_keys.size() * dimension * sizeof(V)));
+  CUDA_CHECK(cudaMalloc(&device_query_scores, query_keys.size() * sizeof(S)));
+  CUDA_CHECK(cudaMalloc(&device_found, query_keys.size() * sizeof(bool)));
+  cudaStream_t value_stream;
+  cudaStream_t score_stream;
+  CUDA_CHECK(cudaStreamCreateWithFlags(&value_stream, cudaStreamNonBlocking));
+  CUDA_CHECK(cudaStreamCreateWithFlags(&score_stream, cudaStreamNonBlocking));
+  int device = 0;
+  CUDA_CHECK(cudaGetDevice(&device));
+  for (size_t round = 0; round < 8; ++round) {
+    SCOPED_TRACE(round);
+    std::vector<V> update_values(count * dimension);
+    std::vector<S> update_scores(count);
+    for (size_t row = 0; row < count; ++row) {
+      update_scores[row] = strategy == EvictStrategy::kLfu
+                               ? round + row + 1
+                               : 1000 + round * count + row;
+      for (size_t component = 0; component < dimension; ++component) {
+        const V value =
+            10000 + round * count * dimension + row * dimension + component;
+        update_values[row * dimension + component] = value;
+        if (update_keys[row] != missing_key) {
+          expected_values[row * dimension + component] = value;
+        }
+      }
+      if (update_keys[row] != missing_key) {
+        if (strategy == EvictStrategy::kLfu) {
+          expected_scores[row] += update_scores[row];
+        } else {
+          expected_scores[row] = update_scores[row];
+        }
+      }
+    }
+    CUDA_CHECK(cudaMemcpy(device_update_values, update_values.data(),
+                          update_values.size() * sizeof(V),
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(device_update_scores, update_scores.data(),
+                          update_scores.size() * sizeof(S),
+                          cudaMemcpyHostToDevice));
+    std::atomic<size_t> ready{0};
+    std::atomic<bool> start{false};
+    std::vector<std::exception_ptr> failures(2);
+    std::vector<std::thread> workers;
+    for (size_t worker = 0; worker < 2; ++worker) {
+      workers.emplace_back([&, worker] {
+        ready.fetch_add(1);
+        while (!start.load()) std::this_thread::yield();
+        try {
+          CUDA_CHECK(cudaSetDevice(device));
+          if (worker == 0) {
+            table.assign_values(count, device_update_keys, device_update_values,
+                                value_stream, true);
+          } else {
+            table.assign_scores(count, device_update_keys, device_update_scores,
+                                score_stream, true);
+          }
+        } catch (...) {
+          failures[worker] = std::current_exception();
+        }
+      });
+    }
+    while (ready.load() != workers.size()) std::this_thread::yield();
+    start.store(true);
+    for (auto& worker : workers) worker.join();
+    for (auto failure : failures) {
+      if (failure) std::rethrow_exception(failure);
+    }
+    CUDA_CHECK(cudaStreamSynchronize(value_stream));
+    CUDA_CHECK(cudaStreamSynchronize(score_stream));
+    CUDA_CHECK(
+        cudaMemset(device_found, 0xff, query_keys.size() * sizeof(bool)));
+    table.find(query_keys.size(), device_query_keys, device_query_values,
+               device_found, device_query_scores, 0);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    std::vector<uint8_t> found(query_keys.size());
+    std::vector<V> actual_values(query_keys.size() * dimension);
+    std::vector<S> actual_scores(query_keys.size());
+    CUDA_CHECK(cudaMemcpy(found.data(), device_found, found.size(),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(actual_values.data(), device_query_values,
+                          actual_values.size() * sizeof(V),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(actual_scores.data(), device_query_scores,
+                          actual_scores.size() * sizeof(S),
+                          cudaMemcpyDeviceToHost));
+    EXPECT_EQ(table.size(0), populated);
+    EXPECT_EQ(found.back(), 0);
+    for (size_t row = 0; row < populated; ++row) {
+      EXPECT_EQ(found[row], 1) << row;
+      EXPECT_EQ(actual_scores[row], expected_scores[row]) << row;
+      for (size_t component = 0; component < dimension; ++component) {
+        EXPECT_EQ(actual_values[row * dimension + component],
+                  expected_values[row * dimension + component])
+            << row << ':' << component;
+      }
+    }
+  }
+  CUDA_CHECK(cudaStreamDestroy(value_stream));
+  CUDA_CHECK(cudaStreamDestroy(score_stream));
+  CUDA_CHECK(cudaFree(device_keys));
+  CUDA_CHECK(cudaFree(device_values));
+  CUDA_CHECK(cudaFree(device_scores));
+  CUDA_CHECK(cudaFree(device_update_keys));
+  CUDA_CHECK(cudaFree(device_update_values));
+  CUDA_CHECK(cudaFree(device_update_scores));
+  CUDA_CHECK(cudaFree(device_query_keys));
+  CUDA_CHECK(cudaFree(device_query_values));
+  CUDA_CHECK(cudaFree(device_query_scores));
+  CUDA_CHECK(cudaFree(device_found));
+}
+
+template <int strategy>
+void check_compatible_value_score_completion() {
   const size_t paths[][2] = {{128, 48}, {128, 112}, {4, 112}, {4, 48}};
   for (const auto& path : paths) {
     const size_t dimension = path[0];
     const size_t populated = path[1];
     for (size_t count : {1U, 17U, 33U}) {
-      SCOPED_TRACE(dimension);
-      SCOPED_TRACE(populated);
-      SCOPED_TRACE(count);
-      TableOptions options;
-      options.init_capacity = capacity;
-      options.max_capacity = capacity;
-      options.max_hbm_for_vectors = capacity * dimension * sizeof(V);
-      options.dim = dimension;
-      options.max_bucket_size = capacity;
-      options.table_mode = TableMode::kThroughput;
-      options.api_lock = true;
-      nv::merlin::HashTable<K, V, S, strategy> table;
-      table.init(options);
-      std::vector<K> keys(populated);
-      std::iota(keys.begin(), keys.end(), 1);
-      std::vector<V> expected_values(populated * dimension, -1);
-      std::vector<S> expected_scores(populated, 100);
-      K* device_keys = copy_to_device(keys);
-      V* device_values = copy_to_device(expected_values);
-      S* device_scores = copy_to_device(expected_scores);
-      table.insert_or_assign(populated, device_keys, device_values,
-                             device_scores, 0, true);
-      CUDA_CHECK(cudaDeviceSynchronize());
-
-      std::vector<K> update_keys(keys.begin(), keys.begin() + count);
-      if (count > 1) update_keys.back() = missing_key;
-      K* device_update_keys = copy_to_device(update_keys);
-      V* device_update_values = nullptr;
-      S* device_update_scores = nullptr;
-      CUDA_CHECK(
-          cudaMalloc(&device_update_values, count * dimension * sizeof(V)));
-      CUDA_CHECK(cudaMalloc(&device_update_scores, count * sizeof(S)));
-      std::vector<K> query_keys = keys;
-      query_keys.push_back(missing_key);
-      K* device_query_keys = copy_to_device(query_keys);
-      V* device_query_values = nullptr;
-      S* device_query_scores = nullptr;
-      bool* device_found = nullptr;
-      CUDA_CHECK(cudaMalloc(&device_query_values,
-                            query_keys.size() * dimension * sizeof(V)));
-      CUDA_CHECK(
-          cudaMalloc(&device_query_scores, query_keys.size() * sizeof(S)));
-      CUDA_CHECK(cudaMalloc(&device_found, query_keys.size() * sizeof(bool)));
-      cudaStream_t value_stream;
-      cudaStream_t score_stream;
-      CUDA_CHECK(
-          cudaStreamCreateWithFlags(&value_stream, cudaStreamNonBlocking));
-      CUDA_CHECK(
-          cudaStreamCreateWithFlags(&score_stream, cudaStreamNonBlocking));
-      int device = 0;
-      CUDA_CHECK(cudaGetDevice(&device));
-      for (size_t round = 0; round < 8; ++round) {
-        SCOPED_TRACE(round);
-        std::vector<V> update_values(count * dimension);
-        std::vector<S> update_scores(count);
-        for (size_t row = 0; row < count; ++row) {
-          update_scores[row] = strategy == EvictStrategy::kLfu
-                                   ? round + row + 1
-                                   : 1000 + round * count + row;
-          for (size_t component = 0; component < dimension; ++component) {
-            const V value =
-                10000 + round * count * dimension + row * dimension + component;
-            update_values[row * dimension + component] = value;
-            if (update_keys[row] != missing_key) {
-              expected_values[row * dimension + component] = value;
-            }
-          }
-          if (update_keys[row] != missing_key) {
-            if (strategy == EvictStrategy::kLfu) {
-              expected_scores[row] += update_scores[row];
-            } else {
-              expected_scores[row] = update_scores[row];
-            }
-          }
-        }
-        CUDA_CHECK(cudaMemcpy(device_update_values, update_values.data(),
-                              update_values.size() * sizeof(V),
-                              cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(device_update_scores, update_scores.data(),
-                              update_scores.size() * sizeof(S),
-                              cudaMemcpyHostToDevice));
-        std::atomic<size_t> ready{0};
-        std::atomic<bool> start{false};
-        std::vector<std::exception_ptr> failures(2);
-        std::vector<std::thread> workers;
-        for (size_t worker = 0; worker < 2; ++worker) {
-          workers.emplace_back([&, worker] {
-            ready.fetch_add(1);
-            while (!start.load()) std::this_thread::yield();
-            try {
-              CUDA_CHECK(cudaSetDevice(device));
-              if (worker == 0) {
-                table.assign_values(count, device_update_keys,
-                                    device_update_values, value_stream, true);
-              } else {
-                table.assign_scores(count, device_update_keys,
-                                    device_update_scores, score_stream, true);
-              }
-            } catch (...) {
-              failures[worker] = std::current_exception();
-            }
-          });
-        }
-        while (ready.load() != workers.size()) std::this_thread::yield();
-        start.store(true);
-        for (auto& worker : workers) worker.join();
-        for (auto failure : failures) {
-          if (failure) std::rethrow_exception(failure);
-        }
-        CUDA_CHECK(cudaStreamSynchronize(value_stream));
-        CUDA_CHECK(cudaStreamSynchronize(score_stream));
-        CUDA_CHECK(
-            cudaMemset(device_found, 0xff, query_keys.size() * sizeof(bool)));
-        table.find(query_keys.size(), device_query_keys, device_query_values,
-                   device_found, device_query_scores, 0);
-        CUDA_CHECK(cudaDeviceSynchronize());
-        std::vector<uint8_t> found(query_keys.size());
-        std::vector<V> actual_values(query_keys.size() * dimension);
-        std::vector<S> actual_scores(query_keys.size());
-        CUDA_CHECK(cudaMemcpy(found.data(), device_found, found.size(),
-                              cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(actual_values.data(), device_query_values,
-                              actual_values.size() * sizeof(V),
-                              cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(actual_scores.data(), device_query_scores,
-                              actual_scores.size() * sizeof(S),
-                              cudaMemcpyDeviceToHost));
-        EXPECT_EQ(table.size(0), populated);
-        EXPECT_EQ(found.back(), 0);
-        for (size_t row = 0; row < populated; ++row) {
-          EXPECT_EQ(found[row], 1) << row;
-          EXPECT_EQ(actual_scores[row], expected_scores[row]) << row;
-          for (size_t component = 0; component < dimension; ++component) {
-            EXPECT_EQ(actual_values[row * dimension + component],
-                      expected_values[row * dimension + component])
-                << row << ':' << component;
-          }
-        }
-      }
-      CUDA_CHECK(cudaStreamDestroy(value_stream));
-      CUDA_CHECK(cudaStreamDestroy(score_stream));
-      CUDA_CHECK(cudaFree(device_keys));
-      CUDA_CHECK(cudaFree(device_values));
-      CUDA_CHECK(cudaFree(device_scores));
-      CUDA_CHECK(cudaFree(device_update_keys));
-      CUDA_CHECK(cudaFree(device_update_values));
-      CUDA_CHECK(cudaFree(device_update_scores));
-      CUDA_CHECK(cudaFree(device_query_keys));
-      CUDA_CHECK(cudaFree(device_query_values));
-      CUDA_CHECK(cudaFree(device_query_scores));
-      CUDA_CHECK(cudaFree(device_found));
+      check_compatible_value_score_completion_case<strategy>(dimension,
+                                                             populated, count);
     }
   }
 }
@@ -816,6 +820,146 @@ void check_compatible_value_score_completion() {
 TEST(CorrectnessStress, CompatibleValueScoreWritersCompleteBothEffects) {
   check_compatible_value_score_completion<EvictStrategy::kCustomized>();
 }
+
+#if defined(HKV_ENABLE_P1_PARTITION_TESTS) && HKV_ENABLE_P1_PARTITION_TESTS
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim128_Pop48_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      128, 48, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim128_Pop48_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      128, 48, 17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim128_Pop48_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      128, 48, 33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim128_Pop112_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      128, 112, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim128_Pop112_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      128, 112, 17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim128_Pop112_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      128, 112, 33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim4_Pop112_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      4, 112, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim4_Pop112_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      4, 112, 17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim4_Pop112_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      4, 112, 33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim4_Pop48_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      4, 48, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim4_Pop48_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      4, 48, 17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersCompleteBothEffects_Dim4_Pop48_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kCustomized>(
+      4, 48, 33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim128_Pop48_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(128, 48, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim128_Pop48_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(128, 48,
+                                                                    17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim128_Pop48_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(128, 48,
+                                                                    33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim128_Pop112_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(128, 112,
+                                                                    1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim128_Pop112_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(128, 112,
+                                                                    17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim128_Pop112_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(128, 112,
+                                                                    33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim4_Pop112_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(4, 112, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim4_Pop112_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(4, 112, 17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim4_Pop112_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(4, 112, 33);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim4_Pop48_Count1) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(4, 48, 1);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim4_Pop48_Count17) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(4, 48, 17);
+}
+
+TEST(CorrectnessStress,
+     CompatibleValueScoreWritersApplyLfuExactlyOnce_Dim4_Pop48_Count33) {
+  check_compatible_value_score_completion_case<EvictStrategy::kLfu>(4, 48, 33);
+}
+
+#endif
 
 TEST(CorrectnessStress, CompatibleValueScoreWritersApplyLfuExactlyOnce) {
   check_compatible_value_score_completion<EvictStrategy::kLfu>();
