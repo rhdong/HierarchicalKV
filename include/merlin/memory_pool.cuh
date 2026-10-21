@@ -382,6 +382,18 @@ class MemoryPool final {
     return pending_.size();
   }
 
+  template <class Visitor>
+  void visit_host_allocations(Visitor&& visitor) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    visitor(stock_.data(), stock_.capacity() * sizeof(alloc_type*), "stock");
+    visitor(ready_events_.data(),
+            ready_events_.capacity() * sizeof(cudaEvent_t), "ready_events");
+    visitor(pending_.data(),
+            pending_.capacity() *
+                sizeof(std::tuple<alloc_type*, size_t, cudaEvent_t>),
+            "pending");
+  }
+
   void await_pending(cudaStream_t stream = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
     while (!pending_.empty()) {

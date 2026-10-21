@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
 #include <type_traits>
 #include "merlin/allocator.cuh"
 #include "merlin/array_kernels.cuh"
@@ -940,6 +941,27 @@ class HashTable : public HashTableBase<K, V, S> {
     static_assert(std::is_same<score_type, uint64_t>::value,
                   "The key_type must be uint64_t.");
   };
+
+  template <class Visitor>
+  void visit_host_allocations(Visitor&& visitor) const {
+    if (dev_mem_pool_) {
+      visitor(dev_mem_pool_.get(), sizeof(DeviceMemoryPool),
+              "device_pool_object");
+      dev_mem_pool_->visit_host_allocations(
+          [&](const void* pointer, size_t bytes, const char* origin) {
+            const auto label = std::string("device_pool.") + origin;
+            visitor(pointer, bytes, label.c_str());
+          });
+    }
+    if (host_mem_pool_) {
+      visitor(host_mem_pool_.get(), sizeof(HostMemoryPool), "host_pool_object");
+      host_mem_pool_->visit_host_allocations(
+          [&](const void* pointer, size_t bytes, const char* origin) {
+            const auto label = std::string("host_pool.") + origin;
+            visitor(pointer, bytes, label.c_str());
+          });
+    }
+  }
 
   /**
    * @brief Frees the resources used by the hash table and destroys the hash
