@@ -3415,6 +3415,7 @@ void test_duplicated_keys(size_t max_hbm_for_vectors, size_t key_start = 0) {
   CUDA_CHECK(cudaMallocHost(&h_found, KEY_NUM * sizeof(bool)));
 
   CUDA_CHECK(cudaMemset(h_keys, 1, KEY_NUM * sizeof(K)));
+  std::fill_n(h_scores, KEY_NUM, S{1});
   CUDA_CHECK(cudaMemset(h_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
 
   K* d_keys;
