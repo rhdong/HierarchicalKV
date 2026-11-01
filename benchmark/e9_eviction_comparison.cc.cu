@@ -23,9 +23,6 @@
  * Progress (stderr): reported every ~10% of workload.
  */
 
-#include <thrust/device_vector.h>
-#include <thrust/sequence.h>
-#include <thrust/sort.h>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -37,6 +34,10 @@
 #include "benchmark_util.cuh"
 #include "merlin_hashtable.cuh"
 
+#include <thrust/device_vector.h>
+#include <thrust/sequence.h>
+#include <thrust/sort.h>
+
 using K = uint64_t;
 using V = float;
 using S = uint64_t;
@@ -47,13 +48,12 @@ using namespace benchmark;
 static constexpr size_t DIM = 32;
 static constexpr size_t INIT_CAPACITY = 128UL * 1024 * 1024;  // 128M slots
 static constexpr size_t HBM_GB = 16;
-static constexpr size_t BATCH_SIZE = 1024 * 1024UL;       // 1M keys per batch
+static constexpr size_t BATCH_SIZE = 1024 * 1024UL;  // 1M keys per batch
 static constexpr size_t TOTAL_OPS = 5UL * INIT_CAPACITY;  // 5x capacity
 static constexpr double ZIPF_ALPHA = 0.99;
 static constexpr uint64_t KEY_RANGE = 10UL * INIT_CAPACITY;
 
-/* ─── Zipfian Generator (YCSB-style, copied from score_strategy_benchmark) ───
- */
+/* ─── Zipfian Generator (YCSB-style, copied from score_strategy_benchmark) ─── */
 
 class ZipfianGenerator {
  public:
@@ -62,7 +62,8 @@ class ZipfianGenerator {
     zeta_n_ = zetaApprox(n_, theta_);
     zeta_2_ = zetaApprox(2, theta_);
     alpha_ = 1.0 / (1.0 - theta_);
-    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) / (1.0 - zeta_2_ / zeta_n_);
+    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) /
+           (1.0 - zeta_2_ / zeta_n_);
   }
 
   uint64_t next() {
@@ -169,7 +170,7 @@ void benchmark_hkv_builtin_eviction(cudaStream_t stream) {
     CUDA_CHECK(
         cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += cur;
@@ -209,7 +210,7 @@ void benchmark_hkv_builtin_eviction(cudaStream_t stream) {
     CUDA_CHECK(
         cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
 
     float elapsed_ms = 0.0f;
     CUDA_CHECK(cudaEventRecord(ev_start, stream));
@@ -246,11 +247,12 @@ void benchmark_hkv_builtin_eviction(cudaStream_t stream) {
             << std::setprecision(3) << stats.p50 << "," << stats.p95 << ","
             << stats.p99 << std::endl;
 
-  std::cerr << "[hkv_builtin] Done: wall=" << std::fixed << std::setprecision(3)
-            << wall_time_s << "s throughput=" << std::setprecision(6)
-            << throughput_bkvs << " B-KV/s P50=" << std::setprecision(3)
-            << stats.p50 << "ms P95=" << stats.p95 << "ms P99=" << stats.p99
-            << "ms" << std::endl;
+  std::cerr << "[hkv_builtin] Done: wall=" << std::fixed
+            << std::setprecision(3) << wall_time_s
+            << "s throughput=" << std::setprecision(6) << throughput_bkvs
+            << " B-KV/s P50=" << std::setprecision(3) << stats.p50
+            << "ms P95=" << stats.p95 << "ms P99=" << stats.p99 << "ms"
+            << std::endl;
 
   CUDA_CHECK(cudaEventDestroy(ev_start));
   CUDA_CHECK(cudaEventDestroy(ev_stop));
@@ -321,7 +323,8 @@ void benchmark_external_eviction(cudaStream_t stream) {
   V* d_export_values;
   S* d_export_scores;
   CUDA_CHECK(cudaMalloc(&d_export_keys, INIT_CAPACITY * sizeof(K)));
-  CUDA_CHECK(cudaMalloc(&d_export_values, INIT_CAPACITY * sizeof(V) * DIM));
+  CUDA_CHECK(
+      cudaMalloc(&d_export_values, INIT_CAPACITY * sizeof(V) * DIM));
   CUDA_CHECK(cudaMalloc(&d_export_scores, INIT_CAPACITY * sizeof(S)));
 
   /* Pre-populate to ~90% capacity with sequential keys, score = key */
@@ -337,7 +340,7 @@ void benchmark_external_eviction(cudaStream_t stream) {
     CUDA_CHECK(
         cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += cur;
@@ -396,10 +399,10 @@ void benchmark_external_eviction(cudaStream_t stream) {
       // Export in chunks using export_batch
       while (offset < table->capacity()) {
         size_t chunk = std::min(export_batch_size, table->capacity() - offset);
-        size_t got =
-            table->export_batch(chunk, offset, d_export_keys + exported,
-                                d_export_values + exported * DIM,
-                                d_export_scores + exported, stream);
+        size_t got = table->export_batch(
+            chunk, offset, d_export_keys + exported,
+            d_export_values + exported * DIM, d_export_scores + exported,
+            stream);
         CUDA_CHECK(cudaStreamSynchronize(stream));
         exported += got;
         offset += chunk;
@@ -433,7 +436,7 @@ void benchmark_external_eviction(cudaStream_t stream) {
       CUDA_CHECK(
           cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
       CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
       table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);
 
       CUDA_CHECK(cudaEventRecord(ev_stop, stream));
@@ -441,8 +444,8 @@ void benchmark_external_eviction(cudaStream_t stream) {
       CUDA_CHECK(cudaEventElapsedTime(&batch_time_ms, ev_start, ev_stop));
 
       sweep_count++;
-      std::cerr << "  [external_sweep] Sweep #" << sweep_count << " at batch "
-                << (b + 1) << ": exported=" << exported
+      std::cerr << "  [external_sweep] Sweep #" << sweep_count
+                << " at batch " << (b + 1) << ": exported=" << exported
                 << " erased=" << to_erase << " sweep_time=" << std::fixed
                 << std::setprecision(1) << batch_time_ms << "ms" << std::endl;
     } else {
@@ -454,7 +457,7 @@ void benchmark_external_eviction(cudaStream_t stream) {
       CUDA_CHECK(
           cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
       CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
 
       CUDA_CHECK(cudaEventRecord(ev_start, stream));
       table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);

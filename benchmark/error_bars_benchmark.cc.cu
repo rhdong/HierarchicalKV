@@ -35,7 +35,7 @@ struct Config {
   size_t hbm_gb;
 };
 
-// Reuse test_one_api logic from the main benchmark but simplified.
+// Re-use test_one_api logic from the main benchmark but simplified.
 float measure_api(size_t dim, size_t init_capacity, size_t hbm_gb,
                   API_Select api, cudaStream_t stream) {
   HashTableOptions options;
@@ -84,8 +84,8 @@ float measure_api(size_t dim, size_t init_capacity, size_t hbm_gb,
     create_continuous_keys<K, S>(h_keys, h_scores, cur, start);
     CUDA_CHECK(
         cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(d_scores, h_scores, cur * sizeof(S), cudaMemcpyHostToDevice));
     table->find_or_insert(cur, d_keys, d_vectors_ptr, d_found, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += cur;
@@ -95,12 +95,13 @@ float measure_api(size_t dim, size_t init_capacity, size_t hbm_gb,
   float real_lf = table->load_factor(stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   while (LOAD_FACTOR - real_lf > EPSILON) {
-    auto append = static_cast<int64_t>((LOAD_FACTOR - real_lf) * init_capacity);
+    auto append =
+        static_cast<int64_t>((LOAD_FACTOR - real_lf) * init_capacity);
     if (append <= 0) break;
     append = std::min(static_cast<int64_t>(BATCH_SIZE), append);
     create_continuous_keys<K, S>(h_keys, h_scores, append, start);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, append * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, append * sizeof(K),
+                          cudaMemcpyHostToDevice));
     table->insert_or_assign(append, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += append;
@@ -112,9 +113,9 @@ float measure_api(size_t dim, size_t init_capacity, size_t hbm_gb,
   create_keys_for_hitrate<K, S>(h_keys, h_scores, BATCH_SIZE, 0.6f,
                                 Hit_Mode::last_insert, start, true);
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_scores, h_scores, BATCH_SIZE * sizeof(S),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
 
   // Warmup (3 iterations)
   for (int w = 0; w < 3; w++) {
@@ -126,8 +127,7 @@ float measure_api(size_t dim, size_t init_capacity, size_t hbm_gb,
       case API_Select::find_ptr: {
         benchmark::array2ptr(d_vectors_ptr, d_vectors, dim, BATCH_SIZE, stream);
         CUDA_CHECK(cudaStreamSynchronize(stream));
-        table->find(BATCH_SIZE, d_keys, d_vectors_ptr, d_found, nullptr,
-                    stream);
+        table->find(BATCH_SIZE, d_keys, d_vectors_ptr, d_found, nullptr, stream);
         break;
       }
       case API_Select::insert_or_assign:
@@ -135,8 +135,7 @@ float measure_api(size_t dim, size_t init_capacity, size_t hbm_gb,
         break;
       case API_Select::insert_and_evict:
         table->insert_and_evict(BATCH_SIZE, d_keys, d_vectors, nullptr,
-                                d_evict_keys, d_def_val, d_evict_scores,
-                                stream);
+                                d_evict_keys, d_def_val, d_evict_scores, stream);
         break;
       case API_Select::assign:
         table->assign(BATCH_SIZE, d_keys, d_def_val, nullptr, stream);
@@ -250,9 +249,8 @@ int main() {
     for (auto& cfg : configs) {
       for (auto& ai : apis) {
         for (int run = 0; run < NUM_RUNS; run++) {
-          std::cerr << "  " << cfg.name << " " << ai.name
-                    << " run=" << (run + 1) << "/" << NUM_RUNS << " ..."
-                    << std::flush;
+          std::cerr << "  " << cfg.name << " " << ai.name << " run="
+                    << (run + 1) << "/" << NUM_RUNS << " ..." << std::flush;
 
           cudaStream_t stream;
           CUDA_CHECK(cudaStreamCreate(&stream));

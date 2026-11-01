@@ -18,19 +18,19 @@
  */
 
 #include <cuda_runtime.h>
-#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
 #include <vector>
+#include <algorithm>
 #include "merlin_hashtable.cuh"
 
 using K = uint64_t;
 using V = float;
 using S = uint64_t;
-using Table =
-    nv::merlin::HashTable<K, V, S, nv::merlin::EvictStrategy::kCustomized>;
+using Table = nv::merlin::HashTable<K, V, S,
+                                     nv::merlin::EvictStrategy::kCustomized>;
 using TableOptions = nv::merlin::HashTableOptions;
 
 constexpr uint64_t DIM = 8;
@@ -45,7 +45,8 @@ constexpr S LOW_SCORE = 1;
 // Very high score to force eviction (bypass admission)
 constexpr S VERY_HIGH_SCORE = 999999999ULL;
 
-void fill_table(Table* table, uint64_t n, K* d_keys, V* d_values, S* d_scores,
+void fill_table(Table* table, uint64_t n,
+                K* d_keys, V* d_values, S* d_scores,
                 cudaStream_t stream) {
   std::vector<K> h_keys(BATCH_SIZE);
   std::vector<V> h_values(BATCH_SIZE * DIM);
@@ -70,16 +71,17 @@ void fill_table(Table* table, uint64_t n, K* d_keys, V* d_values, S* d_scores,
     cudaStreamSynchronize(stream);
 
     // Use ignore_evict_strategy=true during fill to ensure all go in
-    table->insert_or_assign(batch, d_keys, d_values, d_scores, stream, true,
-                            true);
+    table->insert_or_assign(batch, d_keys, d_values, d_scores,
+                            stream, true, true);
     cudaStreamSynchronize(stream);
     inserted += batch;
   }
 }
 
 // Insert burst of random new keys with given score
-void insert_burst(Table* table, uint64_t n, S score, K* d_keys, V* d_values,
-                  S* d_scores, cudaStream_t stream) {
+void insert_burst(Table* table, uint64_t n, S score,
+                  K* d_keys, V* d_values, S* d_scores,
+                  cudaStream_t stream) {
   std::vector<K> h_keys(BATCH_SIZE);
   std::vector<V> h_values(BATCH_SIZE * DIM);
   std::vector<S> h_scores(BATCH_SIZE);
@@ -106,16 +108,18 @@ void insert_burst(Table* table, uint64_t n, S score, K* d_keys, V* d_values,
 
     // ignore_evict_strategy=false → admission control active
     // (reject if incoming score < bucket minimum)
-    table->insert_or_assign(batch, d_keys, d_values, d_scores, stream, true,
-                            false);
+    table->insert_or_assign(batch, d_keys, d_values, d_scores,
+                            stream, true, false);
     cudaStreamSynchronize(stream);
     sent += batch;
   }
 }
 
 // Look up original keys and count hits
-double measure_hit_rate(Table* table, uint64_t n, K* d_keys, V* d_values,
-                        S* d_scores, bool* d_founds, cudaStream_t stream) {
+double measure_hit_rate(Table* table, uint64_t n,
+                        K* d_keys, V* d_values, S* d_scores,
+                        bool* d_founds,
+                        cudaStream_t stream) {
   std::vector<K> h_keys(BATCH_SIZE);
   bool* h_founds = new bool[BATCH_SIZE];
 
@@ -145,8 +149,9 @@ double measure_hit_rate(Table* table, uint64_t n, K* d_keys, V* d_values,
   return static_cast<double>(total_found) / static_cast<double>(n) * 100.0;
 }
 
-void run_experiment(const char* label, S burst_score, K* d_keys, V* d_values,
-                    S* d_scores, bool* d_founds, cudaStream_t stream) {
+void run_experiment(const char* label, S burst_score,
+                    K* d_keys, V* d_values, S* d_scores,
+                    bool* d_founds, cudaStream_t stream) {
   printf("--- %s (burst score = %lu) ---\n", label, burst_score);
 
   TableOptions opt;
@@ -168,24 +173,26 @@ void run_experiment(const char* label, S burst_score, K* d_keys, V* d_values,
   printf("  Table size after fill: %lu (LF=%.4f)\n", size_after_fill, lf_fill);
 
   // Step 2: Hit rate before burst (baseline)
-  double hit_rate_before = measure_hit_rate(
-      table.get(), INIT_CAPACITY, d_keys, d_values, d_scores, d_founds, stream);
+  double hit_rate_before = measure_hit_rate(table.get(), INIT_CAPACITY,
+                                             d_keys, d_values, d_scores,
+                                             d_founds, stream);
   printf("  Hit rate before burst: %.2f%%\n", hit_rate_before);
 
   // Step 3: Adversarial burst
   uint64_t burst_count = INIT_CAPACITY / 4;  // 25% of capacity
   printf("  Step 2: Inserting %luM random keys (score=%lu)...\n",
          burst_count / (1024 * 1024), burst_score);
-  insert_burst(table.get(), burst_count, burst_score, d_keys, d_values,
-               d_scores, stream);
+  insert_burst(table.get(), burst_count, burst_score,
+               d_keys, d_values, d_scores, stream);
   uint64_t size_after_burst = table->size(stream);
-  printf(
-      "  Table size after burst: %lu (delta=%ld)\n", size_after_burst,
-      static_cast<long>(size_after_burst) - static_cast<long>(size_after_fill));
+  printf("  Table size after burst: %lu (delta=%ld)\n",
+         size_after_burst,
+         static_cast<long>(size_after_burst) - static_cast<long>(size_after_fill));
 
   // Step 4: Hit rate after burst
-  double hit_rate_after = measure_hit_rate(
-      table.get(), INIT_CAPACITY, d_keys, d_values, d_scores, d_founds, stream);
+  double hit_rate_after = measure_hit_rate(table.get(), INIT_CAPACITY,
+                                            d_keys, d_values, d_scores,
+                                            d_founds, stream);
   printf("  Hit rate after burst: %.2f%%\n", hit_rate_after);
   printf("  Hit rate delta: %+.2f pp\n\n", hit_rate_after - hit_rate_before);
 }
@@ -196,8 +203,8 @@ int main() {
   cudaDeviceProp prop;
   cudaGetDeviceProperties(&prop, 0);
   printf("%s\n", prop.name);
-  printf("Capacity: %luM, DIM=%lu, Bucket=%lu\n", INIT_CAPACITY / (1024 * 1024),
-         DIM, BUCKET_SIZE);
+  printf("Capacity: %luM, DIM=%lu, Bucket=%lu\n",
+         INIT_CAPACITY / (1024 * 1024), DIM, BUCKET_SIZE);
   printf("Original keys: score = %lu + key_idx\n", HIGH_SCORE_BASE);
   printf("Burst size: %luM (25%% of capacity)\n\n",
          (INIT_CAPACITY / 4) / (1024 * 1024));
@@ -221,7 +228,8 @@ int main() {
 
   // Run B: High-score burst (admission ACCEPTS, evicts originals)
   run_experiment("Run B: High-score burst (no admission, evicts originals)",
-                 VERY_HIGH_SCORE, d_keys, d_values, d_scores, d_founds, stream);
+                 VERY_HIGH_SCORE,
+                 d_keys, d_values, d_scores, d_founds, stream);
 
   printf("=== Conclusion ===\n");
   printf("Compare Run A vs Run B hit rates to quantify admission control's\n");

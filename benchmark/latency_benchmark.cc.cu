@@ -65,8 +65,8 @@ void pre_populate(std::shared_ptr<HKVTable>& table, float load_factor,
     create_continuous_keys<K, S>(h_keys, h_scores, cur, start);
     CUDA_CHECK(
         cudaMemcpy(d_keys, h_keys, cur * sizeof(K), cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(d_scores, h_scores, cur * sizeof(S), cudaMemcpyHostToDevice));
     table->find_or_insert(cur, d_keys, d_vptrs, d_found, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += cur;
@@ -76,12 +76,13 @@ void pre_populate(std::shared_ptr<HKVTable>& table, float load_factor,
   float real_lf = table->load_factor(stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   while (load_factor - real_lf > EPSILON) {
-    auto append = static_cast<int64_t>((load_factor - real_lf) * INIT_CAPACITY);
+    auto append =
+        static_cast<int64_t>((load_factor - real_lf) * INIT_CAPACITY);
     if (append <= 0) break;
     append = std::min(static_cast<int64_t>(fill_batch), append);
     create_continuous_keys<K, S>(h_keys, h_scores, append, start);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, append * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, append * sizeof(K),
+                          cudaMemcpyHostToDevice));
     table->insert_or_assign(append, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += append;
@@ -139,7 +140,7 @@ void run_latency_test(std::shared_ptr<HKVTable>& table, API_Select api,
       create_continuous_keys<K, S>(h_keys, h_scores, BATCH_SIZE, base);
     }
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
   };
 
   // Warmup
@@ -206,10 +207,10 @@ void run_latency_test(std::shared_ptr<HKVTable>& table, API_Select api,
   float p95 = latencies[static_cast<int>(n * 0.95)];
   float p99 = latencies[static_cast<int>(n * 0.99)];
   float p999 = latencies[std::min(static_cast<int>(n * 0.999), n - 1)];
-  std::cerr << "  " << api_name << " LF=" << std::fixed << std::setprecision(2)
-            << load_factor << ": P50=" << std::setprecision(3) << p50
-            << "ms P95=" << p95 << "ms P99=" << p99 << "ms P99.9=" << p999
-            << "ms" << std::endl;
+  std::cerr << "  " << api_name << " LF=" << std::fixed
+            << std::setprecision(2) << load_factor << ": P50="
+            << std::setprecision(3) << p50 << "ms P95=" << p95
+            << "ms P99=" << p99 << "ms P99.9=" << p999 << "ms" << std::endl;
 
   CUDA_CHECK(cudaEventDestroy(ev_start));
   CUDA_CHECK(cudaEventDestroy(ev_stop));

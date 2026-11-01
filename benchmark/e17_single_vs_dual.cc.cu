@@ -39,7 +39,7 @@ using namespace benchmark;
 
 static constexpr size_t DIM = 32;
 static constexpr size_t CAPACITY = 128UL * 1024 * 1024;  // 128M
-static constexpr size_t BATCH_SIZE = 1024 * 1024UL;      // 1M
+static constexpr size_t BATCH_SIZE = 1024 * 1024UL;       // 1M
 static constexpr size_t BUCKET_SIZE = 128;
 
 /* ================================================================
@@ -53,7 +53,8 @@ class ZipfianGenerator {
     zeta_n_ = zetaApprox(n_, theta_);
     zeta_2_ = zetaApprox(2, theta_);
     alpha_ = 1.0 / (1.0 - theta_);
-    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) / (1.0 - zeta_2_ / zeta_n_);
+    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) /
+           (1.0 - zeta_2_ / zeta_n_);
   }
 
   uint64_t next() {
@@ -131,8 +132,8 @@ struct BenchBuffers {
  * ================================================================ */
 
 struct ModeConfig {
-  const char* name;      // "single" or "dual"
-  TableMode table_mode;  // kThroughput or kMemory
+  const char* name;       // "single" or "dual"
+  TableMode table_mode;   // kThroughput or kMemory
 };
 
 static const ModeConfig MODES[] = {
@@ -175,11 +176,12 @@ void fill_sequential(HKVTable& table, size_t target_count, BenchBuffers& buf,
       buf.h_scores[i] = inserted + i;  // score = key (ignored under kLru)
     }
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     // kLru mode: pass nullptr for scores (auto-generates LRU timestamps)
-    table.insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr, stream);
+    table.insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
+                           stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     inserted += cur;
   }
@@ -190,9 +192,9 @@ void fill_sequential(HKVTable& table, size_t target_count, BenchBuffers& buf,
  * ================================================================ */
 
 void part1_first_eviction_lf(const ModeConfig& mode, BenchBuffers& buf,
-                             cudaStream_t stream) {
-  std::cerr << "[Part1] mode=" << mode.name << " first-eviction LF..."
-            << std::flush;
+                              cudaStream_t stream) {
+  std::cerr << "[Part1] mode=" << mode.name
+            << " first-eviction LF..." << std::flush;
 
   auto table = create_table(mode.table_mode);
 
@@ -208,10 +210,11 @@ void part1_first_eviction_lf(const ModeConfig& mode, BenchBuffers& buf,
       buf.h_scores[i] = total_inserted + i;
     }
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr, stream);
+                           cudaMemcpyHostToDevice));
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
+                            stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     total_inserted += cur;
 
@@ -252,7 +255,8 @@ void part1_first_eviction_lf(const ModeConfig& mode, BenchBuffers& buf,
 
 void part2_hit_ratio(const ModeConfig& mode, BenchBuffers& buf,
                      cudaStream_t stream) {
-  std::cerr << "[Part2] mode=" << mode.name << " hit ratio..." << std::flush;
+  std::cerr << "[Part2] mode=" << mode.name
+            << " hit ratio..." << std::flush;
 
   auto table = create_table(mode.table_mode);
 
@@ -279,14 +283,14 @@ void part2_hit_ratio(const ModeConfig& mode, BenchBuffers& buf,
   while (inserted < steady_state_count) {
     size_t cur = std::min(BATCH_SIZE, steady_state_count - inserted);
     zipf_insert.fill(buf.h_keys, cur);
-    // LRU-style: score = global counter (most recently touched -> highest
-    // score)
+    // LRU-style: score = global counter (most recently touched -> highest score)
     for (size_t i = 0; i < cur; i++) buf.h_scores[i] = global_score++;
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr, stream);
+                           cudaMemcpyHostToDevice));
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
+                            stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     inserted += cur;
   }
@@ -300,12 +304,12 @@ void part2_hit_ratio(const ModeConfig& mode, BenchBuffers& buf,
   for (int r = 0; r < 5; r++) {
     zipf_find.fill(buf.h_keys, BATCH_SIZE);
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, BATCH_SIZE * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table->find(BATCH_SIZE, buf.d_keys, buf.d_vectors, buf.d_found, nullptr,
                 stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CUDA_CHECK(cudaMemcpy(buf.h_found, buf.d_found, BATCH_SIZE * sizeof(bool),
-                          cudaMemcpyDeviceToHost));
+                           cudaMemcpyDeviceToHost));
     for (size_t j = 0; j < BATCH_SIZE; j++) {
       if (buf.h_found[j]) total_found++;
     }
@@ -318,8 +322,8 @@ void part2_hit_ratio(const ModeConfig& mode, BenchBuffers& buf,
   std::cerr << " hit=" << std::fixed << std::setprecision(4) << hit_ratio
             << std::endl;
 
-  std::cout << mode.name << ",hit_ratio," << BUCKET_SIZE << "," << std::fixed
-            << std::setprecision(4) << hit_ratio << std::endl;
+  std::cout << mode.name << ",hit_ratio," << BUCKET_SIZE << ","
+            << std::fixed << std::setprecision(4) << hit_ratio << std::endl;
 }
 
 /* ================================================================
@@ -341,8 +345,9 @@ void part3_throughput(const ModeConfig& mode, BenchBuffers& buf,
     // Clamp to capacity
     if (fill_count > CAPACITY) fill_count = CAPACITY;
 
-    std::cerr << "[Part3] mode=" << mode.name << " LF=" << std::fixed
-              << std::setprecision(2) << target_lf << "..." << std::flush;
+    std::cerr << "[Part3] mode=" << mode.name
+              << " LF=" << std::fixed << std::setprecision(2) << target_lf
+              << "..." << std::flush;
 
     for (int run = 0; run < TOTAL_RUNS; run++) {
       // Create fresh table for each run
@@ -353,34 +358,32 @@ void part3_throughput(const ModeConfig& mode, BenchBuffers& buf,
         fill_sequential(*table, fill_count, buf, stream);
       }
 
-      // Prepare insert batch: keys in the range [fill_count,
-      // fill_count+BATCH_SIZE) These keys do NOT already exist, so they insert
-      // (and may evict at high LF)
+      // Prepare insert batch: keys in the range [fill_count, fill_count+BATCH_SIZE)
+      // These keys do NOT already exist, so they insert (and may evict at high LF)
       for (size_t i = 0; i < BATCH_SIZE; i++) {
         buf.h_keys[i] = fill_count + i;
         buf.h_scores[i] = fill_count + i;
       }
       CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, BATCH_SIZE * sizeof(K),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
       CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, BATCH_SIZE * sizeof(S),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
 
       // Measure insert throughput
       CUDA_CHECK(cudaStreamSynchronize(stream));
       auto t_insert = Timer<double>();
       t_insert.start();
       // kLru mode: pass nullptr for scores (auto-generates LRU timestamps)
-      table->insert_or_assign(BATCH_SIZE, buf.d_keys, buf.d_vectors, nullptr,
-                              stream);
+      table->insert_or_assign(BATCH_SIZE, buf.d_keys, buf.d_vectors,
+                              nullptr, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       t_insert.end();
-      double insert_tp = static_cast<double>(BATCH_SIZE) /
-                         t_insert.getResult() /
-                         (1024.0 * 1024.0 * 1024.0);  // billion keys/s
+      double insert_tp =
+          static_cast<double>(BATCH_SIZE) / t_insert.getResult() /
+          (1024.0 * 1024.0 * 1024.0);  // billion keys/s
 
       // Prepare find batch: keys in [0, BATCH_SIZE) -- guaranteed 100% hit
-      // (they were inserted during the fill phase, assuming fill_count >=
-      // BATCH_SIZE)
+      // (they were inserted during the fill phase, assuming fill_count >= BATCH_SIZE)
       size_t find_count = BATCH_SIZE;
       if (fill_count < BATCH_SIZE) {
         find_count = fill_count > 0 ? fill_count : BATCH_SIZE;
@@ -389,7 +392,7 @@ void part3_throughput(const ModeConfig& mode, BenchBuffers& buf,
         buf.h_keys[i] = i;  // sequential keys from 0
       }
       CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, find_count * sizeof(K),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
 
       // Measure find throughput
       CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -438,9 +441,9 @@ void part3_throughput(const ModeConfig& mode, BenchBuffers& buf,
  * ================================================================ */
 
 void part4_score_retention(const ModeConfig& mode, BenchBuffers& buf,
-                           cudaStream_t stream) {
-  std::cerr << "[Part4] mode=" << mode.name << " score retention..."
-            << std::flush;
+                            cudaStream_t stream) {
+  std::cerr << "[Part4] mode=" << mode.name
+            << " score retention..." << std::flush;
 
   auto table = create_table(mode.table_mode);
 
@@ -473,10 +476,11 @@ void part4_score_retention(const ModeConfig& mode, BenchBuffers& buf,
       global_score++;
     }
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
-    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr, stream);
+                           cudaMemcpyHostToDevice));
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, nullptr,
+                            stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     inserted += cur;
   }
@@ -495,13 +499,14 @@ void part4_score_retention(const ModeConfig& mode, BenchBuffers& buf,
   CUDA_CHECK(cudaMalloc(&d_export_values, CAPACITY * sizeof(V) * DIM));
   CUDA_CHECK(cudaMalloc(&d_export_scores, CAPACITY * sizeof(S)));
 
-  size_t exported = table->export_batch(
-      CAPACITY, 0, d_export_keys, d_export_values, d_export_scores, stream);
+  size_t exported = table->export_batch(CAPACITY, 0, d_export_keys,
+                                         d_export_values, d_export_scores,
+                                         stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaMemcpy(h_export_keys, d_export_keys, exported * sizeof(K),
-                        cudaMemcpyDeviceToHost));
+                         cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(h_export_scores, d_export_scores, exported * sizeof(S),
-                        cudaMemcpyDeviceToHost));
+                         cudaMemcpyDeviceToHost));
 
   // Build set of keys actually in the table
   std::unordered_set<K> table_keys(h_export_keys, h_export_keys + exported);
@@ -530,13 +535,14 @@ void part4_score_retention(const ModeConfig& mode, BenchBuffers& buf,
   double retention_rate =
       static_cast<double>(retained) / static_cast<double>(ideal_n);
 
-  std::cerr << " retention=" << retained << "/" << ideal_n << " (" << std::fixed
-            << std::setprecision(4) << (retention_rate * 100.0) << "%)"
+  std::cerr << " retention=" << retained << "/" << ideal_n
+            << " (" << std::fixed << std::setprecision(4)
+            << (retention_rate * 100.0) << "%)"
             << " table_size=" << exported << std::endl;
 
   std::cout << mode.name << ",score_retention," << BUCKET_SIZE << ","
-            << std::fixed << std::setprecision(6) << retention_rate << ","
-            << retained << "," << ideal_n << std::endl;
+            << std::fixed << std::setprecision(6) << retention_rate
+            << "," << retained << "," << ideal_n << std::endl;
 
   // Cleanup
   CUDA_CHECK(cudaFreeHost(h_export_keys));
@@ -556,8 +562,8 @@ int main(int argc, char** argv) {
   std::cerr << "GPU: " << props.name << std::endl;
   std::cerr << "E17: Single-Bucket vs Dual-Bucket Comparison" << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << CAPACITY
-            << ", bucket_size=" << BUCKET_SIZE << ", Pure HBM, kLru"
-            << std::endl;
+            << ", bucket_size=" << BUCKET_SIZE
+            << ", Pure HBM, kLru" << std::endl;
 
   // Usage: ./e17_single_vs_dual [part]
   // part: 0 for all (default), 1/2/3/4 for specific part

@@ -20,5 +20,10 @@ and 128-byte value-returning lookup are separate contracts.
 Configure this subproject explicitly if the external dependencies are
 available. CMake `FETCHCONTENT_SOURCE_DIR_WARPCORE`, `..._BGHT` and
 `..._CUCO` can point to already-fetched, identity-checked local sources;
-missing dependencies mean `NOT_RUN`, not a result. No download or build was
-performed during this migration.
+missing dependencies mean `NOT_RUN`, not a result. The pinned cuCollections
+build requires CMake 4.0 or newer; use a separate tool environment if the host
+CMake is older. Compilation alone does not validate GPU correctness or performance.
+
+When cuCollections is enabled, CMake initializes its newer CPM before WarpCore.
+Reversing that order loads WarpCore's old CPM first and breaks the pinned
+RAPIDS/CCCL configuration. Dependency commits are unchanged.

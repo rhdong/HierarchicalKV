@@ -49,8 +49,8 @@ using HKVTable =
  * lambda=0.75 (see s5-evaluation.tex line 282).
  */
 static constexpr int BATCHES_PER_THREAD = 200;
-static constexpr size_t BATCH_SIZE = 64UL * 1024;  // 64K keys per batch
-static constexpr size_t DIM = 16;                  // paper-spec dim
+static constexpr size_t BATCH_SIZE = 64UL * 1024;             // 64K keys per batch
+static constexpr size_t DIM = 16;                             // paper-spec dim
 static constexpr size_t INIT_CAPACITY = 128UL * 1024 * 1024;  // 128M
 static constexpr size_t HBM_GB = 16;
 static constexpr float LOAD_FACTOR = 0.75f;
@@ -118,8 +118,8 @@ void populate_table(std::shared_ptr<HKVTable>& table, cudaStream_t stream) {
   while (inserted < target) {
     uint64_t batch = std::min(pop_batch, target - inserted);
     benchmark::create_continuous_keys<K, S>(h_keys, h_scores, batch, start);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, batch * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, batch * sizeof(K),
+                          cudaMemcpyHostToDevice));
     table->set_global_epoch(epoch++);
     table->insert_or_assign(batch, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -136,8 +136,8 @@ void populate_table(std::shared_ptr<HKVTable>& table, cudaStream_t stream) {
     if (append <= 0) break;
     append = std::min(static_cast<int64_t>(pop_batch), append);
     benchmark::create_continuous_keys<K, S>(h_keys, h_scores, append, start);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, append * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, append * sizeof(K),
+                          cudaMemcpyHostToDevice));
     table->insert_or_assign(append, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += append;
@@ -166,9 +166,10 @@ void populate_table(std::shared_ptr<HKVTable>& table, cudaStream_t stream) {
  */
 static constexpr int BUFFER_POOL_SIZE = 4;
 
-void worker_thread(HKVTable* table, OpType op, int batches, size_t batch_size,
-                   size_t dim, uint64_t key_range, uint64_t insert_start,
-                   int thread_id, Barrier* barrier, ThreadResult* result) {
+void worker_thread(HKVTable* table, OpType op, int batches,
+                   size_t batch_size, size_t dim, uint64_t key_range,
+                   uint64_t insert_start, int thread_id, Barrier* barrier,
+                   ThreadResult* result) {
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
 
@@ -181,7 +182,8 @@ void worker_thread(HKVTable* table, OpType op, int batches, size_t batch_size,
   for (int b = 0; b < pool; b++) {
     CUDA_CHECK(cudaMalloc(&d_keys_vec[b], batch_size * sizeof(K)));
     CUDA_CHECK(cudaMalloc(&d_vectors_vec[b], batch_size * sizeof(V) * dim));
-    CUDA_CHECK(cudaMemset(d_vectors_vec[b], 1, batch_size * sizeof(V) * dim));
+    CUDA_CHECK(
+        cudaMemset(d_vectors_vec[b], 1, batch_size * sizeof(V) * dim));
     if (op == OP_FIND) {
       CUDA_CHECK(cudaMalloc(&d_found_vec[b], batch_size * sizeof(bool)));
     }
@@ -395,7 +397,8 @@ void run_workload(const char* mode_name, const WorkloadMix& mix) {
   /* CSV output to stdout */
   printf("%s,%s,%d,%zu,%.6f,%.6f,%zu,%.6f,%zu,%.6f,%zu,%.6f\n", mode_name,
          mix.name, total_threads, total_ops, max_thread_time, agg_throughput,
-         find_ops, find_tput, assign_ops, assign_tput, insert_ops, insert_tput);
+         find_ops, find_tput, assign_ops, assign_tput, insert_ops,
+         insert_tput);
   fflush(stdout);
 }
 
@@ -411,11 +414,14 @@ int main(int argc, char** argv) {
 
   cudaDeviceProp props;
   CUDA_CHECK(cudaGetDeviceProperties(&props, 0));
-  fprintf(stderr, "GPU: %s (SM %d.%d)\n", props.name, props.major, props.minor);
+  fprintf(stderr, "GPU: %s (SM %d.%d)\n", props.name, props.major,
+          props.minor);
   fprintf(stderr, "Mode: %s\n", mode_name);
-  fprintf(stderr, "Config: dim=%zu, capacity=%zuM, HBM=%zuGB, lambda=%.2f\n",
+  fprintf(stderr,
+          "Config: dim=%zu, capacity=%zuM, HBM=%zuGB, lambda=%.2f\n",
           DIM, INIT_CAPACITY / (1024 * 1024), HBM_GB, LOAD_FACTOR);
-  fprintf(stderr, "Threads=variable, Batches/thread=%d, Batch size=%zuK\n",
+  fprintf(stderr,
+          "Threads=variable, Batches/thread=%d, Batch size=%zuK\n",
           BATCHES_PER_THREAD, BATCH_SIZE / 1024);
 
   /* CSV header */

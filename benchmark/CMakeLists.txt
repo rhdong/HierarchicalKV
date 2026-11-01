@@ -81,3 +81,8 @@ foreach(name IN ITEMS ${HKV_REPRO_SOURCES}
     digest_ablation_no_digest concurrency_rw_lock)
   target_compile_options(${name} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-O3>)
 endforeach()
+
+# Compile the paper microbenchmark suite without running GPU workloads or tests.
+add_custom_target(paper_benchmarks DEPENDS
+  merlin_hashtable_benchmark find_with_missed_keys_benchmark dual_bucket_benchmark
+  ${HKV_REPRO_SOURCES} digest_ablation_no_digest concurrency_rw_lock)

@@ -42,7 +42,8 @@ class ZipfianGenerator {
     zeta_n_ = zetaApprox(n_, theta_);
     zeta_2_ = zetaApprox(2, theta_);
     alpha_ = 1.0 / (1.0 - theta_);
-    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) / (1.0 - zeta_2_ / zeta_n_);
+    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) /
+           (1.0 - zeta_2_ / zeta_n_);
   }
 
   uint64_t next() {
@@ -114,7 +115,7 @@ void run_strategy(const char* name, uint64_t key_range, double zipf_alpha,
   // Set all scores to 1 (for LFU/EpochLFU/Custom: unit frequency)
   for (size_t j = 0; j < BATCH_SIZE; j++) h_scores[j] = 1;
   CUDA_CHECK(cudaMemcpy(d_scores, h_scores, BATCH_SIZE * sizeof(S),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
 
   // Pre-populate to λ=1.0 with sequential keys
   std::cerr << "  Pre-populating..." << std::flush;
@@ -134,7 +135,7 @@ void run_strategy(const char* name, uint64_t key_range, double zipf_alpha,
       // Reset scores to 1 for each batch
       for (size_t j = 0; j < cur; j++) h_scores[j] = 1;
       CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
       table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);
     }
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -163,7 +164,7 @@ void run_strategy(const char* name, uint64_t key_range, double zipf_alpha,
     } else {
       for (size_t j = 0; j < cur; j++) h_scores[j] = 1;
       CUDA_CHECK(cudaMemcpy(d_scores, h_scores, cur * sizeof(S),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
       table->insert_or_assign(cur, d_keys, d_vectors, d_scores, stream);
     }
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -186,7 +187,7 @@ void run_strategy(const char* name, uint64_t key_range, double zipf_alpha,
   for (int r = 0; r < FIND_ROUNDS; r++) {
     zipf_find.fill(h_keys, BATCH_SIZE);
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     auto ft = benchmark::Timer<double>();
     ft.start();
     table->find(BATCH_SIZE, d_keys, d_vectors, d_found, nullptr, stream);
@@ -194,7 +195,7 @@ void run_strategy(const char* name, uint64_t key_range, double zipf_alpha,
     ft.end();
     find_tp_sum += BATCH_SIZE / ft.getResult() / (1024.0 * 1024.0 * 1024.0);
     CUDA_CHECK(cudaMemcpy(h_found, d_found, BATCH_SIZE * sizeof(bool),
-                          cudaMemcpyDeviceToHost));
+                           cudaMemcpyDeviceToHost));
     for (size_t j = 0; j < BATCH_SIZE; j++)
       if (h_found[j]) total_found++;
     total_queries += BATCH_SIZE;

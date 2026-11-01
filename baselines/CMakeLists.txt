@@ -64,6 +64,13 @@ if(ENABLE_CUCO_BENCH)
   )
 endif()
 
+# Initialize cuCollections' newer CPM before WarpCore's legacy bootstrap.
+# The reverse order makes RAPIDS pass unsupported arguments to CPM 0.27.3.
+if(ENABLE_CUCO_BENCH)
+  message(STATUS "Fetching cuCollections ...")
+  FetchContent_MakeAvailable(cuco)
+endif()
+
 # ─── WarpCore benchmark ───
 message(STATUS "Fetching WarpCore ...")
 FetchContent_MakeAvailable(warpcore)
@@ -115,8 +122,6 @@ set_target_properties(p2bht_bench PROPERTIES
 
 if(ENABLE_CUCO_BENCH)
   # ─── cuCollections benchmark ───
-  message(STATUS "Fetching cuCollections ...")
-  FetchContent_MakeAvailable(cuco)
   add_executable(cuco_bench cuco_bench.cu)
   target_include_directories(cuco_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(cuco_bench PRIVATE cuco::cuco)

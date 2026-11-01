@@ -16,8 +16,7 @@
  * Protocol per (policy, alpha):
  *   1. Create fresh table.
  *   2. Pre-populate to capacity with sequential keys [0, CAPACITY).
- *   3. Run 5x CAPACITY Zipfian steady-state inserts from key_range=10x
- * CAPACITY.
+ *   3. Run 5x CAPACITY Zipfian steady-state inserts from key_range=10x CAPACITY.
  *   4. Run 5 rounds of 1M Zipfian find queries (different seed).
  *   5. Compute hit ratio.
  *
@@ -26,8 +25,7 @@
  * Usage:
  *   ./e19_cache_quality_sweep [policy] [alpha]
  *     policy: all (default), kLru, kLfu, kEpochLru, kEpochLfu, kCustomized
- *     alpha:  all (default), or a specific float value matching one of the
- * sweep
+ *     alpha:  all (default), or a specific float value matching one of the sweep
  */
 
 #include <algorithm>
@@ -75,7 +73,8 @@ class ZipfianGenerator {
     zeta_n_ = zetaApprox(n_, theta_);
     zeta_2_ = zetaApprox(2, theta_);
     alpha_ = 1.0 / (1.0 - theta_);
-    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) / (1.0 - zeta_2_ / zeta_n_);
+    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) /
+           (1.0 - zeta_2_ / zeta_n_);
   }
 
   uint64_t next() {
@@ -118,12 +117,12 @@ class ZipfianGenerator {
  * ================================================================ */
 
 struct BenchBuffers {
-  K* h_keys = nullptr;
+  K* h_keys   = nullptr;
   S* h_scores = nullptr;
   bool* h_found = nullptr;
-  K* d_keys = nullptr;
-  S* d_scores = nullptr;
-  V* d_vectors = nullptr;
+  K* d_keys     = nullptr;
+  S* d_scores   = nullptr;
+  V* d_vectors  = nullptr;
   bool* d_found = nullptr;
 
   void alloc() {
@@ -304,7 +303,8 @@ void run_policy(const char* policy_name, double alpha, BenchBuffers& buf,
                 stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     auto t1 = std::chrono::high_resolution_clock::now();
-    total_find_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
+    total_find_ms +=
+        std::chrono::duration<double, std::milli>(t1 - t0).count();
 
     CUDA_CHECK(cudaMemcpy(buf.h_found, buf.d_found, BATCH_SIZE * sizeof(bool),
                           cudaMemcpyDeviceToHost));
@@ -323,8 +323,7 @@ void run_policy(const char* policy_name, double alpha, BenchBuffers& buf,
             << " find=" << std::setprecision(3) << find_throughput_bkvs
             << " B-KV/s" << std::endl;
 
-  // CSV output:
-  // policy,alpha,hit_ratio,total_found,total_queries,find_throughput_bkvs
+  // CSV output: policy,alpha,hit_ratio,total_found,total_queries,find_throughput_bkvs
   std::cout << policy_name << "," << std::fixed << std::setprecision(2) << alpha
             << "," << std::setprecision(4) << hit_ratio << "," << total_found
             << "," << total_queries << "," << std::setprecision(4)
@@ -395,9 +394,7 @@ int main(int argc, char** argv) {
   buf.alloc();
 
   // CSV header
-  std::cout
-      << "policy,alpha,hit_ratio,total_found,total_queries,find_throughput_bkvs"
-      << std::endl;
+  std::cout << "policy,alpha,hit_ratio,total_found,total_queries,find_throughput_bkvs" << std::endl;
 
   try {
     if (target_policy == "all" || target_policy == "kLru") {

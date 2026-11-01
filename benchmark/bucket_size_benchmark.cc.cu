@@ -74,12 +74,13 @@ void pre_populate(std::shared_ptr<HKVTable>& table, float load_factor,
   float real_lf = table->load_factor(stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   while (load_factor - real_lf > EPSILON) {
-    auto append = static_cast<int64_t>((load_factor - real_lf) * INIT_CAPACITY);
+    auto append =
+        static_cast<int64_t>((load_factor - real_lf) * INIT_CAPACITY);
     if (append <= 0) break;
     append = std::min(static_cast<int64_t>(fill_batch), append);
     create_continuous_keys<K, S>(h_keys, h_scores, append, start);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, append * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, append * sizeof(K),
+                          cudaMemcpyHostToDevice));
     table->insert_or_assign(append, d_keys, d_vectors, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     start += append;
@@ -123,7 +124,7 @@ float measure_once(std::shared_ptr<HKVTable>& table, API_Select api,
     create_continuous_keys<K, S>(h_keys, h_scores, BATCH_SIZE, offset);
   }
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
 
   // Warmup
   for (int w = 0; w < NUM_WARMUP; w++) {
@@ -172,8 +173,8 @@ int main() {
   std::cerr << "GPU: " << props.name << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << INIT_CAPACITY
             << ", batch=" << BATCH_SIZE << ", LF=" << LOAD_FACTOR << std::endl;
-  std::cerr << "Runs per point: " << NUM_RUNS << ", Warmup: " << NUM_WARMUP
-            << std::endl;
+  std::cerr << "Runs per point: " << NUM_RUNS
+            << ", Warmup: " << NUM_WARMUP << std::endl;
 
   std::vector<size_t> bucket_sizes = {32, 64, 128, 256};
   std::vector<API_Select> apis = {API_Select::find,
@@ -206,9 +207,8 @@ int main() {
       cudaStream_t stream;
       CUDA_CHECK(cudaStreamCreate(&stream));
 
-      std::cerr << "bucket=" << bucket_size
-                << " pre-populating to LF=" << LOAD_FACTOR << "..."
-                << std::flush;
+      std::cerr << "bucket=" << bucket_size << " pre-populating to LF="
+                << LOAD_FACTOR << "..." << std::flush;
 
       K key_end = 0;
       pre_populate(table, LOAD_FACTOR, stream, key_end);
@@ -232,9 +232,10 @@ int main() {
           float tp = measure_once(table, api, stream, key_end, run);
           results.push_back(tp);
 
-          std::cout << api_name << "," << bucket_size << "," << std::fixed
-                    << std::setprecision(2) << LOAD_FACTOR << "," << (run + 1)
-                    << "," << std::setprecision(6) << tp << std::endl;
+          std::cout << api_name << "," << bucket_size << ","
+                    << std::fixed << std::setprecision(2) << LOAD_FACTOR << ","
+                    << (run + 1) << "," << std::setprecision(6) << tp
+                    << std::endl;
 
           std::cerr << " " << std::fixed << std::setprecision(3) << tp
                     << " B-KV/s" << std::endl;
@@ -244,8 +245,8 @@ int main() {
         std::sort(results.begin(), results.end());
         float median = results[NUM_RUNS / 2];
         std::cerr << "  => " << api_name << " bucket=" << bucket_size
-                  << " median=" << std::setprecision(3) << median << " B-KV/s"
-                  << std::endl;
+                  << " median=" << std::setprecision(3) << median
+                  << " B-KV/s" << std::endl;
       }
 
       CUDA_CHECK(cudaStreamDestroy(stream));

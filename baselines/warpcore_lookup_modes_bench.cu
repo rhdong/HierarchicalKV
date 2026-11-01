@@ -1,7 +1,7 @@
 /*
- * WarpCore lookup-mode audit.
+ * Review-response P0: WarpCore lookup-mode audit.
  *
- * Measures two distinct lookup semantics:
+ * Measures two distinct semantics requested by reviewers:
  *   1. key_only: native HashSet membership lookup.
  *      key_only_proxy remains available as an audit fallback.
  *   2. value_returning: SingleValueHashTable retrieve of native 128B values.

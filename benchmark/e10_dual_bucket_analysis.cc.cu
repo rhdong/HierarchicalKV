@@ -32,7 +32,7 @@ using namespace benchmark;
 
 static constexpr size_t DIM = 32;
 static constexpr size_t CAPACITY = 128UL * 1024 * 1024;  // 128M
-static constexpr size_t BATCH_SIZE = 1024 * 1024UL;      // 1M
+static constexpr size_t BATCH_SIZE = 1024 * 1024UL;       // 1M
 
 /* ================================================================
  * Zipfian Generator (copied from score_strategy_benchmark.cc.cu)
@@ -45,7 +45,8 @@ class ZipfianGenerator {
     zeta_n_ = zetaApprox(n_, theta_);
     zeta_2_ = zetaApprox(2, theta_);
     alpha_ = 1.0 / (1.0 - theta_);
-    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) / (1.0 - zeta_2_ / zeta_n_);
+    eta_ = (1.0 - std::pow(2.0 / n_, 1.0 - theta_)) /
+           (1.0 - zeta_2_ / zeta_n_);
   }
 
   uint64_t next() {
@@ -152,9 +153,9 @@ void fill_sequential(HKVTable& table, size_t target_count, BenchBuffers& buf,
       buf.h_scores[i] = inserted + i;  // score = key
     }
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table.insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
                            stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -167,9 +168,9 @@ void fill_sequential(HKVTable& table, size_t target_count, BenchBuffers& buf,
  * ================================================================ */
 
 void part1_first_eviction_lf(size_t bucket_size, BenchBuffers& buf,
-                             cudaStream_t stream) {
-  std::cerr << "[Part1] bucket_size=" << bucket_size << " first-eviction LF..."
-            << std::flush;
+                              cudaStream_t stream) {
+  std::cerr << "[Part1] bucket_size=" << bucket_size
+            << " first-eviction LF..." << std::flush;
 
   auto table = create_table(bucket_size);
 
@@ -185,9 +186,9 @@ void part1_first_eviction_lf(size_t bucket_size, BenchBuffers& buf,
       buf.h_scores[i] = total_inserted + i;
     }
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
                             stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -229,8 +230,8 @@ void part1_first_eviction_lf(size_t bucket_size, BenchBuffers& buf,
 
 void part2_hit_ratio(size_t bucket_size, BenchBuffers& buf,
                      cudaStream_t stream) {
-  std::cerr << "[Part2] bucket_size=" << bucket_size << " hit ratio..."
-            << std::flush;
+  std::cerr << "[Part2] bucket_size=" << bucket_size
+            << " hit ratio..." << std::flush;
 
   auto table = create_table(bucket_size);
 
@@ -260,9 +261,9 @@ void part2_hit_ratio(size_t bucket_size, BenchBuffers& buf,
     // LRU-style: score = global counter (most recently touched → highest score)
     for (size_t i = 0; i < cur; i++) buf.h_scores[i] = global_score++;
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
                             stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -278,12 +279,12 @@ void part2_hit_ratio(size_t bucket_size, BenchBuffers& buf,
   for (int r = 0; r < 5; r++) {
     zipf_find.fill(buf.h_keys, BATCH_SIZE);
     CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, BATCH_SIZE * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
     table->find(BATCH_SIZE, buf.d_keys, buf.d_vectors, buf.d_found, nullptr,
                 stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     CUDA_CHECK(cudaMemcpy(buf.h_found, buf.d_found, BATCH_SIZE * sizeof(bool),
-                          cudaMemcpyDeviceToHost));
+                           cudaMemcpyDeviceToHost));
     for (size_t j = 0; j < BATCH_SIZE; j++) {
       if (buf.h_found[j]) total_found++;
     }
@@ -319,8 +320,9 @@ void part3_throughput(size_t bucket_size, BenchBuffers& buf,
     // Clamp to capacity
     if (fill_count > CAPACITY) fill_count = CAPACITY;
 
-    std::cerr << "[Part3] bucket_size=" << bucket_size << " LF=" << std::fixed
-              << std::setprecision(2) << target_lf << "..." << std::flush;
+    std::cerr << "[Part3] bucket_size=" << bucket_size
+              << " LF=" << std::fixed << std::setprecision(2) << target_lf
+              << "..." << std::flush;
 
     for (int run = 0; run < TOTAL_RUNS; run++) {
       // Create fresh table for each run
@@ -331,17 +333,17 @@ void part3_throughput(size_t bucket_size, BenchBuffers& buf,
         fill_sequential(*table, fill_count, buf, stream);
       }
 
-      // Prepare insert batch: keys in the range [fill_count,
-      // fill_count+BATCH_SIZE) These keys do NOT already exist, so they insert
-      // (and may evict at high LF) For LF=1.0, these will cause evictions
+      // Prepare insert batch: keys in the range [fill_count, fill_count+BATCH_SIZE)
+      // These keys do NOT already exist, so they insert (and may evict at high LF)
+      // For LF=1.0, these will cause evictions
       for (size_t i = 0; i < BATCH_SIZE; i++) {
         buf.h_keys[i] = fill_count + i;
         buf.h_scores[i] = fill_count + i;
       }
       CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, BATCH_SIZE * sizeof(K),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
       CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, BATCH_SIZE * sizeof(S),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
 
       // Measure insert throughput
       CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -351,13 +353,12 @@ void part3_throughput(size_t bucket_size, BenchBuffers& buf,
                               buf.d_scores, stream);
       CUDA_CHECK(cudaStreamSynchronize(stream));
       t_insert.end();
-      double insert_tp = static_cast<double>(BATCH_SIZE) /
-                         t_insert.getResult() /
-                         (1024.0 * 1024.0 * 1024.0);  // billion keys/s
+      double insert_tp =
+          static_cast<double>(BATCH_SIZE) / t_insert.getResult() /
+          (1024.0 * 1024.0 * 1024.0);  // billion keys/s
 
       // Prepare find batch: keys in [0, BATCH_SIZE) -- guaranteed 100% hit
-      // (they were inserted during the fill phase, assuming fill_count >=
-      // BATCH_SIZE)
+      // (they were inserted during the fill phase, assuming fill_count >= BATCH_SIZE)
       size_t find_count = BATCH_SIZE;
       if (fill_count < BATCH_SIZE) {
         // If fill_count < 1M, use all filled keys for find
@@ -367,7 +368,7 @@ void part3_throughput(size_t bucket_size, BenchBuffers& buf,
         buf.h_keys[i] = i;  // sequential keys from 0
       }
       CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, find_count * sizeof(K),
-                            cudaMemcpyHostToDevice));
+                             cudaMemcpyHostToDevice));
 
       // Measure find throughput
       CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -449,8 +450,7 @@ int main(int argc, char** argv) {
   buf.alloc();
 
   // CSV header
-  std::cout << "metric,bucket_size,load_factor,run,throughput_bkvs"
-            << std::endl;
+  std::cout << "metric,bucket_size,load_factor,run,throughput_bkvs" << std::endl;
 
   try {
     if (target_part == 0 || target_part == 1) {

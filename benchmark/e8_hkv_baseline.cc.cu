@@ -35,9 +35,9 @@ static constexpr float EPSILON = 0.001f;
 
 /* ─── Pre-populate Table to Target LF ─── */
 
-static K prepopulate(
-    std::shared_ptr<HashTable<K, V, S, EvictStrategy::kLru, Sm80>>& table,
-    size_t target_count, cudaStream_t stream) {
+static K prepopulate(std::shared_ptr<HashTable<K, V, S,
+                     EvictStrategy::kLru, Sm80>>& table,
+                     size_t target_count, cudaStream_t stream) {
   K* h_keys;
   CUDA_CHECK(cudaMallocHost(&h_keys, BATCH_SIZE * sizeof(K)));
 
@@ -97,7 +97,7 @@ static void bench_insert(float target_lf, cudaStream_t stream) {
     CUDA_CHECK(cudaMalloc(&d_vectors, BATCH_SIZE * sizeof(V) * DIM));
     CUDA_CHECK(cudaMemset(d_vectors, 1, BATCH_SIZE * sizeof(V) * DIM));
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
-                          cudaMemcpyHostToDevice));
+                           cudaMemcpyHostToDevice));
 
     // Timed insert_or_assign (kLru: no scores, uses internal timestamps)
     auto timer = benchmark::KernelTimer<double>();
@@ -111,8 +111,9 @@ static void bench_insert(float target_lf, cudaStream_t stream) {
       std::cout << "HKV,insert," << std::fixed << std::setprecision(2)
                 << target_lf << "," << (run - WARMUP + 1) << ","
                 << std::setprecision(6) << tp << std::endl;
-      std::cerr << "  insert run " << (run - WARMUP + 1) << ": " << std::fixed
-                << std::setprecision(3) << tp << " B-KV/s" << std::endl;
+      std::cerr << "  insert run " << (run - WARMUP + 1) << ": "
+                << std::fixed << std::setprecision(3) << tp << " B-KV/s"
+                << std::endl;
     }
 
     CUDA_CHECK(cudaFreeHost(h_keys));
@@ -157,7 +158,7 @@ static void bench_find(float target_lf, cudaStream_t stream) {
   CUDA_CHECK(cudaMalloc(&d_vectors, BATCH_SIZE * sizeof(V) * DIM));
   CUDA_CHECK(cudaMalloc(&d_found, BATCH_SIZE * sizeof(bool)));
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, BATCH_SIZE * sizeof(K),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
 
   for (int run = 0; run < WARMUP + RUNS; run++) {
     auto timer = benchmark::KernelTimer<double>();
@@ -188,10 +189,10 @@ int main(int argc, char** argv) {
   cudaDeviceProp props;
   CUDA_CHECK(cudaGetDeviceProperties(&props, 0));
   std::cerr << "GPU: " << props.name << std::endl;
-  std::cerr << "E16: HKV LF Degradation (kThroughput, eviction-enabled)"
-            << std::endl;
+  std::cerr << "E16: HKV LF Degradation (kThroughput, eviction-enabled)" << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << INIT_CAPACITY
-            << ", HBM=" << HBM_GB << "GB, kLru" << std::endl;
+            << ", HBM=" << HBM_GB << "GB, kLru"
+            << std::endl;
 
   std::cout << "library,operation,load_factor,run,throughput_bkvs" << std::endl;
 
@@ -204,8 +205,8 @@ int main(int argc, char** argv) {
     load_factors = {0.25f, 0.50f, 0.75f, 0.80f, 0.85f, 0.90f, 0.95f, 1.00f};
   }
   for (float lf : load_factors) {
-    std::cerr << "--- LF=" << std::fixed << std::setprecision(2) << lf << " ---"
-              << std::endl;
+    std::cerr << "--- LF=" << std::fixed << std::setprecision(2) << lf
+              << " ---" << std::endl;
     bench_insert(lf, 0);
     bench_find(lf, 0);
   }

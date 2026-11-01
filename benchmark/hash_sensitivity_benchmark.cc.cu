@@ -1,5 +1,5 @@
 /*
- * Hash sensitivity microbenchmark for standalone comparison.
+ * Hash sensitivity microbenchmark for reviewer-response experiments.
  *
  * This benchmark intentionally does not change HKV's core hash path.  It
  * replays HKV's bucket-index and digest derivation rules in a standalone
@@ -186,7 +186,8 @@ static HashKind parse_hash(const std::string& value) {
       value == "xxhash") {
     return HashKind::kXxhashAvalanche;
   }
-  if (value == "wyhash_final" || value == "wyhash-style" || value == "wyhash") {
+  if (value == "wyhash_final" || value == "wyhash-style" ||
+      value == "wyhash") {
     return HashKind::kWyhashFinal;
   }
   if (value == "identity") return HashKind::kIdentity;
@@ -224,8 +225,9 @@ static std::vector<T> parse_csv(const std::string& value, ParseFn parse_one) {
 }
 
 static std::vector<double> parse_load_factors(const std::string& value) {
-  return parse_csv<double>(
-      value, [](const std::string& token) { return std::stod(token); });
+  return parse_csv<double>(value, [](const std::string& token) {
+    return std::stod(token);
+  });
 }
 
 static uint64_t make_key(Distribution distribution, size_t index,
@@ -328,7 +330,8 @@ class MicroTable {
     stats.variance = sq / static_cast<double>(occupancy_.size());
     stats.cv = stats.mean == 0.0 ? 0.0 : std::sqrt(stats.variance) / stats.mean;
 
-    size_t p99_index = static_cast<size_t>(std::ceil(0.99 * sorted.size())) - 1;
+    size_t p99_index =
+        static_cast<size_t>(std::ceil(0.99 * sorted.size())) - 1;
     p99_index = std::min(p99_index, sorted.size() - 1);
     stats.p99 = static_cast<double>(sorted[p99_index]);
     stats.max = sorted.back();
@@ -342,7 +345,8 @@ class MicroTable {
 
   size_t first_bucket(uint64_t hashed) const {
     if (mode_ == TableMode::kMemory) {
-      return static_cast<size_t>(hashed & UINT64_C(0xffffffff)) % bucket_count_;
+      return static_cast<size_t>(hashed & UINT64_C(0xffffffff)) %
+             bucket_count_;
     }
     size_t global_slot = static_cast<size_t>(hashed % capacity_slots_);
     return global_slot / bucket_size_;
@@ -442,27 +446,29 @@ static ProbeStats run_probe(const MicroTable& table, Distribution distribution,
   }
   auto end = std::chrono::steady_clock::now();
 
-  double seconds = std::chrono::duration<double>(end - start).count();
+  double seconds =
+      std::chrono::duration<double>(end - start).count();
   double total_queries = static_cast<double>(resident_queries + miss_queries);
   stats.throughput_bkvs =
-      seconds == 0.0 ? 0.0
-                     : total_queries / seconds / (1024.0 * 1024.0 * 1024.0);
-  stats.resident_found_rate = resident_queries == 0
-                                  ? 0.0
-                                  : static_cast<double>(resident_found) /
-                                        static_cast<double>(resident_queries);
-  stats.miss_false_found_rate = miss_queries == 0
-                                    ? 0.0
-                                    : static_cast<double>(miss_false_found) /
-                                          static_cast<double>(miss_queries);
-  stats.digest_fp_per_query = miss_queries == 0
-                                  ? 0.0
-                                  : static_cast<double>(digest_matches) /
-                                        static_cast<double>(miss_queries);
-  stats.digest_fp_per_slot = checked_slots == 0
-                                 ? 0.0
-                                 : static_cast<double>(digest_matches) /
-                                       static_cast<double>(checked_slots);
+      seconds == 0.0 ? 0.0 : total_queries / seconds / (1024.0 * 1024.0 * 1024.0);
+  stats.resident_found_rate =
+      resident_queries == 0
+          ? 0.0
+          : static_cast<double>(resident_found) /
+                static_cast<double>(resident_queries);
+  stats.miss_false_found_rate =
+      miss_queries == 0
+          ? 0.0
+          : static_cast<double>(miss_false_found) /
+                static_cast<double>(miss_queries);
+  stats.digest_fp_per_query =
+      miss_queries == 0 ? 0.0
+                        : static_cast<double>(digest_matches) /
+                              static_cast<double>(miss_queries);
+  stats.digest_fp_per_slot =
+      checked_slots == 0 ? 0.0
+                         : static_cast<double>(digest_matches) /
+                               static_cast<double>(checked_slots);
   return stats;
 }
 
@@ -481,26 +487,29 @@ static void print_result(HashKind hash, Distribution distribution,
                          const OccupancyStats& occupancy,
                          const ProbeStats& probe, const InsertResult& insert,
                          size_t capacity_slots) {
-  double inserted_load_factor = capacity_slots == 0
-                                    ? 0.0
-                                    : static_cast<double>(insert.inserted) /
-                                          static_cast<double>(capacity_slots);
-  double dropped_insert_rate = insert.attempted == 0
-                                   ? 0.0
-                                   : static_cast<double>(insert.dropped) /
-                                         static_cast<double>(insert.attempted);
+  double inserted_load_factor =
+      capacity_slots == 0
+          ? 0.0
+          : static_cast<double>(insert.inserted) /
+                static_cast<double>(capacity_slots);
+  double dropped_insert_rate =
+      insert.attempted == 0
+          ? 0.0
+          : static_cast<double>(insert.dropped) /
+                static_cast<double>(insert.attempted);
 
   std::cout << to_string(hash) << "," << to_string(distribution) << ","
             << to_string(table_mode) << "," << std::fixed
             << std::setprecision(4) << load_factor << ","
             << std::setprecision(6) << occupancy.mean << ","
-            << occupancy.variance << "," << occupancy.cv << "," << occupancy.p99
-            << "," << occupancy.max << "," << probe.digest_fp_per_query
-            << ",micro_lookup," << probe.throughput_bkvs << ","
-            << probe.resident_found_rate << "," << probe.miss_false_found_rate
-            << "," << insert.inserted << "," << capacity_slots << ","
-            << inserted_load_factor << "," << dropped_insert_rate << ","
-            << probe.digest_fp_per_slot << std::endl;
+            << occupancy.variance << "," << occupancy.cv << ","
+            << occupancy.p99 << "," << occupancy.max << ","
+            << probe.digest_fp_per_query << ",micro_lookup,"
+            << probe.throughput_bkvs << "," << probe.resident_found_rate
+            << "," << probe.miss_false_found_rate << "," << insert.inserted
+            << "," << capacity_slots << "," << inserted_load_factor << ","
+            << dropped_insert_rate << "," << probe.digest_fp_per_slot
+            << std::endl;
 }
 
 static void set_mode_defaults(Options* options) {
@@ -526,17 +535,14 @@ static void print_usage(const char* program) {
       << "Options:\n"
       << "  --mode quick|full              Preset sizes and LF grid.\n"
       << "  --hash all|csv                 Hashes: murmur3,splitmix64,\n"
-      << "                                 "
-         "xxhash_avalanche,wyhash_final,identity.\n"
-      << "  --distribution all|csv         Distributions: "
-         "sequential,uniform64,\n"
+      << "                                 xxhash_avalanche,wyhash_final,identity.\n"
+      << "  --distribution all|csv         Distributions: sequential,uniform64,\n"
       << "                                 strided_lowbits.\n"
       << "  --table-mode all|csv           Modes: kThroughput,kMemory.\n"
       << "  --load-factors csv             Override LF grid.\n"
       << "  --capacity-slots n             Override logical slot capacity.\n"
       << "  --bucket-size n                Override bucket size, default 128.\n"
-      << "  --query-count n                Override resident/miss query "
-         "count.\n";
+      << "  --query-count n                Override resident/miss query count.\n";
 }
 
 static Options parse_args(int argc, char** argv) {
@@ -590,8 +596,7 @@ static Options parse_args(int argc, char** argv) {
         options.table_modes = parse_csv<TableMode>(value, parse_table_mode);
       }
     } else if (arg == "--load-factors") {
-      options.load_factors =
-          parse_load_factors(require_value("--load-factors"));
+      options.load_factors = parse_load_factors(require_value("--load-factors"));
     } else if (arg == "--capacity-slots") {
       options.capacity_slots =
           static_cast<size_t>(std::stoull(require_value("--capacity-slots")));
@@ -607,8 +612,7 @@ static Options parse_args(int argc, char** argv) {
   }
 
   if (options.capacity_slots % options.bucket_size != 0) {
-    throw std::invalid_argument(
-        "capacity-slots must be divisible by bucket-size");
+    throw std::invalid_argument("capacity-slots must be divisible by bucket-size");
   }
   return options;
 }
@@ -624,8 +628,9 @@ int main(int argc, char** argv) {
       for (Distribution distribution : options.distributions) {
         for (TableMode table_mode : options.table_modes) {
           for (double load_factor : options.load_factors) {
-            size_t requested = static_cast<size_t>(std::llround(
-                load_factor * static_cast<double>(options.capacity_slots)));
+            size_t requested =
+                static_cast<size_t>(std::llround(
+                    load_factor * static_cast<double>(options.capacity_slots)));
             MicroTable table(hash, table_mode, options.capacity_slots,
                              options.bucket_size);
             InsertResult insert =

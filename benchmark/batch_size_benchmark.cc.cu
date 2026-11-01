@@ -55,7 +55,8 @@ void pre_populate(
   CUDA_CHECK(cudaMalloc(&d_vectors, fill_batch * sizeof(V) * DIM));
   CUDA_CHECK(cudaMemset(d_vectors, 1, fill_batch * sizeof(V) * DIM));
 
-  size_t target_count = static_cast<size_t>(INIT_CAPACITY * LOAD_FACTOR);
+  size_t target_count =
+      static_cast<size_t>(INIT_CAPACITY * LOAD_FACTOR);
   K start = 0;
   int epoch = 0;
 
@@ -76,12 +77,13 @@ void pre_populate(
   float real_lf = table->load_factor(stream);
   CUDA_CHECK(cudaStreamSynchronize(stream));
   while (LOAD_FACTOR - real_lf > EPSILON) {
-    auto append = static_cast<int64_t>((LOAD_FACTOR - real_lf) * INIT_CAPACITY);
+    auto append =
+        static_cast<int64_t>((LOAD_FACTOR - real_lf) * INIT_CAPACITY);
     if (append <= 0) break;
     append = std::min(static_cast<int64_t>(fill_batch), append);
     create_continuous_keys<K, S>(h_keys, h_scores, append, start);
-    CUDA_CHECK(
-        cudaMemcpy(d_keys, h_keys, append * sizeof(K), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, append * sizeof(K),
+                          cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_scores, h_scores, append * sizeof(S),
                           cudaMemcpyHostToDevice));
     table->insert_or_assign(append, d_keys, d_vectors, nullptr, stream);
@@ -129,9 +131,9 @@ float measure_once(
     create_continuous_keys<K, S>(h_keys, h_scores, batch_size, key_start);
   }
   CUDA_CHECK(cudaMemcpy(d_keys, h_keys, batch_size * sizeof(K),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_scores, h_scores, batch_size * sizeof(S),
-                        cudaMemcpyHostToDevice));
+                         cudaMemcpyHostToDevice));
 
   // Warmup
   for (int w = 0; w < NUM_WARMUP; w++) {
@@ -176,16 +178,16 @@ int main() {
   std::cerr << "GPU: " << props.name << std::endl;
   std::cerr << "Config B: dim=" << DIM << ", capacity=" << INIT_CAPACITY
             << ", HBM=" << HBM_GB << "GB, LF=" << LOAD_FACTOR << std::endl;
-  std::cerr << "Runs per point: " << NUM_RUNS << ", Warmup: " << NUM_WARMUP
-            << std::endl;
+  std::cerr << "Runs per point: " << NUM_RUNS
+            << ", Warmup: " << NUM_WARMUP << std::endl;
 
   std::vector<size_t> batch_sizes = {
-      1024,             // 1K
-      10 * 1024,        // 10K
-      100 * 1024,       // 100K
-      500 * 1024,       // 500K
-      1024 * 1024,      // 1M
-      2048 * 1024,      // 2M
+      1024,           // 1K
+      10 * 1024,      // 10K
+      100 * 1024,     // 100K
+      500 * 1024,     // 500K
+      1024 * 1024,    // 1M
+      2048 * 1024,    // 2M
       5 * 1024 * 1024,  // 5M
       10 * 1024 * 1024  // 10M
   };
