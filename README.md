@@ -1,8 +1,10 @@
 # [NVIDIA HierarchicalKV(Beta)](https://github.com/NVIDIA-Merlin/HierarchicalKV)
 
-Optional source-level benchmarks and the real FBGEMM TBE service adapter are
-documented in [benchmark/README.md](benchmark/README.md). These targets do
-not change the default library or test build.
+> **For reviewers of the HKV paper (PVLDB Vol. 20, VLDB 2027):** this branch
+> contains the benchmark sources, baselines, and reproduction guide for the
+> paper's experiments. Start with [benchmark/README.md](benchmark/README.md).
+> These benchmark targets are opt-in and do not change the default library or
+> test build.
 
 [![Version](https://img.shields.io/github/v/release/NVIDIA-Merlin/HierarchicalKV?color=orange&include_prereleases)](https://github.com/NVIDIA-Merlin/HierarchicalKV/releases)
 [![GitHub License](https://img.shields.io/github/license/NVIDIA-Merlin/HierarchicalKV)](https://github.com/NVIDIA-Merlin/HierarchicalKV/blob/master/LICENSE)
